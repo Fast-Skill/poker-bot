@@ -10,11 +10,14 @@
 
 pub mod betting;
 pub mod card;
+pub mod cfr;
 pub mod eval;
+pub mod kuhn;
 pub mod omaha;
 pub mod pot;
 
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};
+pub use cfr::{Game, InfoKey, Profile, Solver};
 pub use card::{
     parse_cards, Card, CardSet, ParseCardError, ParseCardsError, ParseCardsErrorKind, Rank, Suit,
     NUM_CARDS, NUM_RANKS, NUM_SUITS,
