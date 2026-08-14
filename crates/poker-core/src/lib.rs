@@ -22,7 +22,7 @@ pub mod rng;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};
-pub use cfr::{Game, InfoKey, Profile, Solver};
+pub use cfr::{Discount, Game, InfoKey, Profile, Solver};
 pub use card::{
     parse_cards, Card, CardSet, ParseCardError, ParseCardsError, ParseCardsErrorKind, Rank, Suit,
     NUM_CARDS, NUM_RANKS, NUM_SUITS,
