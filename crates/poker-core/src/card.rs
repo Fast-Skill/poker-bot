@@ -413,27 +413,43 @@ impl Iterator for CardSetIter {
 
 impl ExactSizeIterator for CardSetIter {}
 
-/// Parses a whitespace-separated list of cards, e.g. `"As Kd 7c"`.
+/// Parses a list of cards, e.g. `"As Kd 7c"`.
 ///
-/// Returns an error on the first unparseable token. Duplicate cards are
-/// rejected, since every caller here treats them as a bug rather than a
-/// meaningful input.
+/// Cards may be separated by whitespace or run together in the usual poker
+/// shorthand, so `"AhKh"`, `"Ah Kh"`, and `"AsAdKsKd"` all parse. This is
+/// unambiguous because a card is always exactly two characters.
+///
+/// Returns an error on the first unparseable card. Duplicates are rejected:
+/// every caller here treats a repeated card as a bug rather than as input.
 pub fn parse_cards(s: &str) -> Result<Vec<Card>, ParseCardsError> {
     let mut cards = Vec::new();
     let mut seen = CardSet::empty();
+
     for token in s.split_whitespace() {
-        let card = token.parse::<Card>().map_err(|source| ParseCardsError {
-            token: token.to_string(),
-            kind: ParseCardsErrorKind::Invalid(source),
-        })?;
-        if !seen.insert(card) {
+        let chars: Vec<char> = token.chars().collect();
+        if chars.is_empty() || chars.len() % 2 != 0 {
             return Err(ParseCardsError {
                 token: token.to_string(),
-                kind: ParseCardsErrorKind::Duplicate,
+                kind: ParseCardsErrorKind::Invalid(ParseCardError::WrongLength(chars.len())),
             });
         }
-        cards.push(card);
+
+        for pair in chars.chunks(2) {
+            let text: String = pair.iter().collect();
+            let card = text.parse::<Card>().map_err(|source| ParseCardsError {
+                token: text.clone(),
+                kind: ParseCardsErrorKind::Invalid(source),
+            })?;
+            if !seen.insert(card) {
+                return Err(ParseCardsError {
+                    token: text,
+                    kind: ParseCardsErrorKind::Duplicate,
+                });
+            }
+            cards.push(card);
+        }
     }
+
     Ok(cards)
 }
 
@@ -607,6 +623,40 @@ mod tests {
         assert_eq!(cards[0], Card::new(Rank::Ace, Suit::Spades));
         assert_eq!(cards[2], Card::new(Rank::Seven, Suit::Clubs));
         assert_eq!(parse_cards("").expect("empty is valid"), vec![]);
+    }
+
+    #[test]
+    fn parse_cards_accepts_run_together_poker_shorthand() {
+        // "AhKh" is how hands are written everywhere in poker.
+        assert_eq!(parse_cards("AhKh").expect("valid"), parse_cards("Ah Kh").expect("valid"));
+        assert_eq!(
+            parse_cards("AsAdKsKd").expect("valid"),
+            parse_cards("As Ad Ks Kd").expect("valid"),
+            "an Omaha hand"
+        );
+        // Mixed styles in one string.
+        assert_eq!(
+            parse_cards("AhKh 7c2d").expect("valid").len(),
+            4,
+            "two two-card hands"
+        );
+    }
+
+    #[test]
+    fn parse_cards_rejects_odd_length_tokens() {
+        let err = parse_cards("AhK").expect_err("dangling rank");
+        assert_eq!(err.token, "AhK");
+        assert!(matches!(
+            err.kind,
+            ParseCardsErrorKind::Invalid(ParseCardError::WrongLength(3))
+        ));
+    }
+
+    #[test]
+    fn parse_cards_catches_duplicates_inside_a_single_token() {
+        let err = parse_cards("AhAh").expect_err("same card twice");
+        assert_eq!(err.kind, ParseCardsErrorKind::Duplicate);
+        assert_eq!(err.token, "Ah", "reports the card, not the whole token");
     }
 
     #[test]

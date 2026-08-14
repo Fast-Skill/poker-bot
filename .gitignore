@@ -1,0 +1,157 @@
+# =============================================================================
+# Deliberately TRACKED (do not add these):
+#   Cargo.lock          - this is an application workspace; the lock file is
+#                         what makes builds reproducible
+#   calibration configs - small, hand-tuned table layouts for the vision layer
+#   test fixtures       - small sample images/hand histories used by tests
+# =============================================================================
+
+# --- Rust build ---
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# --- Profiling, benchmarking, coverage ---
+/criterion/
+flamegraph.svg
+perf.data
+perf.data.old
+*.profraw
+*.profdata
+tarpaulin-report.*
+cobertura.xml
+lcov.info
+/htmlcov/
+.coverage
+.coverage.*
+
+# --- Python (vision + tooling layer) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+/build/
+/dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.ipynb_checkpoints/
+pip-log.txt
+
+# maturin / PyO3 compiled extensions
+*.so
+*.pyd
+*.dylib
+
+# --- Node (if any JS tooling appears) ---
+node_modules/
+npm-debug.log*
+
+# =============================================================================
+# Secrets and credentials — never commit these
+# =============================================================================
+.env
+.env.*
+!.env.example
+secrets.toml
+secrets.json
+credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
+/config/local.*
+*.local.toml
+
+# =============================================================================
+# Solver artifacts
+# Blueprints and abstraction tables are large binaries regenerated from source.
+# Track the code that builds them, never the gigabytes they emit.
+# =============================================================================
+*.blueprint
+*.abstraction
+*.strategy
+*.regrets
+/blueprints/
+/abstractions/
+/checkpoints/
+/data/
+
+# Trained models, if a neural net layer is added later
+*.onnx
+*.pt
+*.pth
+*.h5
+*.safetensors
+/models/
+
+# =============================================================================
+# Bot runtime data
+# Generated every session, often large, and hand histories can identify the
+# machine and account they came from. Regenerable and not source.
+# =============================================================================
+/hand_histories/
+/sessions/
+*.hh
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+/opponent_stats/
+/bankroll/
+
+# =============================================================================
+# Vision assets
+# Raw captures are large and machine-specific. Sprite templates extracted for
+# recognition are small and belong in the repo — keep them out of these paths.
+# =============================================================================
+/captures/
+/recordings/
+/frames/
+*.raw
+*.mp4
+*.avi
+*.mkv
+
+# --- Logs and scratch ---
+*.log
+/logs/
+/scratch/
+/tmp/
+/temp/
+
+# --- Editors ---
+.vscode/
+.idea/
+.vs/
+*.user
+*.suo
+*.swp
+*.swo
+*~
+.direnv/
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Patch and backup artifacts ---
+*.orig
+*.rej
+*.bak
+*.tmp
