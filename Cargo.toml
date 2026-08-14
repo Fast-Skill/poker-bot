@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/poker-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+# Solver training runs for hours; a profiled dev build is useful.
+[profile.bench]
+inherits = "release"
+debug = true
