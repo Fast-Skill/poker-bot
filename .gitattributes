@@ -1,0 +1,46 @@
+# Normalise line endings so the repository is LF everywhere, regardless of
+# each developer's core.autocrlf setting. Without this, endings depend on
+# local git config and produce whole-file diffs that hide real changes.
+* text=auto eol=lf
+
+# --- Source ---
+*.rs      text eol=lf
+*.toml    text eol=lf
+*.py      text eol=lf
+*.pyi     text eol=lf
+*.md      text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.sh      text eol=lf
+
+# Windows scripts genuinely need CRLF or cmd.exe misparses them.
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# --- Binary: never transform these ---
+# Vision templates especially. Line-ending conversion on a PNG corrupts it,
+# and a corrupted card sprite means silent misrecognition at the table.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.bmp     binary
+*.ico     binary
+*.gif     binary
+*.webp    binary
+*.pdf     binary
+*.zip     binary
+*.gz      binary
+*.exe     binary
+*.dll     binary
+*.so      binary
+*.pyd     binary
+*.dylib   binary
+
+# Solver output, if any ever gets committed deliberately.
+*.blueprint    binary
+*.abstraction  binary
+
+# --- Diff behaviour ---
+Cargo.lock  -diff linguist-generated
