@@ -411,6 +411,56 @@ mod tests {
     }
 
     #[test]
+    fn sampled_training_reaches_the_same_equilibrium_as_exact_training() {
+        // External sampling is the variant NLHE will actually use, so it has
+        // to be checked against a game whose answer is known. If sampling
+        // weights or the traverser/opponent split were wrong, this diverges
+        // while vanilla CFR stays correct.
+        let mut rng = crate::rng::Rng::new(0xBADC0FFEE);
+        let mut solver = Solver::new(Kuhn);
+        solver.train_sampled(400_000, &mut rng);
+
+        let profile = solver.profile();
+        let value = solver.expected_value(&profile);
+        assert!(
+            (value - GAME_VALUE).abs() < 0.01,
+            "sampled game value {value}, expected {GAME_VALUE}"
+        );
+
+        let exploitability = solver.exploitability(&profile);
+        assert!(
+            exploitability < 0.02,
+            "sampled strategy exploitable for {exploitability}"
+        );
+
+        // Player 1's equilibrium is unique, so these are the numbers that
+        // cannot come out right by accident.
+        let tolerance = 0.05;
+        assert!(
+            (bet_probability(&solver, QUEEN, 0b1, 1) - 1.0 / 3.0).abs() < tolerance,
+            "queen bluff-catch frequency"
+        );
+        assert!(
+            (bet_probability(&solver, JACK, 0b0, 1) - 1.0 / 3.0).abs() < tolerance,
+            "jack bluff frequency"
+        );
+        assert!(bet_probability(&solver, KING, 0b1, 1) > 1.0 - tolerance);
+        assert!(bet_probability(&solver, JACK, 0b1, 1) < tolerance);
+    }
+
+    #[test]
+    fn sampling_visits_every_information_set() {
+        let mut rng = crate::rng::Rng::new(7);
+        let mut solver = Solver::new(Kuhn);
+        solver.train_sampled(20_000, &mut rng);
+        assert_eq!(
+            solver.info_set_count(),
+            12,
+            "sampling must still reach the whole tree over many iterations"
+        );
+    }
+
+    #[test]
     fn a_uniform_strategy_is_measurably_exploitable() {
         // Sanity check on the exploitability metric itself: if it reported ~0
         // for everything, the convergence tests above would prove nothing.
