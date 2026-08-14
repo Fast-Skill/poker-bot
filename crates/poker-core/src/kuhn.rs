@@ -449,6 +449,55 @@ mod tests {
     }
 
     #[test]
+    fn cfr_plus_converges_faster_than_vanilla_cfr() {
+        // Both rules reach the same equilibrium; the claim under test is that
+        // CFR+ gets there in materially fewer iterations. Measured early,
+        // where the gap between the two is largest.
+        const BUDGET: usize = 500;
+
+        let mut vanilla = Solver::new(Kuhn).with_discount(crate::cfr::Discount::Vanilla);
+        vanilla.train(BUDGET);
+        let vanilla_gap = vanilla.exploitability(&vanilla.profile());
+
+        let mut plus = Solver::new(Kuhn).with_discount(crate::cfr::Discount::Plus);
+        plus.train(BUDGET);
+        let plus_gap = plus.exploitability(&plus.profile());
+
+        assert!(
+            plus_gap < vanilla_gap,
+            "after {BUDGET} iterations CFR+ was {plus_gap} and vanilla {vanilla_gap}"
+        );
+    }
+
+    #[test]
+    fn both_discount_rules_reach_the_same_equilibrium() {
+        for discount in [crate::cfr::Discount::Vanilla, crate::cfr::Discount::Plus] {
+            let mut solver = Solver::new(Kuhn).with_discount(discount);
+            solver.train(50_000);
+            let value = solver.expected_value(&solver.profile());
+            assert!(
+                (value - GAME_VALUE).abs() < 5e-3,
+                "{discount:?} converged to {value}, expected {GAME_VALUE}"
+            );
+            assert!(
+                (bet_probability(&solver, QUEEN, 0b1, 1) - 1.0 / 3.0).abs() < 0.02,
+                "{discount:?} missed the unique bluff-catch frequency"
+            );
+        }
+    }
+
+    #[test]
+    fn iterations_are_counted() {
+        let mut solver = Solver::new(Kuhn);
+        assert_eq!(solver.iterations(), 0);
+        solver.train(100);
+        assert_eq!(solver.iterations(), 100);
+        let mut rng = crate::rng::Rng::new(1);
+        solver.train_sampled(50, &mut rng);
+        assert_eq!(solver.iterations(), 150, "both trainers share the counter");
+    }
+
+    #[test]
     fn sampling_visits_every_information_set() {
         let mut rng = crate::rng::Rng::new(7);
         let mut solver = Solver::new(Kuhn);

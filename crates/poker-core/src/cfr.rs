@@ -131,19 +131,89 @@ impl Node {
 /// A strategy profile: the probability of each action at each information set.
 pub type Profile = HashMap<InfoKey, Vec<f64>>;
 
+/// How regrets accumulate and strategies are averaged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Discount {
+    /// Classic CFR. Regrets accumulate without a floor and every iteration
+    /// contributes equally to the average strategy.
+    Vanilla,
+    /// CFR+. Two changes, both aimed at the same problem — early mistakes
+    /// lingering far longer than they deserve to.
+    ///
+    /// Cumulative regret is floored at zero, so an action that was briefly
+    /// terrible can be reconsidered as soon as it becomes good, rather than
+    /// waiting to climb out of a deep negative hole. And the average strategy
+    /// is weighted linearly by iteration, so the well-trained later iterations
+    /// dominate the near-random early ones.
+    ///
+    /// Converges substantially faster in practice and is what every serious
+    /// modern solver uses.
+    #[default]
+    Plus,
+}
+
+/// The update rule in force for one iteration.
+#[derive(Debug, Clone, Copy)]
+struct Update {
+    floor_regrets: bool,
+    /// Weight this iteration contributes to the average strategy.
+    strategy_weight: f64,
+}
+
+impl Update {
+    fn for_iteration(discount: Discount, iteration: u64) -> Update {
+        match discount {
+            Discount::Vanilla => Update {
+                floor_regrets: false,
+                strategy_weight: 1.0,
+            },
+            Discount::Plus => Update {
+                floor_regrets: true,
+                strategy_weight: iteration as f64,
+            },
+        }
+    }
+
+    /// Applies `delta` to a cumulative regret under this rule.
+    #[inline]
+    fn accumulate(&self, regret: &mut f64, delta: f64) {
+        *regret += delta;
+        if self.floor_regrets && *regret < 0.0 {
+            *regret = 0.0;
+        }
+    }
+}
+
 /// Trains a strategy for a [`Game`] by running CFR.
 #[derive(Debug)]
 pub struct Solver<G: Game> {
     game: G,
     nodes: HashMap<InfoKey, Node>,
+    discount: Discount,
+    /// Iterations run so far, used for linear strategy weighting.
+    iteration: u64,
 }
 
 impl<G: Game> Solver<G> {
+    /// A solver using [`Discount::Plus`], the faster default.
     pub fn new(game: G) -> Solver<G> {
         Solver {
             game,
             nodes: HashMap::new(),
+            discount: Discount::default(),
+            iteration: 0,
         }
+    }
+
+    /// Chooses the update rule. Use [`Discount::Vanilla`] for textbook CFR.
+    pub fn with_discount(mut self, discount: Discount) -> Solver<G> {
+        self.discount = discount;
+        self
+    }
+
+    /// Iterations run so far.
+    pub fn iterations(&self) -> u64 {
+        self.iteration
     }
 
     pub fn game(&self) -> &G {
@@ -164,7 +234,9 @@ impl<G: Game> Solver<G> {
     pub fn train(&mut self, iterations: usize) {
         let root = self.game.initial();
         for _ in 0..iterations {
-            walk(&self.game, &mut self.nodes, &root, [1.0, 1.0], 1.0);
+            self.iteration += 1;
+            let update = Update::for_iteration(self.discount, self.iteration);
+            walk(&self.game, &mut self.nodes, &root, [1.0, 1.0], 1.0, update);
         }
     }
 
@@ -183,9 +255,11 @@ impl<G: Game> Solver<G> {
     pub fn train_sampled(&mut self, iterations: usize, rng: &mut Rng) {
         let root = self.game.initial();
         for _ in 0..iterations {
+            self.iteration += 1;
+            let update = Update::for_iteration(self.discount, self.iteration);
             // Alternate which player's regrets are being updated.
             for traverser in 0..2 {
-                sample_walk(&self.game, &mut self.nodes, &root, traverser, rng);
+                sample_walk(&self.game, &mut self.nodes, &root, traverser, rng, update);
             }
         }
     }
@@ -235,6 +309,7 @@ fn walk<G: Game>(
     state: &G::State,
     reach: [f64; 2],
     chance_reach: f64,
+    update: Update,
 ) -> f64 {
     if game.is_terminal(state) {
         return game.terminal_utility(state);
@@ -245,7 +320,7 @@ fn walk<G: Game>(
             .chance_outcomes(state)
             .into_iter()
             .map(|(next, probability)| {
-                probability * walk(game, nodes, &next, reach, chance_reach * probability)
+                probability * walk(game, nodes, &next, reach, chance_reach * probability, update)
             })
             .sum();
     }
@@ -266,7 +341,7 @@ fn walk<G: Game>(
         let next = game.apply(state, action);
         let mut next_reach = reach;
         next_reach[player] *= strategy[action];
-        *utility = walk(game, nodes, &next, next_reach, chance_reach);
+        *utility = walk(game, nodes, &next, next_reach, chance_reach, update);
         node_utility += strategy[action] * *utility;
     }
 
@@ -278,10 +353,12 @@ fn walk<G: Game>(
         // player 1 gains exactly what player 0 loses.
         let gain = action_utility[action] - node_utility;
         let regret = if player == 0 { gain } else { -gain };
-        node.regret_sum[action] += counterfactual * regret;
+        update.accumulate(&mut node.regret_sum[action], counterfactual * regret);
 
-        // The average strategy is weighted by this player's own reach.
-        node.strategy_sum[action] += reach[player] * strategy[action];
+        // The average strategy is weighted by this player's own reach, and by
+        // how much this iteration is worth under the discount rule.
+        node.strategy_sum[action] +=
+            update.strategy_weight * reach[player] * strategy[action];
     }
 
     node_utility
@@ -298,6 +375,7 @@ fn sample_walk<G: Game>(
     state: &G::State,
     traverser: usize,
     rng: &mut Rng,
+    update: Update,
 ) -> f64 {
     if game.is_terminal(state) {
         let utility = game.terminal_utility(state);
@@ -306,7 +384,7 @@ fn sample_walk<G: Game>(
 
     if game.is_chance(state) {
         let next = game.sample_chance(state, rng);
-        return sample_walk(game, nodes, &next, traverser, rng);
+        return sample_walk(game, nodes, &next, traverser, rng, update);
     }
 
     let player = game.current_player(state);
@@ -322,10 +400,17 @@ fn sample_walk<G: Game>(
         // accumulated here, on the visits where they are not being updated.
         let node = nodes.get_mut(&key).expect("inserted above");
         for (action, probability) in strategy.iter().enumerate() {
-            node.strategy_sum[action] += probability;
+            node.strategy_sum[action] += update.strategy_weight * probability;
         }
         let sampled = sample_action(&strategy, rng);
-        return sample_walk(game, nodes, &game.apply(state, sampled), traverser, rng);
+        return sample_walk(
+            game,
+            nodes,
+            &game.apply(state, sampled),
+            traverser,
+            rng,
+            update,
+        );
     }
 
     // The traverser explores every action, which is what keeps the regret
@@ -333,13 +418,20 @@ fn sample_walk<G: Game>(
     let mut action_value = vec![0.0; actions];
     let mut node_value = 0.0;
     for (action, value) in action_value.iter_mut().enumerate() {
-        *value = sample_walk(game, nodes, &game.apply(state, action), traverser, rng);
+        *value = sample_walk(
+            game,
+            nodes,
+            &game.apply(state, action),
+            traverser,
+            rng,
+            update,
+        );
         node_value += strategy[action] * *value;
     }
 
     let node = nodes.get_mut(&key).expect("inserted above");
     for (action, value) in action_value.iter().enumerate() {
-        node.regret_sum[action] += value - node_value;
+        update.accumulate(&mut node.regret_sum[action], value - node_value);
     }
 
     node_value

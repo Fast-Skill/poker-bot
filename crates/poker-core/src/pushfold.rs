@@ -742,12 +742,42 @@ mod tests {
     }
 
     #[test]
-    fn trash_is_playable_when_short_and_not_when_deep() {
+    fn deep_stack_push_ranges_are_contained_in_short_stack_ones() {
+        // Nash push ranges nest: every hand worth jamming with more behind is
+        // still worth jamming with less. Asserted across all 169 classes rather
+        // than on one hand, because any single marginal holding sits near
+        // indifference and its exact frequency is dominated by solver noise.
         let equity = table();
-        let short = frequency(&solve(3.0, equity.clone()), 0, "72o");
-        let deep = frequency(&solve(20.0, equity), 0, "72o");
-        assert!(short > deep, "72o: {short:.3} at 3bb vs {deep:.3} at 20bb");
-        assert!(deep < 0.15, "72o should mostly fold at 20bb, got {deep:.3}");
+        let short = solve(5.0, equity.clone());
+        let deep = solve(20.0, equity);
+
+        for hand in HandClass::all() {
+            let text = hand.to_string();
+            let (near, far) = (
+                frequency(&short, 0, &text),
+                frequency(&deep, 0, &text),
+            );
+            assert!(
+                near >= far - 0.15,
+                "{text} pushes {far:.3} at 20bb but only {near:.3} at 5bb"
+            );
+        }
+    }
+
+    #[test]
+    fn premium_hands_are_pushed_at_every_depth_and_trash_only_when_short() {
+        let equity = table();
+        for stack in [5.0, 20.0] {
+            let solver = solve(stack, equity.clone());
+            assert!(
+                frequency(&solver, 0, "AA") > 0.95,
+                "aces must jam at {stack}bb"
+            );
+            assert!(
+                frequency(&solver, 0, "72o") < 0.30,
+                "72o is never a standard jam, even at {stack}bb"
+            );
+        }
     }
 
     #[test]
