@@ -20,6 +20,7 @@
 //! receives the negation. That is what makes the game zero-sum, and it keeps
 //! one sign convention in one place instead of scattered through the recursion.
 
+use crate::rng::Rng;
 use std::collections::HashMap;
 
 /// Identifies an information set: everything the acting player knows.
@@ -58,6 +59,32 @@ pub trait Game {
 
     /// The state after taking `action`, an index below [`Game::num_actions`].
     fn apply(&self, state: &Self::State, action: usize) -> Self::State;
+
+    /// Draws a single chance outcome.
+    ///
+    /// The default walks [`Game::chance_outcomes`], which is correct but builds
+    /// the whole distribution each visit. Games whose chance space is large —
+    /// dealing from a 52-card deck, say — should override this to draw
+    /// directly, since materialising every possible deal per iteration defeats
+    /// the point of sampling.
+    fn sample_chance(&self, state: &Self::State, rng: &mut Rng) -> Self::State {
+        let outcomes = self.chance_outcomes(state);
+        debug_assert!(!outcomes.is_empty(), "chance node with no outcomes");
+        let roll = rng.next_f64();
+        let mut cumulative = 0.0;
+        for (next, probability) in &outcomes {
+            cumulative += probability;
+            if roll < cumulative {
+                return next.clone();
+            }
+        }
+        // Reached only through floating-point drift in the final comparison.
+        outcomes
+            .into_iter()
+            .next_back()
+            .expect("chance node with no outcomes")
+            .0
+    }
 }
 
 /// Converts regrets into a strategy: play each action in proportion to its
@@ -138,6 +165,28 @@ impl<G: Game> Solver<G> {
         let root = self.game.initial();
         for _ in 0..iterations {
             walk(&self.game, &mut self.nodes, &root, [1.0, 1.0], 1.0);
+        }
+    }
+
+    /// Runs `iterations` of external-sampling MCCFR.
+    ///
+    /// Each iteration walks the tree twice, once per player. For the player
+    /// being updated every action is explored; for the opponent and for chance,
+    /// a single outcome is sampled. Cost per iteration is therefore
+    /// proportional to the traverser's own decisions rather than to the whole
+    /// tree, which is what makes games the size of No-Limit Hold'em reachable.
+    ///
+    /// The trade is variance for reach: individual iterations are noisy, but
+    /// the estimator is unbiased, so the average strategy converges to the same
+    /// equilibrium [`Solver::train`] finds — just via many more, much cheaper,
+    /// iterations.
+    pub fn train_sampled(&mut self, iterations: usize, rng: &mut Rng) {
+        let root = self.game.initial();
+        for _ in 0..iterations {
+            // Alternate which player's regrets are being updated.
+            for traverser in 0..2 {
+                sample_walk(&self.game, &mut self.nodes, &root, traverser, rng);
+            }
         }
     }
 
@@ -236,6 +285,77 @@ fn walk<G: Game>(
     }
 
     node_utility
+}
+
+/// One external-sampling traversal, returning the value to `traverser`.
+///
+/// Utilities are converted to the traverser's perspective on entry, so the
+/// regret arithmetic below needs no sign handling — unlike [`walk`], which
+/// carries player 0's perspective throughout.
+fn sample_walk<G: Game>(
+    game: &G,
+    nodes: &mut HashMap<InfoKey, Node>,
+    state: &G::State,
+    traverser: usize,
+    rng: &mut Rng,
+) -> f64 {
+    if game.is_terminal(state) {
+        let utility = game.terminal_utility(state);
+        return if traverser == 0 { utility } else { -utility };
+    }
+
+    if game.is_chance(state) {
+        let next = game.sample_chance(state, rng);
+        return sample_walk(game, nodes, &next, traverser, rng);
+    }
+
+    let player = game.current_player(state);
+    let actions = game.num_actions(state);
+    let key = game.info_key(state);
+    let strategy = nodes
+        .entry(key)
+        .or_insert_with(|| Node::new(actions))
+        .current_strategy();
+
+    if player != traverser {
+        // The opponent plays one sampled action. Their average strategy is
+        // accumulated here, on the visits where they are not being updated.
+        let node = nodes.get_mut(&key).expect("inserted above");
+        for (action, probability) in strategy.iter().enumerate() {
+            node.strategy_sum[action] += probability;
+        }
+        let sampled = sample_action(&strategy, rng);
+        return sample_walk(game, nodes, &game.apply(state, sampled), traverser, rng);
+    }
+
+    // The traverser explores every action, which is what keeps the regret
+    // estimate unbiased despite sampling everywhere else.
+    let mut action_value = vec![0.0; actions];
+    let mut node_value = 0.0;
+    for (action, value) in action_value.iter_mut().enumerate() {
+        *value = sample_walk(game, nodes, &game.apply(state, action), traverser, rng);
+        node_value += strategy[action] * *value;
+    }
+
+    let node = nodes.get_mut(&key).expect("inserted above");
+    for (action, value) in action_value.iter().enumerate() {
+        node.regret_sum[action] += value - node_value;
+    }
+
+    node_value
+}
+
+/// Draws an action index from a strategy distribution.
+fn sample_action(strategy: &[f64], rng: &mut Rng) -> usize {
+    let roll = rng.next_f64();
+    let mut cumulative = 0.0;
+    for (action, probability) in strategy.iter().enumerate() {
+        cumulative += probability;
+        if roll < cumulative {
+            return action;
+        }
+    }
+    strategy.len() - 1
 }
 
 /// Expected payoff to player 0 when both players follow `profile`.
