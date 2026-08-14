@@ -25,11 +25,19 @@ use crate::card::{Card, CardSet, Suit};
 use crate::cfr::{Game, InfoKey};
 use crate::eval::evaluate;
 use crate::rng::Rng;
+use std::fs::{self, File};
+use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
 /// Fold, for either player.
 pub const FOLD: usize = 0;
 /// Push for the small blind, call for the big blind.
 pub const PUSH: usize = 1;
+
+/// Identifies a serialized equity table.
+const TABLE_MAGIC: &[u8; 4] = b"PKEQ";
+/// Bumped whenever the layout changes, so stale caches are rebuilt.
+const TABLE_VERSION: u32 = 1;
 
 /// Pairwise showdown equity between starting-hand classes.
 ///
@@ -67,11 +75,145 @@ impl EquityTable {
         EquityTable { table }
     }
 
+    /// Builds the table across `threads` workers.
+    ///
+    /// Each class pairing is seeded from `seed` and its own indices, never from
+    /// the worker it lands on, so the result is bit-identical no matter how many
+    /// threads run it. A table that changed with the core count would make every
+    /// downstream solve irreproducible.
+    pub fn sampled_parallel(samples: u32, seed: u64, threads: usize) -> EquityTable {
+        let pairs: Vec<(usize, usize)> = (0..NUM_HAND_CLASSES)
+            .flat_map(|a| (a + 1..NUM_HAND_CLASSES).map(move |b| (a, b)))
+            .collect();
+        let threads = threads.max(1);
+        let chunk = pairs.len().div_ceil(threads);
+
+        let computed: Vec<Vec<(usize, usize, f64)>> = std::thread::scope(|scope| {
+            let workers: Vec<_> = pairs
+                .chunks(chunk)
+                .map(|slice| {
+                    scope.spawn(move || {
+                        let mut deck = Vec::with_capacity(48);
+                        slice
+                            .iter()
+                            .map(|&(a, b)| {
+                                let mut rng = Rng::new(pair_seed(seed, a, b));
+                                let class_a = HandClass::from_index(a).expect("in range");
+                                let class_b = HandClass::from_index(b).expect("in range");
+                                let equity = sample_pair_equity(
+                                    class_a, class_b, samples, &mut rng, &mut deck,
+                                );
+                                (a, b, equity)
+                            })
+                            .collect()
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .map(|worker| worker.join().expect("equity worker panicked"))
+                .collect()
+        });
+
+        let mut table = vec![0.5f32; NUM_HAND_CLASSES * NUM_HAND_CLASSES];
+        for batch in computed {
+            for (a, b, equity) in batch {
+                table[a * NUM_HAND_CLASSES + b] = equity as f32;
+                table[b * NUM_HAND_CLASSES + a] = (1.0 - equity) as f32;
+            }
+        }
+        EquityTable { table }
+    }
+
     /// Class `a`'s equity against class `b`.
     #[inline]
     pub fn get(&self, a: HandClass, b: HandClass) -> f64 {
         self.table[a.index() * NUM_HAND_CLASSES + b.index()] as f64
     }
+
+    /// Writes the table to `path`, creating parent directories as needed.
+    ///
+    /// The format is a short header followed by row-major `f32` values —
+    /// about 112 KB. Building a high-precision table takes minutes; reloading
+    /// it takes milliseconds, so it is computed once and cached.
+    pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = BufWriter::new(File::create(path)?);
+        file.write_all(TABLE_MAGIC)?;
+        file.write_all(&TABLE_VERSION.to_le_bytes())?;
+        file.write_all(&(NUM_HAND_CLASSES as u32).to_le_bytes())?;
+        for value in &self.table {
+            file.write_all(&value.to_le_bytes())?;
+        }
+        file.flush()
+    }
+
+    /// Reads a table written by [`EquityTable::save`].
+    pub fn load(path: impl AsRef<Path>) -> io::Result<EquityTable> {
+        let mut file = BufReader::new(File::open(path)?);
+
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic)?;
+        if &magic != TABLE_MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not an equity table",
+            ));
+        }
+
+        let mut word = [0u8; 4];
+        file.read_exact(&mut word)?;
+        let version = u32::from_le_bytes(word);
+        if version != TABLE_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("equity table version {version}, expected {TABLE_VERSION}"),
+            ));
+        }
+
+        file.read_exact(&mut word)?;
+        let classes = u32::from_le_bytes(word) as usize;
+        if classes != NUM_HAND_CLASSES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("table covers {classes} classes, expected {NUM_HAND_CLASSES}"),
+            ));
+        }
+
+        let mut table = vec![0.0f32; NUM_HAND_CLASSES * NUM_HAND_CLASSES];
+        for value in table.iter_mut() {
+            file.read_exact(&mut word)?;
+            *value = f32::from_le_bytes(word);
+        }
+        Ok(EquityTable { table })
+    }
+
+    /// Loads the cached table at `path`, building and saving it if absent.
+    ///
+    /// A cache that fails to load — corrupt, or written by an older version —
+    /// is rebuilt rather than treated as an error, since it is derived data.
+    pub fn load_or_build(
+        path: impl AsRef<Path>,
+        samples: u32,
+        seed: u64,
+        threads: usize,
+    ) -> io::Result<EquityTable> {
+        let path = path.as_ref();
+        if let Ok(table) = EquityTable::load(path) {
+            return Ok(table);
+        }
+        let table = EquityTable::sampled_parallel(samples, seed, threads);
+        table.save(path)?;
+        Ok(table)
+    }
+}
+
+/// A per-pairing seed, independent of how work is divided across threads.
+fn pair_seed(seed: u64, a: usize, b: usize) -> u64 {
+    seed ^ ((a * NUM_HAND_CLASSES + b) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
 /// Draws concrete cards for `class` that avoid `blocked`.
@@ -400,6 +542,117 @@ mod tests {
         assert!(table.get(class("AA"), class("KK")) > 0.75);
         assert!(table.get(class("AA"), class("72o")) > 0.80);
         assert!((table.get(class("AKs"), class("22")) - 0.5).abs() < 0.10);
+    }
+
+    #[test]
+    fn parallel_building_does_not_depend_on_the_thread_count() {
+        // Seeding per pairing rather than per worker is what makes this hold.
+        // If it failed, every solve would be irreproducible across machines
+        // with different core counts.
+        let one = EquityTable::sampled_parallel(120, 0xABCD, 1);
+        let many = EquityTable::sampled_parallel(120, 0xABCD, 4);
+        for a in HandClass::all() {
+            for b in HandClass::all() {
+                assert_eq!(one.get(a, b), many.get(a, b), "{a} vs {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_table_round_trips_through_disk() {
+        let original = EquityTable::sampled_parallel(120, 0x1234, 2);
+        let path = std::env::temp_dir().join("poker_core_equity_roundtrip.bin");
+
+        original.save(&path).expect("save should succeed");
+        let loaded = EquityTable::load(&path).expect("load should succeed");
+
+        for a in HandClass::all() {
+            for b in HandClass::all() {
+                assert_eq!(original.get(a, b), loaded.get(a, b), "{a} vs {b}");
+            }
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn loading_a_corrupt_cache_is_an_error_not_a_wrong_table() {
+        let path = std::env::temp_dir().join("poker_core_equity_corrupt.bin");
+        std::fs::write(&path, b"not an equity table at all").expect("write");
+
+        let result = EquityTable::load(&path);
+        assert!(result.is_err(), "garbage must not load as a valid table");
+
+        // load_or_build treats a bad cache as absent and rebuilds it.
+        let rebuilt = EquityTable::load_or_build(&path, 60, 0x99, 2).expect("rebuild");
+        assert!((rebuilt.get(class("AA"), class("72o")) - 0.85).abs() < 0.10);
+        assert!(EquityTable::load(&path).is_ok(), "cache was repaired");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn equity_ranks_hands_in_the_expected_order() {
+        // Against a fixed weak hand, stronger holdings must show more equity.
+        // This is the property sampling noise was breaking in the solved charts.
+        //
+        // Choosing the rungs is harder than it looks, and the constraints are
+        // all real poker, not test hygiene:
+        //
+        // 1. No rung shares a rank with the villain. Sharing one creates
+        //    domination, which reorders equities independently of hand
+        //    strength — see the test below.
+        // 2. No two rungs sit in the same structural matchup. *Every* pair
+        //    against two undercards runs about 87%, whether it is aces or
+        //    tens, because what beats it is the undercards improving rather
+        //    than the pair's rank. AA over TT here is under a point — far
+        //    below the sampling error, so it is unorderable in a unit test.
+        //
+        // What remains are three genuinely different matchups roughly twenty
+        // points apart: a pair over undercards, two overcards, and a hand
+        // playing catch-up.
+        let table = EquityTable::sampled_parallel(5_000, 0x5EED, 4);
+        let villain = class("72o");
+
+        let ladder = ["AA", "AKs", "54s"];
+        for pair in ladder.windows(2) {
+            let (stronger, weaker) = (class(pair[0]), class(pair[1]));
+            assert!(
+                table.get(stronger, villain) > table.get(weaker, villain),
+                "{} ({:.4}) should beat {} ({:.4}) against 72o",
+                pair[0],
+                table.get(stronger, villain),
+                pair[1],
+                table.get(weaker, villain),
+            );
+        }
+    }
+
+    #[test]
+    fn domination_outweighs_raw_hand_strength() {
+        // 87s is a far weaker holding than AKs, yet it is the bigger favourite
+        // against 72o: the seven ties the villain's seven while the eight
+        // outkicks the deuce, so the villain is drawing thin. AKs merely holds
+        // two overcards and has to improve.
+        //
+        // Equity is a property of the matchup, not of a hand in isolation. A
+        // solver that ranked hands on a single strength axis would misprice
+        // every dominated spot, so this is asserted rather than assumed.
+        let table = EquityTable::sampled_parallel(5_000, 0x5EED, 4);
+        let villain = class("72o");
+
+        let dominating = table.get(class("87s"), villain);
+        let overcards = table.get(class("AKs"), villain);
+        assert!(
+            dominating > overcards,
+            "87s ({dominating:.4}) should beat AKs ({overcards:.4}) against 72o"
+        );
+
+        // The same holding loses its edge once the shared rank is gone.
+        let no_overlap = table.get(class("87s"), class("A3o"));
+        assert!(
+            no_overlap < dominating,
+            "87s is only this strong because it dominates: {no_overlap:.4} vs {dominating:.4}"
+        );
     }
 
     #[test]
