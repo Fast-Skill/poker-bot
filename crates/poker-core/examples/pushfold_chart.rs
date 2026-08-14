@@ -9,15 +9,23 @@ use poker_core::pushfold::{EquityTable, PushFold, PUSH};
 use poker_core::rng::Rng;
 use std::time::Instant;
 
-const EQUITY_SAMPLES: u32 = 4_000;
+
+/// High enough that the standard error (~0.2%) sits below the equity gaps that
+/// decide marginal push/fold cells. Built once, then cached.
+const EQUITY_SAMPLES: u32 = 60_000;
 const ITERATIONS: usize = 3_000_000;
+const CACHE: &str = "data/preflop_equity.bin";
 
 fn main() {
-    print!("building the 169x169 equity table ({EQUITY_SAMPLES} samples per pairing)... ");
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+
+    print!("equity table ({EQUITY_SAMPLES} samples/pairing, {threads} threads)... ");
     let started = Instant::now();
-    let mut rng = Rng::new(0x9E3779B9);
-    let equity = EquityTable::sampled(EQUITY_SAMPLES, &mut rng);
-    println!("{:.1?}", started.elapsed());
+    let equity = EquityTable::load_or_build(CACHE, EQUITY_SAMPLES, 0x9E3779B9, threads)
+        .expect("equity table should build");
+    println!("{:.1?}  [cached at {CACHE}]", started.elapsed());
 
     println!("\nRange widths by stack depth (share of all 1,326 combos)\n");
     println!("{:>8}  {:>10}  {:>10}  {:>16}", "stack", "SB push", "BB call", "SB EV (bb/hand)");
