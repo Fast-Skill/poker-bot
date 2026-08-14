@@ -1,0 +1,10 @@
+[package]
+name = "poker-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Cards, hand evaluation, and game-state engine for NLHE and PLO."
+
+[dependencies]
+
+[dev-dependencies]
