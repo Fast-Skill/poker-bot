@@ -8,6 +8,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![warn(missing_debug_implementations)]
 
+pub mod abstraction;
 pub mod betting;
 pub mod card;
 pub mod cfr;
@@ -18,6 +19,7 @@ pub mod omaha;
 pub mod pot;
 pub mod rng;
 
+pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};
 pub use cfr::{Game, InfoKey, Profile, Solver};
 pub use card::{
