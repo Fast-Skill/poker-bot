@@ -17,6 +17,7 @@ pub mod eval;
 pub mod kuhn;
 pub mod omaha;
 pub mod pot;
+pub mod preflop;
 pub mod pushfold;
 pub mod rng;
 
