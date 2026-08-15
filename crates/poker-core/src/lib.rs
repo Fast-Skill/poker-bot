@@ -19,6 +19,7 @@ pub mod omaha;
 pub mod pot;
 pub mod preflop;
 pub mod pushfold;
+pub mod range;
 pub mod river;
 pub mod rng;
 
@@ -31,6 +32,7 @@ pub use card::{
 };
 pub use equity::{Equity, EquityError, Variant};
 pub use eval::{evaluate, Category, HandRank};
+pub use range::{ParseRangeError, Range};
 pub use rng::Rng;
 pub use omaha::{best_omaha_hand, evaluate_omaha};
 pub use pot::{award, build_pots, OddChip, Pot};

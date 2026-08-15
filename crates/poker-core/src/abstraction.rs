@@ -16,7 +16,7 @@
 //! making.
 
 use crate::betting::{Action, LegalActions};
-use crate::card::{Card, Rank, NUM_RANKS};
+use crate::card::{Card, Rank, Suit, NUM_RANKS};
 use std::fmt;
 use std::str::FromStr;
 
@@ -56,6 +56,58 @@ impl HandClass {
             low * NUM_RANKS as u8 + high
         };
         HandClass(index)
+    }
+
+    /// Builds a class from two ranks and whether they share a suit.
+    ///
+    /// The ranks may be given in either order.
+    ///
+    /// # Panics
+    /// Panics if a pair is asked for as suited, which no two cards can be.
+    pub fn new(a: Rank, b: Rank, suited: bool) -> HandClass {
+        let (high, low) = if a >= b { (a, b) } else { (b, a) };
+        assert!(
+            !(suited && high == low),
+            "a pair cannot be suited: {high}{low}"
+        );
+        let index = if suited || high == low {
+            high.index() * NUM_RANKS as u8 + low.index()
+        } else {
+            low.index() * NUM_RANKS as u8 + high.index()
+        };
+        HandClass(index)
+    }
+
+    /// Every concrete two-card holding in this class.
+    ///
+    /// Six for a pair, four for a suited hand, twelve for an offsuit one —
+    /// matching [`HandClass::combos`].
+    pub fn combinations(self) -> Vec<[Card; 2]> {
+        let (high, low) = (self.high(), self.low());
+        let mut out = Vec::with_capacity(self.combos() as usize);
+
+        if self.is_pair() {
+            for (i, first) in Suit::ALL.iter().enumerate() {
+                for second in &Suit::ALL[i + 1..] {
+                    out.push([Card::new(high, *first), Card::new(high, *second)]);
+                }
+            }
+        } else if self.is_suited() {
+            for suit in Suit::ALL {
+                out.push([Card::new(high, suit), Card::new(low, suit)]);
+            }
+        } else {
+            for first in Suit::ALL {
+                for second in Suit::ALL {
+                    if first != second {
+                        out.push([Card::new(high, first), Card::new(low, second)]);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(out.len(), self.combos() as usize);
+        out
     }
 
     /// Builds a class from its `0..169` index.
@@ -371,6 +423,47 @@ mod tests {
             assert_eq!(count, class.combos(), "{class} combo count");
         }
         assert_eq!(seen.values().sum::<u32>(), 1_326, "combos are conserved");
+    }
+
+    #[test]
+    fn new_agrees_with_reading_the_cards() {
+        for class in HandClass::all() {
+            let rebuilt = HandClass::new(class.high(), class.low(), class.is_suited());
+            assert_eq!(rebuilt, class, "{class}");
+        }
+        // Rank order is irrelevant.
+        assert_eq!(
+            HandClass::new(Rank::King, Rank::Ace, true),
+            HandClass::new(Rank::Ace, Rank::King, true)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "a pair cannot be suited")]
+    fn a_suited_pair_is_rejected() {
+        HandClass::new(Rank::Ace, Rank::Ace, true);
+    }
+
+    #[test]
+    fn combinations_enumerate_every_holding_exactly_once() {
+        let mut seen = std::collections::HashSet::new();
+        let mut total = 0;
+
+        for class in HandClass::all() {
+            let combos = class.combinations();
+            assert_eq!(combos.len(), class.combos() as usize, "{class}");
+            for pair in combos {
+                assert_ne!(pair[0], pair[1], "{class} produced a duplicate card");
+                // Every holding must classify back to where it came from.
+                assert_eq!(HandClass::from_cards(pair[0], pair[1]), class);
+                let mut key = [pair[0].index(), pair[1].index()];
+                key.sort_unstable();
+                assert!(seen.insert(key), "{class} repeated a holding");
+                total += 1;
+            }
+        }
+
+        assert_eq!(total, 1_326, "every two-card holding, exactly once");
     }
 
     #[test]

@@ -110,6 +110,20 @@ impl HandRank {
         self.0
     }
 
+    /// Rebuilds a rank from [`HandRank::to_bits`].
+    ///
+    /// Returns `None` if the category field holds no valid category. That check
+    /// is not decoration: [`HandRank::category`] transmutes those bits, so
+    /// accepting arbitrary input here would make a safe function unsound.
+    #[inline]
+    pub fn from_bits(bits: u32) -> Option<HandRank> {
+        let category = (bits >> CATEGORY_SHIFT) as usize;
+        if category >= Category::ALL.len() {
+            return None;
+        }
+        Some(HandRank(bits))
+    }
+
     /// The tiebreak ranks, most significant first, including zero padding.
     fn slots(self) -> [u8; NUM_SLOTS] {
         let mut out = [0u8; NUM_SLOTS];
@@ -495,6 +509,31 @@ mod tests {
         assert_eq!(rank("9c 9d 9h 2s 2c").to_string(), "full house (9 2)");
         assert_eq!(rank("9c 9d 7h 5s 2c").to_string(), "pair (9 7 5 2)");
         assert_eq!(HandRank::WORST.to_string(), "(none)");
+    }
+
+    #[test]
+    fn bits_round_trip_through_from_bits() {
+        for hand in [
+            "As Ks Qs Js Ts",
+            "9c 9d 9h 2s 2c",
+            "Ac Jd 9h 5s 2c",
+            "7c 5d 4h 3s 2c",
+        ] {
+            let original = rank(hand);
+            let rebuilt = HandRank::from_bits(original.to_bits()).expect("valid bits");
+            assert_eq!(rebuilt, original, "{hand}");
+            assert_eq!(rebuilt.category(), original.category());
+        }
+        assert_eq!(HandRank::from_bits(0), Some(HandRank::WORST));
+    }
+
+    #[test]
+    fn from_bits_rejects_an_impossible_category() {
+        // Category 9 does not exist; accepting it would make category()
+        // transmute an invalid discriminant.
+        let bogus = 9u32 << CATEGORY_SHIFT;
+        assert_eq!(HandRank::from_bits(bogus), None);
+        assert_eq!(HandRank::from_bits(u32::MAX), None);
     }
 
     #[test]
