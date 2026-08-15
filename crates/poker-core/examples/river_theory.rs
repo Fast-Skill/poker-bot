@@ -18,7 +18,10 @@ fn main() {
     println!("{}", "-".repeat(76));
 
     for fraction in [0.25, 0.33, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0] {
-        let spot = River::new(
+        // Raising is off: the closed-form solution assumes a single bet and a
+        // single call, so allowing raises would be comparing against the wrong
+        // equilibrium.
+        let spot = River::without_raises(
             1.0,
             100.0,
             &[fraction],
@@ -53,7 +56,8 @@ fn main() {
 }
 
 fn strategy(solver: &Solver<River>, stage: Stage, holding: usize) -> Vec<f64> {
+    // A single bet size and no raises, so both size indices are zero.
     solver
-        .average_strategy(River::info_key(stage, holding))
+        .average_strategy(River::info_key(stage, holding, 0, 0))
         .expect("information set was visited")
 }
