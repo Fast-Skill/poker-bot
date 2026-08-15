@@ -9,6 +9,7 @@
 #![warn(missing_debug_implementations)]
 
 pub mod abstraction;
+pub mod bench;
 pub mod betting;
 pub mod blueprint;
 pub mod card;
@@ -23,6 +24,7 @@ pub mod pushfold;
 pub mod range;
 pub mod river;
 pub mod rng;
+pub mod table;
 pub mod turnriver;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
