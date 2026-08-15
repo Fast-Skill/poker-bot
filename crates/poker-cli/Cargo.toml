@@ -1,0 +1,13 @@
+[package]
+name = "poker-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Solve strategies, store them as blueprints, and query them."
+
+[[bin]]
+name = "poker"
+path = "src/main.rs"
+
+[dependencies]
+poker-core = { path = "../poker-core" }
