@@ -10,6 +10,7 @@
 
 pub mod abstraction;
 pub mod betting;
+pub mod blueprint;
 pub mod card;
 pub mod cfr;
 pub mod equity;
@@ -26,6 +27,7 @@ pub mod turnriver;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};
+pub use blueprint::Blueprint;
 pub use cfr::{Discount, Game, InfoKey, Profile, Solver};
 pub use card::{
     parse_cards, Card, CardSet, ParseCardError, ParseCardsError, ParseCardsErrorKind, Rank, Suit,
