@@ -22,6 +22,7 @@ pub mod pushfold;
 pub mod range;
 pub mod river;
 pub mod rng;
+pub mod turnriver;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};
