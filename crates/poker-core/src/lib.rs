@@ -19,6 +19,7 @@ pub mod omaha;
 pub mod pot;
 pub mod preflop;
 pub mod pushfold;
+pub mod river;
 pub mod rng;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
