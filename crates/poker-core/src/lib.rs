@@ -12,6 +12,7 @@ pub mod abstraction;
 pub mod bench;
 pub mod betting;
 pub mod blueprint;
+pub mod bot;
 pub mod card;
 pub mod cfr;
 pub mod equity;
