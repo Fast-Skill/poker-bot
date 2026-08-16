@@ -21,7 +21,8 @@ use poker_core::blueprint::Blueprint;
 use poker_core::bot::BlueprintAgent;
 use poker_core::card::{Rank, NUM_RANKS};
 use poker_core::cfr::Solver;
-use poker_core::table::Table;
+use poker_core::betting::Action;
+use poker_core::table::{Agent, Deck, Table};
 use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
 use poker_core::rng::Rng;
@@ -41,6 +42,7 @@ fn main() -> ExitCode {
         Some("query") => query(&args[1..]),
         Some("chart") => chart(&args[1..]),
         Some("bench") => bench(&args[1..]),
+        Some("play") => play(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             Ok(())
@@ -68,6 +70,7 @@ USAGE
   poker query <blueprint> [options] look up one decision
   poker chart <blueprint> [options] print a 13x13 range grid
   poker bench <blueprint> [options] play it against baseline opponents
+  poker play  <blueprint> [options] watch it play, hand by hand
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -90,6 +93,12 @@ BENCH OPTIONS
   --vs <opponent>     fold | call | jam | chart | all   [default all]
   --hands <n>         hands per match                   [default 20000]
   --stack <bb>        stack depth for the table         [default 100]
+
+PLAY OPTIONS
+  --vs <opponent>     fold | call | jam | chart         [default chart]
+  --hands <n>         hands to show                     [default 10]
+  --stack <bb>        stack depth for the table         [default 100]
+  --seed <n>          fix the shuffle, to replay a run  [default 1]
 
 STAGES
   pushfold   sb, bb
@@ -428,6 +437,117 @@ fn bench(args: &[String]) -> Result<(), String> {
 
     println!("WIN means the lower bound of the 95% interval is above zero.");
     Ok(())
+}
+
+fn play(args: &[String]) -> Result<(), String> {
+    let path = args.first().ok_or("play needs a blueprint path")?;
+    let flags = Flags::parse(&args[1..])?;
+    flags.reject_unknown(&["vs", "hands", "stack", "seed"])?;
+
+    let blueprint = open(path)?;
+    let stack_bb = flags.number("stack", 100.0)?;
+    let hands = flags.number("hands", 10.0)? as u64;
+    let seed = flags.number("seed", 1.0)? as u64;
+    let opponent_name = flags.text("vs", "chart");
+
+    let big_blind = 100u64;
+    let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
+    let mut hero = BlueprintAgent::new("bot", blueprint.clone(), Sizing::default());
+    let mut opponent: Box<dyn Agent> = match opponent_name.as_str() {
+        "fold" => Box::new(AlwaysFold),
+        "call" => Box::new(AlwaysCall),
+        "jam" => Box::new(AlwaysJam),
+        "chart" => Box::new(ChartBot::default()),
+        other => {
+            return Err(format!(
+                "unknown opponent {other:?}; try fold, call, jam, or chart"
+            ))
+        }
+    };
+
+    println!("{} vs {opponent_name}", blueprint.label());
+    println!("{table}, seed {seed}\n");
+
+    let mut rng = Rng::new(seed);
+    let mut deck = Deck::fresh();
+    let mut running = 0i64;
+
+    for hand in 1..=hands {
+        deck.shuffle(&mut rng);
+        let result = table.play_hand([&mut hero, opponent.as_mut()], deck.hand_cards(), &mut rng);
+
+        println!("Hand {hand}  —  bot on the button");
+        println!(
+            "  bot {}   {} {}",
+            show(&result.hole[0]),
+            opponent_name,
+            show(&result.hole[1])
+        );
+
+        let mut current = None;
+        for record in &result.actions {
+            if current != Some(record.street) {
+                current = Some(record.street);
+                let shown = &result.board[..record.street.board_cards().min(result.board.len())];
+                if shown.is_empty() {
+                    println!("  preflop");
+                } else {
+                    println!("  {:<8} {}", record.street.to_string(), show(shown));
+                }
+            }
+            let who = if record.seat == 0 { "bot" } else { &opponent_name };
+            println!(
+                "    {:<10} {}",
+                who,
+                describe(&record.action, record.to_call, big_blind)
+            );
+        }
+
+        if result.showdown && result.board.len() == 5 {
+            println!("  showdown   {}", show(&result.board));
+        }
+
+        running += result.net[0];
+        let net_bb = result.net[0] as f64 / big_blind as f64;
+        println!(
+            "  result     bot {net_bb:+.2} bb   (running {:+.2} bb)\n",
+            running as f64 / big_blind as f64
+        );
+    }
+
+    let (from_blueprint, total) = hero.coverage();
+    println!(
+        "over {hands} hands: {:+.2} bb total, blueprint decided {from_blueprint} of {total} spots ({:.0}%)",
+        running as f64 / big_blind as f64,
+        hero.coverage_fraction() * 100.0
+    );
+    Ok(())
+}
+
+/// Renders cards as "As Kd".
+fn show(cards: &[poker_core::card::Card]) -> String {
+    cards
+        .iter()
+        .map(|card| card.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Renders an action the way a hand history would.
+fn describe(action: &Action, to_call: u64, big_blind: u64) -> String {
+    let blinds = |chips: u64| chips as f64 / big_blind as f64;
+    match action {
+        Action::Fold => "folds".to_string(),
+        Action::Check => "checks".to_string(),
+        Action::Call => format!("calls {:.2} bb", blinds(to_call)),
+        Action::RaiseTo(amount) => {
+            if to_call == 0 {
+                format!("bets to {:.2} bb", blinds(*amount))
+            } else {
+                format!("raises to {:.2} bb", blinds(*amount))
+            }
+        }
+    }
 }
 
 fn open(path: &str) -> Result<Blueprint, String> {

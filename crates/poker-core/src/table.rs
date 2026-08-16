@@ -86,17 +86,37 @@ pub trait Agent {
     fn new_hand(&mut self) {}
 }
 
+/// One action, as it happened.
+///
+/// Recording these is what makes a hand reviewable. When a live bot makes a
+/// decision nobody understands, this is the only evidence of what it saw and
+/// what it did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActionRecord {
+    pub seat: usize,
+    pub street: Street,
+    pub action: Action,
+    /// The pot before this action went in.
+    pub pot: u64,
+    /// What it cost the actor to call at that moment.
+    pub to_call: u64,
+}
+
 /// The outcome of one hand.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HandResult {
     /// Net chips won or lost, per seat. Always sums to zero.
     pub net: [i64; 2],
+    /// Each seat's hole cards.
+    pub hole: [[Card; 2]; 2],
     /// The board as it ran out.
     pub board: Vec<Card>,
     /// How far the hand got.
     pub street: Street,
     /// Whether the hand ended at showdown rather than in a fold.
     pub showdown: bool,
+    /// Every action taken, in order.
+    pub actions: Vec<ActionRecord>,
 }
 
 /// A heads-up table.
@@ -178,6 +198,7 @@ impl Table {
 
         let mut street = Street::Preflop;
         let mut showdown = false;
+        let mut actions: Vec<ActionRecord> = Vec::new();
 
         loop {
             // Run this street to completion.
@@ -202,6 +223,13 @@ impl Table {
                 };
 
                 let action = agents[seat].act(&view, rng);
+                actions.push(ActionRecord {
+                    seat,
+                    street,
+                    action,
+                    pot: view.pot,
+                    to_call: view.to_call,
+                });
                 round.apply(action).unwrap_or_else(|error| {
                     panic!("{} played an illegal action: {error}", agents[seat].name())
                 });
@@ -262,9 +290,11 @@ impl Table {
 
         HandResult {
             net,
+            hole,
             board,
             street,
             showdown: showdown && round.live_seat_count() > 1,
+            actions,
         }
     }
 }
@@ -497,6 +527,62 @@ mod tests {
         let (mut a, mut b) = (Caller, Caller);
         let showdown = table.play_hand([&mut a, &mut b], &deck, &mut rng);
         assert_eq!(showdown.board.len(), 5);
+    }
+
+    #[test]
+    fn every_action_is_recorded_in_order() {
+        let table = Table::standard();
+        let mut rng = Rng::new(20);
+        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
+
+        let (mut a, mut b) = (Caller, Caller);
+        let result = table.play_hand([&mut a, &mut b], &deck, &mut rng);
+
+        // Two checks or calls on each of four streets.
+        assert_eq!(result.actions.len(), 8, "{:?}", result.actions);
+        assert_eq!(result.actions[0].seat, 0, "the button acts first preflop");
+        assert_eq!(result.actions[0].street, Street::Preflop);
+        assert_eq!(
+            result.actions[2].seat, 1,
+            "out of position acts first once a board exists"
+        );
+        assert_eq!(result.actions[2].street, Street::Flop);
+
+        // Streets only ever advance.
+        assert!(result.actions.windows(2).all(|w| w[0].street <= w[1].street));
+        // The pot never shrinks.
+        assert!(result.actions.windows(2).all(|w| w[0].pot <= w[1].pot));
+    }
+
+    #[test]
+    fn the_result_reports_the_cards_each_seat_held() {
+        let table = Table::standard();
+        let mut rng = Rng::new(21);
+        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
+
+        let (mut a, mut b) = (Caller, Caller);
+        let result = table.play_hand([&mut a, &mut b], &deck, &mut rng);
+
+        assert_eq!(result.hole[0], [deck[0], deck[1]]);
+        assert_eq!(result.hole[1], [deck[2], deck[3]]);
+    }
+
+    #[test]
+    fn a_fold_is_recorded_with_what_it_cost_to_continue() {
+        let table = Table::standard();
+        let mut rng = Rng::new(22);
+        let deck = deck_from("7c 2d As Ah 3c 4c 5c 8d 9d");
+
+        let (mut jammer, mut folder) = (Jammer, Folder);
+        let result = table.play_hand([&mut jammer, &mut folder], &deck, &mut rng);
+
+        let fold = result
+            .actions
+            .iter()
+            .find(|record| record.action == Action::Fold)
+            .expect("the big blind folded");
+        assert_eq!(fold.seat, 1);
+        assert!(fold.to_call > 0, "folding means there was something owed");
     }
 
     #[test]
