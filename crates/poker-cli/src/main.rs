@@ -1,4 +1,4 @@
-//! Solve strategies, store them as blueprints, and query them.
+﻿//! Solve strategies, store them as blueprints, and query them.
 //!
 //! This closes the loop the live bot needs: solving is slow and happens once,
 //! offline; deciding is fast and happens at the table. The bot will call the
@@ -23,6 +23,7 @@ use poker_core::card::{Rank, NUM_RANKS};
 use poker_core::cfr::Solver;
 use poker_core::betting::Action;
 use poker_core::table::{Agent, Deck, Table};
+use poker_core::telemetry::ConsoleMonitor;
 use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
 use poker_core::rng::Rng;
@@ -62,7 +63,7 @@ fn main() -> ExitCode {
 fn usage() {
     println!(
         "\
-poker — solve, store, and query poker strategies
+poker - solve, store, and query poker strategies
 
 USAGE
   poker solve <game> [options]     solve a game and write a blueprint
@@ -99,6 +100,7 @@ PLAY OPTIONS
   --hands <n>         hands to show                     [default 10]
   --stack <bb>        stack depth for the table         [default 100]
   --seed <n>          fix the shuffle, to replay a run  [default 1]
+  --monitor <on|off>  show what the bot sees and why    [default off]
 
 STAGES
   pushfold   sb, bb
@@ -204,7 +206,7 @@ fn unknown_stage(kind: Kind, stage: &str) -> String {
 fn solve(args: &[String]) -> Result<(), String> {
     let game = args
         .first()
-        .ok_or("solve needs a game; try `poker solve pushfold --out …`")?;
+        .ok_or("solve needs a game; try `poker solve pushfold --out ...`")?;
     let kind = Kind::parse(game)?;
     let flags = Flags::parse(&args[1..])?;
 
@@ -219,14 +221,14 @@ fn solve(args: &[String]) -> Result<(), String> {
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
-    eprint!("equity table ({threads} threads)… ");
+    eprint!("equity table ({threads} threads)... ");
     let equity = EquityTable::load_or_build(EQUITY_CACHE, EQUITY_SAMPLES, EQUITY_SEED, threads)
         .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
     eprintln!("ready");
 
     // Display for f64 already prints 10.0 as "10", so the label stays tidy.
     let label = format!("{}/{stack}bb", kind.name());
-    eprint!("solving {label} for {iterations} iterations… ");
+    eprint!("solving {label} for {iterations} iterations... ");
 
     let mut rng = Rng::new(SOLVE_SEED);
     let blueprint = match kind {
@@ -296,7 +298,7 @@ fn query(args: &[String]) -> Result<(), String> {
     let key = kind.key(&stage, class)?;
     let actions = kind.actions(&stage)?;
     let strategy = blueprint.strategy(key).ok_or_else(|| {
-        format!("{class} at {stage} is not in this blueprint — it was never solved")
+        format!("{class} at {stage} is not in this blueprint - it was never solved")
     })?;
 
     println!("{class} at {stage}\n");
@@ -326,7 +328,7 @@ fn chart(args: &[String]) -> Result<(), String> {
     };
     let actions = kind.actions(&stage)?;
 
-    println!("{} — {stage}\n", blueprint.label());
+    println!("{} - {stage}\n", blueprint.label());
     print!("     ");
     for column in 0..NUM_RANKS {
         let rank = Rank::from_index((NUM_RANKS - 1 - column) as u8).expect("in range");
@@ -442,7 +444,8 @@ fn bench(args: &[String]) -> Result<(), String> {
 fn play(args: &[String]) -> Result<(), String> {
     let path = args.first().ok_or("play needs a blueprint path")?;
     let flags = Flags::parse(&args[1..])?;
-    flags.reject_unknown(&["vs", "hands", "stack", "seed"])?;
+    flags.reject_unknown(&["vs", "hands", "stack", "seed", "monitor"])?;
+    let monitor = flags.text("monitor", "off") == "on";
 
     let blueprint = open(path)?;
     let stack_bb = flags.number("stack", 100.0)?;
@@ -453,6 +456,11 @@ fn play(args: &[String]) -> Result<(), String> {
     let big_blind = 100u64;
     let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
     let mut hero = BlueprintAgent::new("bot", blueprint.clone(), Sizing::default());
+    if monitor {
+        // Shows what the bot believes it sees at every decision - the view an
+        // overlay would render once a vision layer exists.
+        hero = hero.watch(Box::new(ConsoleMonitor::new(big_blind)));
+    }
     let mut opponent: Box<dyn Agent> = match opponent_name.as_str() {
         "fold" => Box::new(AlwaysFold),
         "call" => Box::new(AlwaysCall),
@@ -476,7 +484,7 @@ fn play(args: &[String]) -> Result<(), String> {
         deck.shuffle(&mut rng);
         let result = table.play_hand([&mut hero, opponent.as_mut()], deck.hand_cards(), &mut rng);
 
-        println!("Hand {hand}  —  bot on the button");
+        println!("Hand {hand}  -  bot on the button");
         println!(
             "  bot {}   {} {}",
             show(&result.hole[0]),
@@ -625,3 +633,4 @@ impl Flags {
         Ok(())
     }
 }
+
