@@ -25,6 +25,7 @@ use crate::abstraction::HandClass;
 use crate::preflop::{self, Preflop, Sizing};
 use crate::rng::Rng;
 use crate::table::{Agent, Position, View};
+use crate::telemetry::{Confidence, DecisionRecord, Observer, Perception, Source};
 
 /// Which abstract action a blueprint index means, per stage.
 ///
@@ -50,6 +51,10 @@ pub struct BlueprintAgent {
     preflop_decisions: u32,
     decisions: u64,
     fallbacks: u64,
+    /// Which hand of the session this is, for the record stream.
+    hand: u64,
+    /// Optional watcher. Costs nothing when absent.
+    observer: Option<Box<dyn Observer>>,
 }
 
 impl BlueprintAgent {
@@ -67,6 +72,47 @@ impl BlueprintAgent {
             preflop_decisions: 0,
             decisions: 0,
             fallbacks: 0,
+            hand: 0,
+            observer: None,
+        }
+    }
+
+    /// Attaches a watcher that receives every decision.
+    ///
+    /// This is how the bot is made visible: the observer sees what was
+    /// perceived, which spot was identified, the frequencies considered, and
+    /// what was played — enough to check the bot's reading against the table
+    /// without trusting it.
+    pub fn watch(mut self, observer: Box<dyn Observer>) -> BlueprintAgent {
+        self.observer = Some(observer);
+        self
+    }
+
+    /// The attached observer, for reading session totals.
+    pub fn observer(&self) -> Option<&dyn Observer> {
+        self.observer.as_deref()
+    }
+
+    /// Names the spot for a stage, as a watcher would read it.
+    fn spot_name(stage: preflop::Stage) -> &'static str {
+        match stage {
+            preflop::Stage::SbOpen => "sb-open",
+            preflop::Stage::BbVsOpen => "bb-vs-open",
+            preflop::Stage::SbVs3Bet => "sb-vs-3bet",
+            preflop::Stage::BbVs4Bet => "bb-vs-4bet",
+            preflop::Stage::SbVsJam => "sb-vs-jam",
+            preflop::Stage::BbVsJam => "bb-vs-jam",
+            _ => "unknown",
+        }
+    }
+
+    /// A readable name for an abstract action.
+    fn action_name(action: Abstract) -> &'static str {
+        match action {
+            Abstract::Fold => "fold",
+            Abstract::Passive => "call",
+            Abstract::Raise => "raise",
+            Abstract::Jam => "jam",
         }
     }
 
@@ -195,35 +241,98 @@ impl Agent for BlueprintAgent {
 
     fn new_hand(&mut self) {
         self.preflop_decisions = 0;
+        self.hand += 1;
     }
 
     fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
         self.decisions += 1;
 
-        let action = self.stage_for(view).and_then(|stage| {
+        // Resolve the spot first, so a watcher can be told which one it was
+        // even when the lookup then fails.
+        let stage = self.stage_for(view);
+        let mut source = Source::Fallback {
+            reason: match view.street {
+                Street::Preflop => "preflop line beyond the solved ladder",
+                _ => "no postflop solve yet",
+            },
+        };
+        let mut frequencies = Vec::new();
+
+        let action = stage.and_then(|stage| {
             let class = HandClass::from_cards(view.hole[0], view.hole[1]);
             let key = Preflop::info_key(stage, class.index());
+            let strategy = self.blueprint.strategy(key)?;
+            let actions = self.actions_at(stage);
+
+            frequencies = actions
+                .iter()
+                .zip(strategy.iter())
+                .map(|(action, probability)| {
+                    (
+                        BlueprintAgent::action_name(*action).to_string(),
+                        *probability as f64,
+                    )
+                })
+                .collect();
+
             // Sampling, not the modal action: a mixed strategy played greedily
             // is a different and more exploitable strategy.
             let index = self.blueprint.sample(key, rng)?;
-            let chosen = *self.actions_at(stage).get(index)?;
-            self.concrete(chosen, stage, view)
+            let chosen = *actions.get(index)?;
+            let concrete = self.concrete(chosen, stage, view)?;
+
+            source = Source::Blueprint {
+                key,
+                spot: BlueprintAgent::spot_name(stage).to_string(),
+            };
+            Some(concrete)
         });
 
         if view.street == Street::Preflop {
             self.preflop_decisions += 1;
         }
 
-        match action {
+        // Anything unrecognised or unplayable goes to the heuristic. It is
+        // counted, because a bot silently falling back on most of its
+        // decisions is not playing the strategy anybody benchmarked.
+        let played = match action {
             Some(action) if view.legal.permits(action) => action,
-            // Anything unrecognised or unplayable goes to the heuristic. It is
-            // counted, because a bot silently falling back on most of its
-            // decisions is not playing the strategy anybody solved.
             _ => {
                 self.fallbacks += 1;
+                source = Source::Fallback {
+                    reason: match view.street {
+                        Street::Preflop => "preflop line beyond the solved ladder",
+                        _ => "no postflop solve yet",
+                    },
+                };
+                frequencies.clear();
                 self.fallback.act(view, rng)
             }
+        };
+
+        if let Some(observer) = self.observer.as_mut() {
+            observer.on_decision(&DecisionRecord {
+                hand: self.hand,
+                perception: Perception {
+                    hole: view.hole,
+                    board: view.board.to_vec(),
+                    street: view.street,
+                    position: view.position,
+                    pot: view.pot,
+                    to_call: view.to_call,
+                    stacks: [view.stack, view.opponent_stack],
+                    // Self-play deals the cards, so nothing was inferred. A
+                    // vision layer replaces this with real match scores and
+                    // every display already understands them.
+                    confidence: Confidence::certain(),
+                },
+                source,
+                action: played,
+                frequencies,
+            });
         }
+
+        played
     }
 }
 
@@ -361,6 +470,95 @@ mod tests {
             legal: &legal,
         };
         assert_eq!(bot.stage_for(&view), None, "there is no solved flop yet");
+    }
+
+    #[test]
+    fn a_watcher_sees_what_the_bot_saw_and_why_it_acted() {
+        use crate::telemetry::ConsoleMonitor;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        /// Captures the stream instead of printing it, sharing the log with the
+        /// test so it can be inspected after play.
+        #[derive(Debug)]
+        struct Capture(Rc<RefCell<Vec<DecisionRecord>>>);
+
+        impl Observer for Capture {
+            fn on_decision(&mut self, record: &DecisionRecord) {
+                self.0.borrow_mut().push(record.clone());
+            }
+        }
+
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut bot = agent(100.0).watch(Box::new(Capture(Rc::clone(&log))));
+        let mut opponent = AlwaysCall;
+        let mut rng = Rng::new(11);
+        duplicate_match(&table(), &mut bot, &mut opponent, 30, &mut rng);
+
+        let records = log.borrow();
+        assert!(!records.is_empty(), "the watcher saw nothing");
+
+        // Whatever the stream produces, the console renderer must handle it.
+        let monitor = ConsoleMonitor::new(100);
+        for record in records.iter() {
+            assert_ne!(
+                record.perception.hole[0], record.perception.hole[1],
+                "a holding cannot repeat a card"
+            );
+            assert!(record.hand >= 1, "hands are numbered from one");
+            let text = monitor.render(record);
+            assert!(text.contains("SEE"), "{text}");
+            assert!(text.contains("DO"), "{text}");
+        }
+
+        // Preflop decisions should be credited to the solved strategy...
+        assert!(
+            records.iter().any(|record| record.source.is_blueprint()),
+            "nothing was credited to the blueprint"
+        );
+        // ...and postflop ones should say plainly that they were not.
+        assert!(
+            records.iter().any(|record| matches!(
+                record.source,
+                Source::Fallback { .. }
+            )),
+            "against a caller, postflop spots must show as fallbacks"
+        );
+    }
+
+    #[test]
+    fn a_blueprint_decision_reports_the_frequencies_it_chose_from() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        #[derive(Debug)]
+        struct Capture(Rc<RefCell<Vec<DecisionRecord>>>);
+        impl Observer for Capture {
+            fn on_decision(&mut self, record: &DecisionRecord) {
+                self.0.borrow_mut().push(record.clone());
+            }
+        }
+
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut bot = agent(100.0).watch(Box::new(Capture(Rc::clone(&log))));
+        let mut opponent = AlwaysFold;
+        let mut rng = Rng::new(12);
+        duplicate_match(&table(), &mut bot, &mut opponent, 30, &mut rng);
+
+        let records = log.borrow();
+        let solved: Vec<&DecisionRecord> = records
+            .iter()
+            .filter(|record| record.source.is_blueprint())
+            .collect();
+        assert!(!solved.is_empty());
+
+        for record in solved {
+            // Without these, a hand folded at its 5% frequency looks like a bug
+            // rather than correct play.
+            assert!(!record.frequencies.is_empty(), "no frequencies recorded");
+            let total: f64 = record.frequencies.iter().map(|(_, p)| p).sum();
+            assert!((total - 1.0).abs() < 1e-5, "frequencies summed to {total}");
+        }
     }
 
     #[test]
