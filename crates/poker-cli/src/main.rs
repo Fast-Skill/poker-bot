@@ -16,9 +16,12 @@ use std::collections::HashMap;
 use std::process::ExitCode;
 
 use poker_core::abstraction::HandClass;
+use poker_core::bench::{duplicate_match, AlwaysCall, AlwaysFold, AlwaysJam, ChartBot};
 use poker_core::blueprint::Blueprint;
+use poker_core::bot::BlueprintAgent;
 use poker_core::card::{Rank, NUM_RANKS};
 use poker_core::cfr::Solver;
+use poker_core::table::Table;
 use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
 use poker_core::rng::Rng;
@@ -37,6 +40,7 @@ fn main() -> ExitCode {
         Some("info") => info(&args[1..]),
         Some("query") => query(&args[1..]),
         Some("chart") => chart(&args[1..]),
+        Some("bench") => bench(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             Ok(())
@@ -63,6 +67,7 @@ USAGE
   poker info  <blueprint>          show what a blueprint contains
   poker query <blueprint> [options] look up one decision
   poker chart <blueprint> [options] print a 13x13 range grid
+  poker bench <blueprint> [options] play it against baseline opponents
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -80,6 +85,11 @@ QUERY OPTIONS
 CHART OPTIONS
   --player <sb|bb>    whose range to print              [default sb]
   --stage <name>      which decision                     [default first]
+
+BENCH OPTIONS
+  --vs <opponent>     fold | call | jam | chart | all   [default all]
+  --hands <n>         hands per match                   [default 20000]
+  --stack <bb>        stack depth for the table         [default 100]
 
 STAGES
   pushfold   sb, bb
@@ -346,6 +356,77 @@ fn chart(args: &[String]) -> Result<(), String> {
 
     println!("\nlegend:  # always   + mostly   . sometimes   (blank) never");
     println!("entering means anything but {:?}", actions[0]);
+    Ok(())
+}
+
+fn bench(args: &[String]) -> Result<(), String> {
+    let path = args.first().ok_or("bench needs a blueprint path")?;
+    let flags = Flags::parse(&args[1..])?;
+    flags.reject_unknown(&["vs", "hands", "stack"])?;
+
+    let blueprint = open(path)?;
+    let stack_bb = flags.number("stack", 100.0)?;
+    let hands = flags.number("hands", 20_000.0)? as u64;
+    if hands < 2 {
+        return Err("--hands needs at least 2".to_string());
+    }
+    // Every deal is played twice, once from each side.
+    let pairs = hands / 2;
+
+    let opponents: Vec<&str> = match flags.text("vs", "all").as_str() {
+        "all" => vec!["fold", "call", "jam", "chart"],
+        one => vec![Box::leak(one.to_string().into_boxed_str()) as &str],
+    };
+
+    let big_blind = 100u64;
+    let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
+
+    println!("{} vs baselines", blueprint.label());
+    println!("  table    {table}");
+    println!("  hands    {hands} per match (duplicate dealt)\n");
+
+    for name in opponents {
+        let mut hero = BlueprintAgent::new(
+            "blueprint",
+            blueprint.clone(),
+            Sizing::default(),
+        );
+        let mut rng = Rng::new(SOLVE_SEED);
+
+        let report = match name {
+            "fold" => duplicate_match(&table, &mut hero, &mut AlwaysFold, pairs, &mut rng),
+            "call" => duplicate_match(&table, &mut hero, &mut AlwaysCall, pairs, &mut rng),
+            "jam" => duplicate_match(&table, &mut hero, &mut AlwaysJam, pairs, &mut rng),
+            "chart" => duplicate_match(
+                &table,
+                &mut hero,
+                &mut ChartBot::default(),
+                pairs,
+                &mut rng,
+            ),
+            other => {
+                return Err(format!(
+                    "unknown opponent {other:?}; try fold, call, jam, chart, or all"
+                ))
+            }
+        };
+
+        let verdict = if report.first_agent_wins() {
+            "WIN "
+        } else if report.is_significant() {
+            "LOSS"
+        } else {
+            "----"
+        };
+        let (from_blueprint, total) = hero.coverage();
+        println!("  {verdict}  {report}");
+        println!(
+            "        blueprint decided {from_blueprint} of {total} spots ({:.0}%)\n",
+            hero.coverage_fraction() * 100.0
+        );
+    }
+
+    println!("WIN means the lower bound of the 95% interval is above zero.");
     Ok(())
 }
 
