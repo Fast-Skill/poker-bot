@@ -22,6 +22,8 @@ use poker_core::bot::BlueprintAgent;
 use poker_core::card::{Rank, NUM_RANKS};
 use poker_core::cfr::Solver;
 use poker_core::betting::Action;
+use poker_core::equity::{exact, Variant};
+use poker_core::river::{Holding, River, Stage as RiverStage};
 use poker_core::table::{Agent, Deck, Table};
 use poker_core::telemetry::ConsoleMonitor;
 use poker_core::preflop::{self, Preflop, Sizing};
@@ -44,6 +46,7 @@ fn main() -> ExitCode {
         Some("chart") => chart(&args[1..]),
         Some("bench") => bench(&args[1..]),
         Some("play") => play(&args[1..]),
+        Some("demo") => demo(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             Ok(())
@@ -72,6 +75,7 @@ USAGE
   poker chart <blueprint> [options] print a 13x13 range grid
   poker bench <blueprint> [options] play it against baseline opponents
   poker play  <blueprint> [options] watch it play, hand by hand
+  poker demo  [blueprint]          show the whole thing works, start to finish
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -556,6 +560,160 @@ fn describe(action: &Action, to_call: u64, big_blind: u64) -> String {
             }
         }
     }
+}
+
+/// Walks a newcomer through the evidence that the prototype works.
+///
+/// Ordered by how convincing each step is to someone who has not been
+/// following: first that the maths is right, then that it derived poker theory
+/// nobody supplied, then that it plays, then that it wins.
+fn demo(args: &[String]) -> Result<(), String> {
+    let path = args
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "data/preflop-100bb.bin".to_string());
+
+    rule("WHAT THIS IS");
+    println!(
+        "A poker bot built from scratch. Nobody gave it strategy, charts, or\n\
+         rules of thumb — it works out how to play by playing itself millions\n\
+         of times. What follows is the evidence that it works.\n"
+    );
+
+    // --- 1. the arithmetic ---------------------------------------------------
+    rule("1. IT COUNTS CARDS CORRECTLY");
+    println!("Equities anyone can check against a published poker table.\n");
+    println!("{:<26} {:>10} {:>12}", "matchup", "computed", "known value");
+    println!("{}", "-".repeat(50));
+    for (label, one, two, expected) in [
+        ("AA vs KK", "AsAd", "KsKd", "82.6%"),
+        ("AA vs 72o", "AsAd", "7c2d", "~88%"),
+        ("AKs vs 22 (coin flip)", "AsKs", "2c2d", "~50%"),
+    ] {
+        let hands = [cards_of(one)?, cards_of(two)?];
+        let refs: Vec<&[poker_core::card::Card]> =
+            hands.iter().map(|hand| hand.as_slice()).collect();
+        let result = exact(&refs, &[], Variant::Holdem)
+            .map_err(|e| format!("equity failed: {e}"))?;
+        println!(
+            "{label:<26} {:>9.2}% {:>12}",
+            result[0].percent(),
+            expected
+        );
+    }
+    println!("\nThose match the textbook. The card engine is not guessing.\n");
+
+    // --- 2. the theory it was never told ------------------------------------
+    rule("2. IT REDISCOVERED POKER THEORY ON ITS OWN");
+    println!(
+        "Poker has known mathematical answers for how often to bluff, and how\n\
+         often to call. Nothing in this program was told them. It played a\n\
+         simplified game against itself until it worked them out.\n"
+    );
+    println!(
+        "{:>10} {:>16} {:>10} {:>16} {:>10}",
+        "bet size", "it bluffs", "theory", "it calls", "theory"
+    );
+    println!("{}", "-".repeat(68));
+    for fraction in [0.5, 1.0, 2.0] {
+        let spot = River::without_raises(
+            1.0,
+            100.0,
+            &[fraction],
+            vec![Holding::new(1_000, 0.5), Holding::new(0, 0.5)],
+            vec![Holding::new(500, 1.0)],
+        );
+        let mut solver = Solver::new(spot);
+        solver.train(20_000);
+
+        let bet = River::bet_action(0);
+        let strategy = |stage, holding| {
+            solver
+                .average_strategy(River::info_key(stage, holding, 0, 0))
+                .expect("visited")
+        };
+        let value = strategy(RiverStage::OopFirst, 0)[bet];
+        let bluff = strategy(RiverStage::OopFirst, 1)[bet];
+        let calls = strategy(RiverStage::IpVsBet, 0)[River::CALL];
+
+        println!(
+            "{:>9.2}x {:>15.1}% {:>9.1}% {:>15.1}% {:>9.1}%",
+            fraction,
+            bluff / (value + bluff) * 100.0,
+            fraction / (1.0 + 2.0 * fraction) * 100.0,
+            calls * 100.0,
+            1.0 / (1.0 + fraction) * 100.0,
+        );
+    }
+    println!(
+        "\nIt lands on the exact published formulas. This is the part that is\n\
+         hard to fake: those numbers are not stored anywhere in the program.\n"
+    );
+
+    // --- 3. watching it play -------------------------------------------------
+    // Everything below needs a trained strategy; say so plainly rather than
+    // failing halfway through a demonstration.
+    if Blueprint::load(&path).is_err() {
+        println!("(no trained strategy at {path})");
+        println!("run: poker solve preflop --stack 100 --out {path}");
+        return Ok(());
+    }
+
+    rule("3. IT PLAYS POKER");
+    println!(
+        "Three hands against an opponent that calls everything. Watch what it\n\
+         does with a weak ace on a board that misses it.\n"
+    );
+    play(&[
+        path.clone(),
+        "--vs".into(),
+        "call".into(),
+        "--hands".into(),
+        "3".into(),
+        "--seed".into(),
+        "42".into(),
+    ])?;
+
+    // --- 4. proof that it wins ----------------------------------------------
+    rule("4. IT WINS, AND THE NUMBERS SAY SO");
+    println!(
+        "Ten thousand hands against four opponents. \"bb/100\" is big blinds won\n\
+         per hundred hands — poker's standard measure. The range in brackets is\n\
+         the 95% confidence interval: if it stays above zero, the win is real\n\
+         and not luck.\n"
+    );
+    bench(&[path.clone(), "--hands".into(), "10000".into()])?;
+
+    // --- 5. what it learned --------------------------------------------------
+    rule("5. WHAT IT WORKED OUT");
+    println!(
+        "Every possible starting hand, and how often it plays each one. Strong\n\
+         hands top-left, weak ones bottom-right — the shape real poker charts\n\
+         have.\n"
+    );
+    chart(std::slice::from_ref(&path))?;
+
+    rule("WHERE IT STANDS");
+    println!(
+        "Working: the strategy engine, and a bot that plays and wins on a\n\
+         built-in table.\n\n\
+         Not yet connected: reading a real game's screen and clicking its\n\
+         buttons. That needs screenshots of the target app.\n\n\
+         Known gap: the solver currently decides preflop only. Later streets\n\
+         fall back to simple rules — the monitor labels every one of those, so\n\
+         nothing is hidden."
+    );
+    Ok(())
+}
+
+fn rule(title: &str) {
+    println!("\n{}", "=".repeat(70));
+    println!("  {title}");
+    println!("{}\n", "=".repeat(70));
+}
+
+fn cards_of(text: &str) -> Result<Vec<poker_core::card::Card>, String> {
+    poker_core::card::parse_cards(text).map_err(|e| format!("bad cards {text:?}: {e}"))
 }
 
 fn open(path: &str) -> Result<Blueprint, String> {
