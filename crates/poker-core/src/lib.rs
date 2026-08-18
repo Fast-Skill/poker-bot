@@ -18,6 +18,7 @@ pub mod cfr;
 pub mod equity;
 pub mod eval;
 pub mod kuhn;
+pub mod multiway;
 pub mod omaha;
 pub mod pot;
 pub mod preflop;
