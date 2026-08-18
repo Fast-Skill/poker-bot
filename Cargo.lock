@@ -12,3 +12,10 @@ dependencies = [
 [[package]]
 name = "poker-core"
 version = "0.1.0"
+
+[[package]]
+name = "poker-vision"
+version = "0.1.0"
+dependencies = [
+ "poker-core",
+]
