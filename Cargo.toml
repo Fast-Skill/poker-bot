@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/poker-core",
     "crates/poker-cli",
+    "crates/poker-vision",
 ]
 
 [workspace.package]

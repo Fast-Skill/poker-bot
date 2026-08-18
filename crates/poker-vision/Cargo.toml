@@ -1,0 +1,9 @@
+[package]
+name = "poker-vision"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Reading a poker table from raw screen pixels."
+
+[dependencies]
+poker-core = { path = "../poker-core" }
