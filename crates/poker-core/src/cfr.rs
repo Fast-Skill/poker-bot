@@ -42,6 +42,28 @@ pub trait Game {
     /// Payoff to player 0 at a terminal node. Player 1 receives the negation.
     fn terminal_utility(&self, state: &Self::State) -> f64;
 
+    /// How many players the game has. Two unless overridden.
+    fn players(&self) -> usize {
+        2
+    }
+
+    /// Payoff to a specific player at a terminal node.
+    ///
+    /// The default is the two-player zero-sum reading of
+    /// [`Game::terminal_utility`]. Games with three or more players must
+    /// override it, since one signed number can no longer describe everyone's
+    /// outcome — three players' payoffs sum to zero without any of them being
+    /// the negation of another.
+    fn utility_for(&self, state: &Self::State, player: usize) -> f64 {
+        debug_assert!(player < 2, "the default utility is two-player only");
+        let utility = self.terminal_utility(state);
+        if player == 0 {
+            utility
+        } else {
+            -utility
+        }
+    }
+
     /// Whether chance acts here rather than a player.
     fn is_chance(&self, state: &Self::State) -> bool;
 
@@ -232,6 +254,11 @@ impl<G: Game> Solver<G> {
     /// validating correctness; sampling variants trade exactness for reach on
     /// large games.
     pub fn train(&mut self, iterations: usize) {
+        assert_eq!(
+            self.game.players(),
+            2,
+            "exact CFR is two-player only; use train_sampled for larger games"
+        );
         let root = self.game.initial();
         for _ in 0..iterations {
             self.iteration += 1;
@@ -257,8 +284,8 @@ impl<G: Game> Solver<G> {
         for _ in 0..iterations {
             self.iteration += 1;
             let update = Update::for_iteration(self.discount, self.iteration);
-            // Alternate which player's regrets are being updated.
-            for traverser in 0..2 {
+            // Every player takes a turn being the one whose regrets update.
+            for traverser in 0..self.game.players() {
                 sample_walk(&self.game, &mut self.nodes, &root, traverser, rng, update);
             }
         }
@@ -297,6 +324,10 @@ impl<G: Game> Solver<G> {
 }
 
 /// One CFR traversal, returning the expected utility to player 0.
+///
+/// Two-player only: the counterfactual weight below is "everyone but me",
+/// which for two players is simply the opponent. Use
+/// [`Solver::train_sampled`] for anything larger.
 ///
 /// `reach` holds each player's probability of playing to this node, and
 /// `chance_reach` the probability chance did. A player's regret is weighted by
@@ -378,8 +409,7 @@ fn sample_walk<G: Game>(
     update: Update,
 ) -> f64 {
     if game.is_terminal(state) {
-        let utility = game.terminal_utility(state);
-        return if traverser == 0 { utility } else { -utility };
+        return game.utility_for(state, traverser);
     }
 
     if game.is_chance(state) {
