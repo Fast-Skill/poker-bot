@@ -138,11 +138,30 @@ impl BlueprintAgent {
         if view.street != Street::Preflop {
             return None;
         }
-        let button = view.position == Position::Button;
+
+        // The blueprint is a *two-player* solve. It applies exactly when the
+        // pot is heads-up and the two players are the blinds — which is the
+        // same game whether the table seats two or seven. Any other shape,
+        // including a heads-up pot with folded players' blinds already dead in
+        // the middle, prices differently and goes to the fallback rather than
+        // being played by a strategy solved for a different game.
+        if view.active != 2 {
+            return None;
+        }
+        let button = match view.position {
+            Position::Button | Position::SmallBlind => true,
+            Position::BigBlind => false,
+            Position::Middle => return None,
+        };
 
         // An opponent with nothing behind has moved all in, whatever the
         // betting looked like before that.
-        if view.opponent_stack == 0 && view.to_call > 0 {
+        let opponent_all_in = view
+            .stacks
+            .iter()
+            .enumerate()
+            .any(|(seat, stack)| seat != view.seat && *stack == 0);
+        if opponent_all_in && view.to_call > 0 {
             return Some(if button {
                 preflop::Stage::SbVsJam
             } else {
@@ -320,7 +339,7 @@ impl Agent for BlueprintAgent {
                     position: view.position,
                     pot: view.pot,
                     to_call: view.to_call,
-                    stacks: [view.stack, view.opponent_stack],
+                    stacks: view.stacks.to_vec(),
                     // Self-play deals the cards, so nothing was inferred. A
                     // vision layer replaces this with real match scores and
                     // every display already understands them.
@@ -435,10 +454,13 @@ mod tests {
             board: &[],
             street: Street::Preflop,
             position: Position::Button,
+            seat: 0,
+            players: 2,
+            active: 2,
             pot: 2_000,
             to_call: 500,
             stack: 1_000,
-            opponent_stack: 0,
+            stacks: &[1_000, 0],
             big_blind: 100,
             legal: &legal,
         };
@@ -462,10 +484,13 @@ mod tests {
             board: &board,
             street: Street::Flop,
             position: Position::Button,
+            seat: 0,
+            players: 2,
+            active: 2,
             pot: 200,
             to_call: 0,
             stack: 1_000,
-            opponent_stack: 1_000,
+            stacks: &[1_000, 1_000],
             big_blind: 100,
             legal: &legal,
         };
@@ -573,5 +598,67 @@ mod tests {
         duplicate_match(&table(), &mut bot, &mut opponent, 200, &mut rng);
         assert_eq!(bot.coverage_fraction(), 0.0, "nothing was ever looked up");
         assert!(bot.coverage().1 > 0, "but it kept playing");
+    }
+}
+
+#[cfg(test)]
+mod multiway_tests {
+    use super::*;
+    use crate::bench::{ring_match, ChartBot};
+    use crate::blueprint::Blueprint;
+    use crate::cfr::Solver;
+    use crate::preflop::Preflop;
+    use crate::pushfold::EquityTable;
+    use crate::table::{Agent, Table};
+
+    fn trained() -> Blueprint {
+        let equity = EquityTable::sampled_parallel(300, 0x51DE, 4);
+        let mut rng = Rng::new(0xF01D);
+        let mut solver = Solver::new(Preflop::new(100.0, Sizing::default(), equity));
+        solver.train_sampled(200_000, &mut rng);
+        Blueprint::from_solver(&solver, "preflop/100bb")
+    }
+
+    /// Plays `seats`-handed and reports what share of decisions the two-player
+    /// blueprint was able to make.
+    fn coverage_at(seats: usize, hands: u64) -> f64 {
+        let mut hero = BlueprintAgent::new("bot", trained(), Sizing::default());
+        let mut others: Vec<ChartBot> = (0..seats - 1).map(|_| ChartBot::default()).collect();
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut hero];
+        for other in others.iter_mut() {
+            refs.push(other as &mut dyn Agent);
+        }
+        let mut rng = Rng::new(0xC0DE);
+        ring_match(&Table::standard(), refs, hands, &mut rng);
+        hero.coverage_fraction()
+    }
+
+    #[test]
+    fn the_bot_plays_legally_at_every_table_size() {
+        // The table panics on an illegal action, so surviving this is the
+        // assertion. Two-player routing must not produce an illegal bet when
+        // the fallback takes over multiway.
+        for seats in 2..=6 {
+            let share = coverage_at(seats, 200);
+            assert!((0.0..=1.0).contains(&share), "{seats}-handed gave {share}");
+        }
+    }
+
+    #[test]
+    fn blueprint_coverage_falls_as_the_table_fills() {
+        // The measurement that decides whether multiway preflop is urgent: a
+        // two-player solve applies to fewer and fewer spots as more players
+        // are dealt in.
+        let heads_up = coverage_at(2, 400);
+        let six_handed = coverage_at(6, 400);
+
+        assert!(
+            heads_up > 0.5,
+            "heads-up should be almost fully covered, got {heads_up:.3}"
+        );
+        assert!(
+            heads_up > six_handed,
+            "coverage should fall with more players: {heads_up:.3} vs {six_handed:.3}"
+        );
     }
 }

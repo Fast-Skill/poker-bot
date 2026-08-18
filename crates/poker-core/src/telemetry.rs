@@ -77,8 +77,8 @@ pub struct Perception {
     pub position: Position,
     pub pot: u64,
     pub to_call: u64,
-    /// The bot's stack, then the opponent's.
-    pub stacks: [u64; 2],
+    /// Every seat's remaining stack, indexed by seat.
+    pub stacks: Vec<u64>,
     pub confidence: Confidence,
 }
 
@@ -334,7 +334,7 @@ mod tests {
                 position: Position::Button,
                 pot: 500,
                 to_call: 0,
-                stacks: [9_750, 9_400],
+                stacks: vec![9_750, 9_400],
                 confidence,
             },
             source,

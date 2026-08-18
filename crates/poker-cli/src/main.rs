@@ -486,7 +486,10 @@ fn play(args: &[String]) -> Result<(), String> {
 
     for hand in 1..=hands {
         deck.shuffle(&mut rng);
-        let result = table.play_hand([&mut hero, opponent.as_mut()], deck.hand_cards(), &mut rng);
+        let result = {
+            let mut seats: Vec<&mut dyn Agent> = vec![&mut hero, opponent.as_mut()];
+            table.play_hand(&mut seats, deck.hand_cards(2), &mut rng)
+        };
 
         println!("Hand {hand}  -  bot on the button");
         println!(

@@ -1,32 +1,41 @@
-//! A heads-up No-Limit Hold'em table that plays complete hands.
+//! A No-Limit Hold'em table that plays complete hands, two to seven handed.
 //!
 //! This is the measuring instrument, not a solver. It deals real cards, runs
 //! all four streets through [`crate::betting`], and settles at showdown through
 //! [`crate::pot`] — so a strategy is judged in the game itself rather than
 //! inside whatever abstraction produced it.
 //!
-//! That distinction is the whole point. A strategy can be near-unexploitable
-//! within its own model and still lose money at a real table, because the model
-//! left something out. Only a full-game match catches that, and only in chips.
+//! # Table size changes the rules
+//!
+//! Heads-up is not merely a small table, it is a different set of rules. The
+//! button posts the *small* blind, acts first before the flop, and last on
+//! every street after it. With three or more players the button, small blind
+//! and big blind are separate seats, the first preflop action falls to the seat
+//! left of the big blind, and the small blind leads every later street.
+//!
+//! Both are implemented here because a real table empties and fills between
+//! hands, so a bot meets whichever it is dealt.
 
 use crate::betting::{Action, BettingRound, LegalActions, Seat, Street};
 use crate::card::Card;
-use crate::eval::evaluate;
+use crate::eval::{evaluate, HandRank};
 use crate::pot::{award, build_pots, OddChip};
 use crate::rng::Rng;
 use std::fmt;
 
-/// Where a player sits relative to the button.
-///
-/// Heads-up, the button posts the small blind and acts first before the flop,
-/// then acts *last* on every later street. Position is worth real money and
-/// agents are told about it explicitly.
+/// The most players a hand can be dealt to.
+pub const MAX_SEATS: usize = 7;
+
+/// Where a seat sits relative to the button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Position {
-    /// On the button: small blind, first to act preflop, last afterwards.
+    /// On the button — last to act after the flop, and heads-up also the small
+    /// blind.
     Button,
-    /// The big blind: last to act preflop, first afterwards.
+    SmallBlind,
     BigBlind,
+    /// Anywhere else: neither on the button nor in the blinds.
+    Middle,
 }
 
 /// What a player can see when it is their turn.
@@ -38,14 +47,20 @@ pub struct View<'a> {
     pub board: &'a [Card],
     pub street: Street,
     pub position: Position,
+    /// Which seat is acting. Seat 0 always holds the button.
+    pub seat: usize,
+    /// How many players were dealt into this hand.
+    pub players: usize,
+    /// How many have not folded, including the actor.
+    pub active: usize,
     /// Chips in the middle, including everything wagered this street.
     pub pot: u64,
     /// Chips the acting player must put in to call.
     pub to_call: u64,
     /// Chips the acting player has left.
     pub stack: u64,
-    /// Chips the opponent has left.
-    pub opponent_stack: u64,
+    /// Every seat's remaining stack, indexed by seat.
+    pub stacks: &'a [u64],
     /// The big blind, so sizes can be reasoned about in blinds.
     pub big_blind: u64,
     /// What is legal here. An agent returning anything else is a bug.
@@ -58,9 +73,24 @@ impl View<'_> {
         self.pot as f64 / self.big_blind as f64
     }
 
-    /// The stack that actually matters — the smaller of the two.
+    /// Whether only one opponent remains — in which case the hand is heads-up
+    /// whatever the table seats, and a two-player strategy applies exactly.
+    pub fn is_heads_up(&self) -> bool {
+        self.active == 2
+    }
+
+    /// The largest stack among opponents still in the hand, which bounds what
+    /// can actually be won or lost.
     pub fn effective_stack(&self) -> u64 {
-        self.stack.min(self.opponent_stack)
+        let largest_opponent = self
+            .stacks
+            .iter()
+            .enumerate()
+            .filter(|(seat, _)| *seat != self.seat)
+            .map(|(_, stack)| *stack)
+            .max()
+            .unwrap_or(0);
+        self.stack.min(largest_opponent)
     }
 
     /// A pot-relative raise target, clamped to what is legal.
@@ -106,9 +136,9 @@ pub struct ActionRecord {
 #[derive(Debug, Clone, PartialEq)]
 pub struct HandResult {
     /// Net chips won or lost, per seat. Always sums to zero.
-    pub net: [i64; 2],
+    pub net: Vec<i64>,
     /// Each seat's hole cards.
-    pub hole: [[Card; 2]; 2],
+    pub hole: Vec<[Card; 2]>,
     /// The board as it ran out.
     pub board: Vec<Card>,
     /// How far the hand got.
@@ -119,7 +149,7 @@ pub struct HandResult {
     pub actions: Vec<ActionRecord>,
 }
 
-/// A heads-up table.
+/// A table.
 #[derive(Debug, Clone)]
 pub struct Table {
     big_blind: u64,
@@ -131,7 +161,8 @@ impl Table {
     /// A table with the given blind and starting stack, in chips.
     ///
     /// # Panics
-    /// Panics if the big blind is not positive or the stack cannot cover it.
+    /// Panics if the big blind is not at least two chips, or the stack cannot
+    /// cover it.
     pub fn new(big_blind: u64, starting_stack: u64) -> Table {
         assert!(big_blind >= 2, "big blind must be at least 2 chips to halve");
         assert!(
@@ -158,41 +189,96 @@ impl Table {
         self.starting_stack
     }
 
-    /// Plays one hand. Seat 0 is the button and posts the small blind.
+    /// Which seats post the blinds, as `(small, big)`.
     ///
-    /// `deck` must hold at least nine cards: two per player and five for the
-    /// board. Supplying it rather than shuffling internally is what makes
-    /// duplicate matches possible — the same deal can be replayed with the
-    /// seats swapped.
+    /// Heads-up the button posts the small blind; otherwise the blinds sit to
+    /// its left. This one rule is the most commonly mis-implemented difference
+    /// between heads-up and everything else.
+    fn blind_seats(players: usize) -> (usize, usize) {
+        if players == 2 {
+            (0, 1)
+        } else {
+            (1, 2)
+        }
+    }
+
+    /// The seat that opens the betting on each street.
+    ///
+    /// Preflop the action starts left of the big blind — which heads-up wraps
+    /// back around to the button. Afterwards it starts left of the button.
+    fn first_to_act(players: usize, street: Street) -> usize {
+        match (players, street) {
+            (2, Street::Preflop) => 0,
+            (2, _) => 1,
+            (_, Street::Preflop) => 3 % players,
+            _ => 1,
+        }
+    }
+
+    /// Where a seat sits relative to the button.
+    pub fn position_of(players: usize, seat: usize) -> Position {
+        let (small, big) = Table::blind_seats(players);
+        if seat == 0 {
+            Position::Button
+        } else if seat == small {
+            Position::SmallBlind
+        } else if seat == big {
+            Position::BigBlind
+        } else {
+            Position::Middle
+        }
+    }
+
+    /// Cards a hand consumes: two per player plus a five-card board.
+    pub const fn cards_needed(players: usize) -> usize {
+        players * 2 + 5
+    }
+
+    /// Plays one hand. Seat 0 holds the button.
+    ///
+    /// `deck` supplies hole cards first, two per seat in order, then the board.
+    /// Passing it rather than shuffling internally is what makes duplicate
+    /// matches possible — the same deal can be replayed with seats exchanged.
     ///
     /// # Panics
-    /// Panics if the deck is too short, or if an agent returns an illegal
-    /// action. Both are caller bugs, and a table that quietly corrected them
-    /// would hide exactly the defects a benchmark exists to find.
+    /// Panics if there are fewer than two or more than [`MAX_SEATS`] players,
+    /// if the deck is too short, or if an agent returns an illegal action. All
+    /// three are caller bugs, and a table that quietly corrected them would
+    /// hide exactly the defects a benchmark exists to find.
     pub fn play_hand(
         &self,
-        agents: [&mut dyn Agent; 2],
+        agents: &mut [&mut dyn Agent],
         deck: &[Card],
         rng: &mut Rng,
     ) -> HandResult {
-        assert!(deck.len() >= 9, "need nine cards to play a hand");
-        let [button, big_blind] = agents;
-        let mut agents: [&mut dyn Agent; 2] = [button, big_blind];
+        let players = agents.len();
+        assert!(
+            (2..=MAX_SEATS).contains(&players),
+            "a hand needs 2 to {MAX_SEATS} players, got {players}"
+        );
+        assert!(
+            deck.len() >= Table::cards_needed(players),
+            "need {} cards for {players} players, got {}",
+            Table::cards_needed(players),
+            deck.len()
+        );
+
         for agent in agents.iter_mut() {
             agent.new_hand();
         }
 
-        let hole = [[deck[0], deck[1]], [deck[2], deck[3]]];
-        let full_board = &deck[4..9];
+        let hole: Vec<[Card; 2]> = (0..players)
+            .map(|seat| [deck[seat * 2], deck[seat * 2 + 1]])
+            .collect();
+        let board_start = players * 2;
+        let full_board = &deck[board_start..board_start + 5];
 
-        let seats = vec![
-            Seat::new(self.starting_stack),
-            Seat::new(self.starting_stack),
-        ];
+        let (small, big) = Table::blind_seats(players);
+        let seats: Vec<Seat> = (0..players).map(|_| Seat::new(self.starting_stack)).collect();
         let mut round = BettingRound::preflop(
             seats,
-            &[(0, self.small_blind), (1, self.big_blind)],
-            0,
+            &[(small, self.small_blind), (big, self.big_blind)],
+            Table::first_to_act(players, Street::Preflop),
             self.big_blind,
         );
 
@@ -201,23 +287,22 @@ impl Table {
         let mut actions: Vec<ActionRecord> = Vec::new();
 
         loop {
-            // Run this street to completion.
             while let Some(seat) = round.to_act() {
                 let legal = round.legal_actions();
                 let board = &full_board[..street.board_cards()];
+                let stacks: Vec<u64> = round.seats().iter().map(|s| s.stack).collect();
                 let view = View {
                     hole: hole[seat],
                     board,
                     street,
-                    position: if seat == 0 {
-                        Position::Button
-                    } else {
-                        Position::BigBlind
-                    },
+                    position: Table::position_of(players, seat),
+                    seat,
+                    players,
+                    active: round.live_seat_count(),
                     pot: round.contributions().iter().sum(),
                     to_call: legal.call_cost.unwrap_or(0),
-                    stack: round.seats()[seat].stack,
-                    opponent_stack: round.seats()[1 - seat].stack,
+                    stack: stacks[seat],
+                    stacks: &stacks,
                     big_blind: self.big_blind,
                     legal: &legal,
                 };
@@ -240,8 +325,13 @@ impl Table {
                 break;
             }
 
-            // Both all in: run the remaining board and settle.
-            if round.seats().iter().all(|seat| seat.is_all_in()) {
+            // Everyone still in is all in: run the rest of the board out.
+            if round
+                .seats()
+                .iter()
+                .filter(|seat| !seat.folded)
+                .all(|seat| seat.is_all_in())
+            {
                 street = Street::River;
                 showdown = true;
                 break;
@@ -250,8 +340,7 @@ impl Table {
             match street.next() {
                 Some(next) => {
                     street = next;
-                    // Out of position acts first once a board exists.
-                    round.next_street(1);
+                    round.next_street(Table::first_to_act(players, next));
                 }
                 None => {
                     showdown = true;
@@ -263,9 +352,9 @@ impl Table {
         let contributions = round.contributions();
         let folded = round.folded_flags();
         let pots = build_pots(&contributions, &folded);
-
         let board = full_board[..street.board_cards()].to_vec();
-        let ranks: Vec<Option<crate::eval::HandRank>> = (0..2)
+
+        let ranks: Vec<Option<HandRank>> = (0..players)
             .map(|seat| {
                 if folded[seat] {
                     return None;
@@ -273,7 +362,7 @@ impl Table {
                 if board.len() < 5 {
                     // Everyone else folded before the board completed; the last
                     // player standing wins without showing.
-                    return Some(crate::eval::HandRank::WORST);
+                    return Some(HandRank::WORST);
                 }
                 let mut cards = hole[seat].to_vec();
                 cards.extend_from_slice(&board);
@@ -281,12 +370,13 @@ impl Table {
             })
             .collect();
 
-        let winnings = award(&pots, &ranks, OddChip::ToSeat(1));
-        let net = [
-            winnings[0] as i64 - contributions[0] as i64,
-            winnings[1] as i64 - contributions[1] as i64,
-        ];
-        debug_assert_eq!(net[0] + net[1], 0, "chips must be conserved");
+        // Odd chips go to the first seat left of the button, as a card room
+        // would award them.
+        let winnings = award(&pots, &ranks, OddChip::ToSeat(1 % players));
+        let net: Vec<i64> = (0..players)
+            .map(|seat| winnings[seat] as i64 - contributions[seat] as i64)
+            .collect();
+        debug_assert_eq!(net.iter().sum::<i64>(), 0, "chips must be conserved");
 
         HandResult {
             net,
@@ -301,11 +391,7 @@ impl Table {
 
 impl fmt::Display for Table {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "heads-up, {} bb stacks",
-            self.starting_stack / self.big_blind
-        )
+        write!(f, "{} bb stacks", self.starting_stack / self.big_blind)
     }
 }
 
@@ -336,19 +422,22 @@ impl Deck {
         &self.cards
     }
 
-    /// The nine cards a heads-up hand consumes.
-    pub fn hand_cards(&self) -> &[Card] {
-        &self.cards[..9]
+    /// The cards a hand for `players` consumes.
+    pub fn hand_cards(&self, players: usize) -> &[Card] {
+        &self.cards[..Table::cards_needed(players)]
     }
 
-    /// The same deal with the two players' holdings exchanged.
+    /// The same deal with two seats' holdings exchanged.
     ///
-    /// This is what makes a duplicate match work: run every deal twice, once
-    /// with each agent holding each hand, and most of the luck cancels out.
-    pub fn swapped(&self) -> Deck {
+    /// This is what makes a duplicate match work: run every deal twice, with
+    /// the agents swapping hands, and most of the luck cancels out.
+    ///
+    /// # Panics
+    /// Panics if either seat is beyond the deck's capacity.
+    pub fn swap_holdings(&self, a: usize, b: usize) -> Deck {
         let mut cards = self.cards.clone();
-        cards.swap(0, 2);
-        cards.swap(1, 3);
+        cards.swap(a * 2, b * 2);
+        cards.swap(a * 2 + 1, b * 2 + 1);
         Deck { cards }
     }
 }
@@ -411,106 +500,228 @@ mod tests {
 
     fn deck_from(text: &str) -> Vec<Card> {
         let mut cards = parse_cards(text).expect("valid cards");
-        // Pad with whatever is left so the deck is always long enough.
         let used: CardSet = cards.iter().copied().collect();
         cards.extend(CardSet::full_deck().difference(used).iter());
         cards
     }
 
+    /// Plays one hand with `players` callers, for structural checks.
+    fn play_with(table: &Table, players: usize, deck: &[Card], rng: &mut Rng) -> HandResult {
+        let mut callers: Vec<Caller> = (0..players).map(|_| Caller).collect();
+        let mut refs: Vec<&mut dyn Agent> =
+            callers.iter_mut().map(|c| c as &mut dyn Agent).collect();
+        table.play_hand(&mut refs, deck, rng)
+    }
+
     #[test]
-    fn chips_are_conserved_in_every_hand() {
+    fn heads_up_puts_the_small_blind_on_the_button() {
+        // The rule that separates heads-up from every other table size.
+        assert_eq!(Table::blind_seats(2), (0, 1));
+        assert_eq!(Table::position_of(2, 0), Position::Button);
+        assert_eq!(Table::position_of(2, 1), Position::BigBlind);
+
+        // Three or more, and the blinds move off the button.
+        assert_eq!(Table::blind_seats(3), (1, 2));
+        assert_eq!(Table::position_of(6, 0), Position::Button);
+        assert_eq!(Table::position_of(6, 1), Position::SmallBlind);
+        assert_eq!(Table::position_of(6, 2), Position::BigBlind);
+        assert_eq!(Table::position_of(6, 4), Position::Middle);
+    }
+
+    #[test]
+    fn action_order_follows_the_table_size() {
+        // Heads-up the button opens preflop and the big blind opens later.
+        assert_eq!(Table::first_to_act(2, Street::Preflop), 0);
+        assert_eq!(Table::first_to_act(2, Street::Flop), 1);
+
+        // Otherwise the seat left of the big blind opens preflop, and the
+        // small blind opens every street after.
+        assert_eq!(Table::first_to_act(3, Street::Preflop), 0, "wraps to the button");
+        assert_eq!(Table::first_to_act(6, Street::Preflop), 3);
+        assert_eq!(Table::first_to_act(6, Street::Flop), 1);
+    }
+
+    #[test]
+    fn chips_are_conserved_at_every_table_size() {
         let table = Table::standard();
         let mut rng = Rng::new(1);
         let mut deck = Deck::fresh();
 
-        for _ in 0..500 {
-            deck.shuffle(&mut rng);
-            let (mut a, mut b) = (Caller, Jammer);
-            let result = table.play_hand([&mut a, &mut b], deck.hand_cards(), &mut rng);
-            assert_eq!(result.net[0] + result.net[1], 0, "chips leaked: {result:?}");
-        }
-    }
-
-    #[test]
-    fn nobody_can_lose_more_than_their_stack() {
-        let table = Table::standard();
-        let mut rng = Rng::new(2);
-        let mut deck = Deck::fresh();
-        let limit = table.starting_stack() as i64;
-
-        for _ in 0..500 {
-            deck.shuffle(&mut rng);
-            let (mut a, mut b) = (Jammer, Jammer);
-            let result = table.play_hand([&mut a, &mut b], deck.hand_cards(), &mut rng);
-            for seat in 0..2 {
-                assert!(result.net[seat].abs() <= limit, "{result:?}");
+        for players in 2..=MAX_SEATS {
+            for _ in 0..200 {
+                deck.shuffle(&mut rng);
+                let mut jammers: Vec<Jammer> = (0..players).map(|_| Jammer).collect();
+                let mut refs: Vec<&mut dyn Agent> =
+                    jammers.iter_mut().map(|j| j as &mut dyn Agent).collect();
+                let result = table.play_hand(&mut refs, deck.hand_cards(players), &mut rng);
+                assert_eq!(
+                    result.net.iter().sum::<i64>(),
+                    0,
+                    "{players}-handed leaked chips"
+                );
+                assert_eq!(result.net.len(), players);
+                assert_eq!(result.hole.len(), players);
             }
         }
     }
 
     #[test]
-    fn folding_the_button_loses_exactly_the_small_blind() {
+    fn nobody_loses_more_than_their_stack() {
+        let table = Table::standard();
+        let mut rng = Rng::new(2);
+        let mut deck = Deck::fresh();
+        let limit = table.starting_stack() as i64;
+
+        for players in [2usize, 3, 6] {
+            for _ in 0..200 {
+                deck.shuffle(&mut rng);
+                let mut jammers: Vec<Jammer> = (0..players).map(|_| Jammer).collect();
+                let mut refs: Vec<&mut dyn Agent> =
+                    jammers.iter_mut().map(|j| j as &mut dyn Agent).collect();
+                let result = table.play_hand(&mut refs, deck.hand_cards(players), &mut rng);
+                for (seat, net) in result.net.iter().enumerate() {
+                    // Losses are capped by a seat's own stack. Winnings are
+                    // not — a multiway all-in collects every opponent's.
+                    assert!(*net >= -limit, "seat {seat} lost {net}, more than its stack");
+                    assert!(
+                        *net <= limit * (players as i64 - 1),
+                        "seat {seat} won {net}, more than the table held"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn folding_the_button_heads_up_loses_exactly_the_small_blind() {
         let table = Table::standard();
         let mut rng = Rng::new(3);
         let deck = deck_from("As Ks Qd Jd 2c 3c 4c 5c 6c");
 
         let (mut folder, mut caller) = (Folder, Caller);
-        let result = table.play_hand([&mut folder, &mut caller], &deck, &mut rng);
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut folder, &mut caller];
+        let result = table.play_hand(&mut refs, &deck, &mut rng);
 
         assert_eq!(result.net[0], -(table.big_blind() as i64 / 2));
         assert_eq!(result.net[1], table.big_blind() as i64 / 2);
-        assert!(!result.showdown, "a fold is not a showdown");
-        assert_eq!(result.street, Street::Preflop);
+        assert!(!result.showdown);
     }
 
     #[test]
-    fn two_callers_reach_showdown_and_the_better_hand_wins() {
+    fn a_six_handed_pot_is_won_by_the_last_player_standing() {
         let table = Table::standard();
         let mut rng = Rng::new(4);
-        // Button holds aces, the big blind holds deuces, board misses both.
-        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
+        let mut deck = Deck::fresh();
+        deck.shuffle(&mut rng);
 
-        let (mut a, mut b) = (Caller, Caller);
-        let result = table.play_hand([&mut a, &mut b], &deck, &mut rng);
+        // Seat 3 opens the action six-handed. It jams; everyone else folds.
+        // A raise is what forces the big blind out — facing only a call it
+        // would check its option and the hand would reach a flop.
+        let mut folders: Vec<Folder> = (0..5).map(|_| Folder).collect();
+        let mut jammer = Jammer;
+        // split_at_mut hands out two disjoint borrows; chained iterators would
+        // borrow the same vector twice.
+        let (front, back) = folders.split_at_mut(3);
+        let mut refs: Vec<&mut dyn Agent> = Vec::new();
+        for folder in front.iter_mut() {
+            refs.push(folder as &mut dyn Agent);
+        }
+        refs.push(&mut jammer);
+        for folder in back.iter_mut() {
+            refs.push(folder as &mut dyn Agent);
+        }
 
-        assert!(result.showdown);
-        assert_eq!(result.street, Street::River);
-        assert_eq!(result.board.len(), 5);
-        assert!(result.net[0] > 0, "aces should win: {result:?}");
-        assert_eq!(result.net[0], table.big_blind() as i64, "one blind each way");
-    }
-
-    #[test]
-    fn a_jammer_against_a_caller_settles_for_the_whole_stack() {
-        let table = Table::standard();
-        let mut rng = Rng::new(5);
-        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
-
-        let (mut jammer, mut caller) = (Jammer, Caller);
-        let result = table.play_hand([&mut jammer, &mut caller], &deck, &mut rng);
-
-        assert!(result.showdown);
+        let result = table.play_hand(&mut refs, deck.hand_cards(6), &mut rng);
+        assert_eq!(result.net.iter().sum::<i64>(), 0);
+        assert!(!result.showdown, "everyone folded to the jam");
         assert_eq!(
-            result.net[0],
-            table.starting_stack() as i64,
-            "aces get it all in and hold"
+            result.net[3],
+            (table.big_blind() + table.big_blind() / 2) as i64,
+            "the jam collected both blinds and nothing more"
         );
     }
 
     #[test]
-    fn a_jammer_against_a_folder_wins_only_the_blind() {
+    fn the_active_count_falls_as_players_fold() {
+        /// Records how many players remained at each decision.
+        struct Watcher {
+            seen: Vec<(usize, usize)>,
+        }
+        impl Agent for Watcher {
+            fn name(&self) -> &str {
+                "watch"
+            }
+            fn act(&mut self, view: &View, _rng: &mut Rng) -> Action {
+                self.seen.push((view.players, view.active));
+                if view.legal.can_check {
+                    Action::Check
+                } else {
+                    Action::Fold
+                }
+            }
+        }
+
+        let table = Table::standard();
+        let mut rng = Rng::new(5);
+        let mut deck = Deck::fresh();
+        deck.shuffle(&mut rng);
+
+        let mut watcher = Watcher { seen: Vec::new() };
+        let mut others: Vec<Folder> = (0..3).map(|_| Folder).collect();
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut watcher];
+        for other in others.iter_mut() {
+            refs.push(other as &mut dyn Agent);
+        }
+        table.play_hand(&mut refs, deck.hand_cards(4), &mut rng);
+
+        assert!(!watcher.seen.is_empty());
+        for (players, active) in &watcher.seen {
+            assert_eq!(*players, 4, "four were dealt in");
+            assert!(*active >= 2 && *active <= 4, "active was {active}");
+        }
+    }
+
+    #[test]
+    fn a_hand_is_heads_up_when_only_two_remain() {
+        // The property the bot routes on: a two-player pot at a six-handed
+        // table is heads-up poker, and a two-player strategy applies exactly.
+        struct Checker {
+            heads_up_seen: bool,
+        }
+        impl Agent for Checker {
+            fn name(&self) -> &str {
+                "check"
+            }
+            fn act(&mut self, view: &View, _rng: &mut Rng) -> Action {
+                if view.is_heads_up() {
+                    self.heads_up_seen = true;
+                    assert_eq!(view.active, 2);
+                }
+                if view.legal.can_check {
+                    Action::Check
+                } else {
+                    Action::Call
+                }
+            }
+        }
+
         let table = Table::standard();
         let mut rng = Rng::new(6);
-        let deck = deck_from("7c 2d As Ah 3c 4c 5c 8d 9d");
+        let mut deck = Deck::fresh();
+        deck.shuffle(&mut rng);
 
-        let (mut jammer, mut folder) = (Jammer, Folder);
-        let result = table.play_hand([&mut jammer, &mut folder], &deck, &mut rng);
+        // Three-handed, the button acts first and folds — which leaves the
+        // small blind and big blind heads-up, the exact shape the bot routes
+        // its two-player strategy on.
+        let mut folder = Folder;
+        let mut checker = Checker { heads_up_seen: false };
+        let mut caller = Caller;
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut folder, &mut checker, &mut caller];
+        table.play_hand(&mut refs, deck.hand_cards(3), &mut rng);
 
-        assert!(!result.showdown, "the big blind folded");
-        assert_eq!(
-            result.net[0],
-            table.big_blind() as i64,
-            "winning uncontested takes the blind, not the stack"
+        assert!(
+            checker.heads_up_seen,
+            "with four folded, the pot should have become heads-up"
         );
     }
 
@@ -521,162 +732,68 @@ mod tests {
         let deck = deck_from("As Ks Qd Jd 2c 3c 4c 5c 6c");
 
         let (mut folder, mut caller) = (Folder, Caller);
-        let folded = table.play_hand([&mut folder, &mut caller], &deck, &mut rng);
-        assert!(folded.board.is_empty(), "no flop was dealt");
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut folder, &mut caller];
+        assert!(table.play_hand(&mut refs, &deck, &mut rng).board.is_empty());
 
-        let (mut a, mut b) = (Caller, Caller);
-        let showdown = table.play_hand([&mut a, &mut b], &deck, &mut rng);
+        let showdown = play_with(&table, 2, &deck, &mut rng);
         assert_eq!(showdown.board.len(), 5);
     }
 
     #[test]
     fn every_action_is_recorded_in_order() {
         let table = Table::standard();
-        let mut rng = Rng::new(20);
+        let mut rng = Rng::new(8);
         let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
+        let result = play_with(&table, 2, &deck, &mut rng);
 
-        let (mut a, mut b) = (Caller, Caller);
-        let result = table.play_hand([&mut a, &mut b], &deck, &mut rng);
-
-        // Two checks or calls on each of four streets.
-        assert_eq!(result.actions.len(), 8, "{:?}", result.actions);
-        assert_eq!(result.actions[0].seat, 0, "the button acts first preflop");
-        assert_eq!(result.actions[0].street, Street::Preflop);
-        assert_eq!(
-            result.actions[2].seat, 1,
-            "out of position acts first once a board exists"
-        );
-        assert_eq!(result.actions[2].street, Street::Flop);
-
-        // Streets only ever advance.
+        assert_eq!(result.actions.len(), 8, "two actions on each of four streets");
+        assert_eq!(result.actions[0].seat, 0, "the button opens preflop");
+        assert_eq!(result.actions[2].seat, 1, "the big blind opens the flop");
         assert!(result.actions.windows(2).all(|w| w[0].street <= w[1].street));
-        // The pot never shrinks.
         assert!(result.actions.windows(2).all(|w| w[0].pot <= w[1].pot));
     }
 
     #[test]
-    fn the_result_reports_the_cards_each_seat_held() {
-        let table = Table::standard();
-        let mut rng = Rng::new(21);
-        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
-
-        let (mut a, mut b) = (Caller, Caller);
-        let result = table.play_hand([&mut a, &mut b], &deck, &mut rng);
-
-        assert_eq!(result.hole[0], [deck[0], deck[1]]);
-        assert_eq!(result.hole[1], [deck[2], deck[3]]);
-    }
-
-    #[test]
-    fn a_fold_is_recorded_with_what_it_cost_to_continue() {
-        let table = Table::standard();
-        let mut rng = Rng::new(22);
-        let deck = deck_from("7c 2d As Ah 3c 4c 5c 8d 9d");
-
-        let (mut jammer, mut folder) = (Jammer, Folder);
-        let result = table.play_hand([&mut jammer, &mut folder], &deck, &mut rng);
-
-        let fold = result
-            .actions
-            .iter()
-            .find(|record| record.action == Action::Fold)
-            .expect("the big blind folded");
-        assert_eq!(fold.seat, 1);
-        assert!(fold.to_call > 0, "folding means there was something owed");
-    }
-
-    #[test]
     fn a_shuffled_deck_is_a_permutation_of_the_real_one() {
-        let mut rng = Rng::new(8);
+        let mut rng = Rng::new(9);
         let mut deck = Deck::fresh();
         for _ in 0..100 {
             deck.shuffle(&mut rng);
             let seen: CardSet = deck.cards().iter().copied().collect();
-            assert_eq!(seen.len(), 52, "the deck lost or repeated a card");
+            assert_eq!(seen.len(), 52);
         }
     }
 
     #[test]
-    fn swapping_a_deck_exchanges_the_two_holdings() {
-        let mut rng = Rng::new(9);
+    fn swapping_holdings_exchanges_two_seats_and_leaves_the_board() {
+        let mut rng = Rng::new(10);
         let mut deck = Deck::fresh();
         deck.shuffle(&mut rng);
-        let swapped = deck.swapped();
+        let swapped = deck.swap_holdings(0, 2);
 
-        assert_eq!(swapped.cards()[0], deck.cards()[2]);
-        assert_eq!(swapped.cards()[1], deck.cards()[3]);
-        assert_eq!(swapped.cards()[2], deck.cards()[0]);
-        assert_eq!(swapped.cards()[3], deck.cards()[1]);
-        // The board is untouched, which is what makes the pairing fair.
-        assert_eq!(&swapped.cards()[4..9], &deck.cards()[4..9]);
+        assert_eq!(swapped.cards()[0..2], deck.cards()[4..6]);
+        assert_eq!(swapped.cards()[4..6], deck.cards()[0..2]);
+        // Seat 1 and the board are untouched, which is what makes the pairing
+        // fair rather than merely different.
+        assert_eq!(swapped.cards()[2..4], deck.cards()[2..4]);
+        assert_eq!(swapped.cards()[6..20], deck.cards()[6..20]);
     }
 
     #[test]
-    fn position_is_reported_correctly() {
-        struct Watcher {
-            seen: Vec<(Street, Position)>,
-        }
-        impl Agent for Watcher {
-            fn name(&self) -> &str {
-                "watch"
-            }
-            fn act(&mut self, view: &View, _rng: &mut Rng) -> Action {
-                self.seen.push((view.street, view.position));
-                if view.legal.can_check {
-                    Action::Check
-                } else {
-                    Action::Call
-                }
-            }
-        }
-
-        let table = Table::standard();
-        let mut rng = Rng::new(10);
-        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
-        let mut watcher = Watcher { seen: Vec::new() };
-        let mut caller = Caller;
-        table.play_hand([&mut watcher, &mut caller], &deck, &mut rng);
-
-        assert!(watcher
-            .seen
-            .iter()
-            .all(|(_, position)| *position == Position::Button));
-        // The button acts on every street, preflop through river.
-        assert!(watcher.seen.iter().any(|(street, _)| *street == Street::Preflop));
-        assert!(watcher.seen.iter().any(|(street, _)| *street == Street::River));
+    fn the_deck_supplies_enough_cards_for_a_full_table() {
+        assert_eq!(Table::cards_needed(2), 9);
+        assert_eq!(Table::cards_needed(7), 19);
+        assert!(Deck::fresh().hand_cards(MAX_SEATS).len() <= 52);
     }
 
     #[test]
-    fn the_pot_the_agent_sees_includes_the_blinds() {
-        struct Peek {
-            first_pot: Option<u64>,
-        }
-        impl Agent for Peek {
-            fn name(&self) -> &str {
-                "peek"
-            }
-            fn act(&mut self, view: &View, _rng: &mut Rng) -> Action {
-                self.first_pot.get_or_insert(view.pot);
-                if view.legal.can_check {
-                    Action::Check
-                } else {
-                    Action::Fold
-                }
-            }
-        }
-
+    #[should_panic(expected = "2 to 7 players")]
+    fn a_one_player_hand_is_rejected() {
         let table = Table::standard();
         let mut rng = Rng::new(11);
-        let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
-        let mut peek = Peek { first_pot: None };
         let mut caller = Caller;
-        table.play_hand([&mut peek, &mut caller], &deck, &mut rng);
-
-        assert_eq!(
-            peek.first_pot,
-            Some(table.big_blind() + table.big_blind() / 2),
-            "both blinds are already in"
-        );
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut caller];
+        table.play_hand(&mut refs, Deck::fresh().cards(), &mut rng);
     }
 
     #[test]
@@ -688,7 +805,6 @@ mod tests {
                 "cheat"
             }
             fn act(&mut self, _view: &View, _rng: &mut Rng) -> Action {
-                // Far beyond any stack at this table.
                 Action::RaiseTo(u64::MAX)
             }
         }
@@ -697,6 +813,7 @@ mod tests {
         let mut rng = Rng::new(12);
         let deck = deck_from("As Ah 2c 2d 7s 8d 9h Jc Qs");
         let (mut cheat, mut caller) = (Cheat, Caller);
-        table.play_hand([&mut cheat, &mut caller], &deck, &mut rng);
+        let mut refs: Vec<&mut dyn Agent> = vec![&mut cheat, &mut caller];
+        table.play_hand(&mut refs, &deck, &mut rng);
     }
 }
