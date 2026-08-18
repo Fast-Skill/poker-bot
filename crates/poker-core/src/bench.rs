@@ -107,11 +107,17 @@ pub fn duplicate_match(
         deck.shuffle(rng);
 
         // First agent on the button.
-        let forward = table.play_hand([first, second], deck.hand_cards(), rng);
+        let forward = {
+            let mut seats: Vec<&mut dyn Agent> = vec![&mut *first, &mut *second];
+            table.play_hand(&mut seats, deck.hand_cards(2), rng)
+        };
         // Same cards, seats exchanged: the first agent now holds what the
         // second just held, from the other side of the button.
-        let swapped = deck.swapped();
-        let reverse = table.play_hand([second, first], swapped.hand_cards(), rng);
+        let swapped = deck.swap_holdings(0, 1);
+        let reverse = {
+            let mut seats: Vec<&mut dyn Agent> = vec![&mut *second, &mut *first];
+            table.play_hand(&mut seats, swapped.hand_cards(2), rng)
+        };
 
         if forward.showdown {
             showdowns += 1;
@@ -146,6 +152,81 @@ pub fn duplicate_match(
         hands,
         bb_per_100: mean * 50.0,
         confidence_95: 1.96 * standard_error * 50.0,
+        showdowns,
+    }
+}
+
+/// Result of a ring-game match, per seat.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RingReport {
+    pub names: Vec<String>,
+    pub hands: u64,
+    /// Each agent's win rate in big blinds per 100 hands, in the order given.
+    pub bb_per_100: Vec<f64>,
+    /// Hands that reached showdown.
+    pub showdowns: u64,
+}
+
+impl fmt::Display for RingReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-handed, {} hands:", self.names.len(), self.hands)?;
+        for (name, rate) in self.names.iter().zip(&self.bb_per_100) {
+            write!(f, "  {name} {rate:+.1}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Plays a ring game, rotating the button so every agent sits in every seat.
+///
+/// Unlike [`duplicate_match`] the deal is not paired, so results are far
+/// noisier — three-handed and up there is no clean way to replay a deal such
+/// that every seat sees the same cards. Use this to measure *coverage* and to
+/// check a bot plays legally at a full table; use duplicate matches to measure
+/// an edge.
+///
+/// # Panics
+/// Panics if there are fewer than two agents, or `hands` is zero.
+pub fn ring_match(
+    table: &Table,
+    mut seats: Vec<&mut dyn Agent>,
+    hands: u64,
+    rng: &mut Rng,
+) -> RingReport {
+    assert!(seats.len() >= 2, "a ring game needs at least two agents");
+    assert!(hands > 0, "a match needs at least one hand");
+
+    let players = seats.len();
+    let names: Vec<String> = seats.iter().map(|agent| agent.name().to_string()).collect();
+    let big_blind = table.big_blind() as f64;
+    let mut totals = vec![0i64; players];
+    let mut showdowns = 0u64;
+    let mut deck = Deck::fresh();
+    // How far the seating has rotated: seat `i` currently holds agent
+    // `(i + rotations) % players`.
+    let mut rotations = 0usize;
+
+    for _ in 0..hands {
+        deck.shuffle(rng);
+        let result = table.play_hand(&mut seats, deck.hand_cards(players), rng);
+        if result.showdown {
+            showdowns += 1;
+        }
+        for (seat, net) in result.net.iter().enumerate() {
+            totals[(seat + rotations) % players] += net;
+        }
+        // Rotate so nobody keeps the button.
+        seats.rotate_left(1);
+        rotations = (rotations + 1) % players;
+    }
+
+    RingReport {
+        names,
+        hands,
+        bb_per_100: totals
+            .iter()
+            .map(|chips| *chips as f64 / big_blind / hands as f64 * 100.0)
+            .collect(),
         showdowns,
     }
 }
