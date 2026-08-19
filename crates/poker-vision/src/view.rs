@@ -786,4 +786,63 @@ mod tests {
             }
         }
     }
+
+    /// Measures how often the hero's own cards read, over a folder of frames.
+    ///
+    /// Point it at frames the reader once could not name — that is the only
+    /// sample where the answer means anything, since frames it always read
+    /// would report a hundred percent whatever the templates held.
+    #[test]
+    #[ignore = "diagnostic; run with --ignored --nocapture"]
+    fn measure_hole_card_coverage() {
+        let dir = std::path::PathBuf::from("C:/poker/captures/unread");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            println!("no folder at {}", dir.display());
+            return;
+        };
+        let mut names: Vec<_> = entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "rgb"))
+            .collect();
+        names.sort();
+
+        let cards = Templates::load(data("card_templates.bin")).expect("card templates");
+        let glyphs = GlyphTemplates::load(data("digit_templates.bin")).expect("glyph templates");
+        let heroes = HeroTemplates::load(data("hero_cards.bin")).expect("hero templates");
+
+        let (mut read, mut holding, mut total) = (0usize, 0usize, 0usize);
+        let mut seen: std::collections::BTreeMap<char, usize> = Default::default();
+        for path in &names {
+            let raw = std::fs::read(path).expect("frame");
+            let w = u32::from_le_bytes(raw[0..4].try_into().expect("hdr")) as usize;
+            let h = u32::from_le_bytes(raw[4..8].try_into().expect("hdr")) as usize;
+            let frame = Frame::new(w, h, &raw[8..]);
+            let view = TableView::read(
+                &frame,
+                &cards,
+                &glyphs,
+                &heroes,
+                Thresholds::default(),
+                TextThresholds::default(),
+            );
+            total += 1;
+            if view.hero().is_some_and(|s| s.in_hand) {
+                holding += 1;
+                if view.hole.len() == 2 {
+                    read += 1;
+                    for card in &view.hole {
+                        let rank = card.to_string().chars().next().expect("a rank");
+                        *seen.entry(rank).or_default() += 1;
+                    }
+                }
+            }
+        }
+        println!();
+        println!("{total} frames, {holding} with the hero holding cards");
+        println!(
+            "{read} of those now read both cards ({:.0}%)",
+            read as f64 / holding.max(1) as f64 * 100.0
+        );
+        println!("ranks seen: {seen:?}");
+    }
 }

@@ -21,13 +21,20 @@ OUT = r"C:\poker\data\hero_cards.bin"
 MAGIC, VERSION = b"PKHC", 1
 SKIP = "_"
 
-# Read off captures/_hero/ranks-labelled.png and pips-labelled.png, in the same
-# order those sheets were drawn: by descending sample count within each size.
-RANKS = "5J89" + "10" + "26AQJ"          # one entry per class, "10" is one class
-RANK_CLASSES = ["5", "J", "8", "9", "10", "2", "6", "A", "Q", "J"]
-# Classes 6..8 are pips clipped by the overlapping card into shapes that no
-# longer say which suit they are, and they carry two to four samples each.
-SUIT_CLASSES = ["s", "d", "s", "c", "h", "h", SKIP, SKIP, SKIP]
+# Read off the contact sheets in captures/_hero, in the order those sheets are
+# drawn: by descending sample count within each glyph size.
+RANK_CLASSES = [
+    "8", "2", "8", "J", "5", "5", "7", "2", "3", "6",
+    "K", "Q", "A", "A", "K", "9", "6", "8", "K", "4",
+    "J", "10", "10", "Q", "7", "7", "J", "Q", "4", "3",
+]
+# Nine of these are pips clipped by the overlapping card into a dome or a
+# triangle that no longer says which suit it is. They are 5% of the samples,
+# and a suit guessed wrong is worse than a hand not read, so they are left out.
+SUIT_CLASSES = [
+    "c", "s", "d", "h", "s", "c", "d", "h", "h", "s",
+    SKIP, SKIP, "c", SKIP, SKIP, "h", SKIP, "h", "d",
+]
 
 
 def cluster(patches, tol=0.10):
@@ -47,7 +54,7 @@ def cluster(patches, tol=0.10):
 
 def collect():
     ranks, pips = collections.defaultdict(list), collections.defaultdict(list)
-    for path in sorted(glob.glob(os.path.join(H.CAPTURES, "*.png"))):
+    for path in H.captures():
         for card in H.hero_cards(path):
             ranks[card["rank"][0]].append(card["rank"][1])
             pips[(card["pip"][0], card["pip"][2])].append(card["pip"][1])

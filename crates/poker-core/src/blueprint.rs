@@ -89,17 +89,25 @@ impl Blueprint {
         }
     }
 
-    /// Freezes a solver's average strategy, recording how long it trained and
-    /// how exploitable the result is.
+    /// Freezes a solver's average strategy, recording how long it trained and —
+    /// for two-player games — how exploitable the result is.
     ///
-    /// The exploitability measurement walks the whole tree, so this is worth
-    /// doing once at save time rather than repeatedly later.
+    /// The exploitability measurement walks the whole tree, so it is worth
+    /// doing once at save time rather than repeatedly later. It is also
+    /// recorded only where it means something. Exploitability is how much a
+    /// best responder gains over *the value of the game*, and a three-player
+    /// game has no single such value to be measured against: the best response
+    /// to one opponent is not the best response to two, and the three payoffs
+    /// sum to zero without any being another's negation. Rather than report a
+    /// number that reads like a quality score and is not one, a blueprint from
+    /// a larger game simply carries none.
     pub fn from_solver<G: Game>(solver: &Solver<G>, label: impl Into<String>) -> Blueprint {
         let profile = solver.profile();
-        let exploitability = solver.exploitability(&profile);
+        let exploitability = (solver.game().players() == 2)
+            .then(|| solver.exploitability(&profile));
         Blueprint {
             iterations: solver.iterations(),
-            exploitability: Some(exploitability),
+            exploitability,
             ..Blueprint::from_profile(&profile, label)
         }
     }
