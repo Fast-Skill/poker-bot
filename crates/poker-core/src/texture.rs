@@ -50,6 +50,13 @@ pub struct Board {
     ///
     /// Held for the flop, turn and river; there is nothing to bucket preflop.
     buckets: Vec<u8>,
+    /// Each holding's finished hand on this board.
+    ///
+    /// Showdowns are settled with these rather than by comparing buckets. A
+    /// bucket is a group of roughly equal strength, so comparing them would
+    /// call two different hands a tie whenever they landed together — and at
+    /// twenty groups that is one showdown in twenty decided wrongly.
+    made: Vec<u32>,
 }
 
 impl Board {
@@ -154,6 +161,15 @@ impl Textures {
         &self.holdings[index]
     }
 
+    /// Who wins a showdown between two holdings on a board.
+    ///
+    /// Positive when the first wins, negative when the second does, zero for a
+    /// split. Settled from the finished hands, not from buckets.
+    pub fn showdown(&self, board: usize, first: usize, second: usize) -> std::cmp::Ordering {
+        let made = &self.boards[board].made;
+        made[first].cmp(&made[second])
+    }
+
     /// How strong a holding is on a board at a street.
     ///
     /// Zero is the weakest group. `None` preflop, where there is no board to be
@@ -179,6 +195,9 @@ impl Textures {
                 file.write_all(&[card.index()])?;
             }
             file.write_all(&board.buckets)?;
+            for made in &board.made {
+                file.write_all(&made.to_le_bytes())?;
+            }
         }
         file.flush()
     }
@@ -212,10 +231,17 @@ impl Textures {
             }
             let mut buckets_of = vec![0u8; 3 * HOLDINGS];
             file.read_exact(&mut buckets_of)?;
+            let mut raw = vec![0u8; HOLDINGS * 4];
+            file.read_exact(&mut raw)?;
+            let made = raw
+                .chunks_exact(4)
+                .map(|word| u32::from_le_bytes(word.try_into().expect("four bytes")))
+                .collect();
             holdings.push(remaining_holdings(&cards));
             boards.push(Board {
                 cards,
                 buckets: buckets_of,
+                made,
             });
         }
         Ok(Textures {
@@ -277,10 +303,21 @@ fn measure_board(rng: &mut Rng, buckets: usize, runouts: u32) -> (Board, Vec<[Ca
         assign_buckets(&equity, buckets, &mut all[at..at + HOLDINGS]);
     }
 
+    let mut hand = [cards[0]; 7];
+    hand[2..].copy_from_slice(&cards);
+    let made = holdings
+        .iter()
+        .map(|holding| {
+            hand[..2].copy_from_slice(holding);
+            evaluate(&hand).to_bits()
+        })
+        .collect();
+
     (
         Board {
             cards,
             buckets: all,
+            made,
         },
         holdings,
     )
@@ -504,6 +541,67 @@ mod tests {
             equity[flush],
             equity[nothing]
         );
+    }
+
+    /// Showdowns must not be settled by comparing buckets.
+    ///
+    /// A bucket holds many hands of roughly equal strength, so comparing them
+    /// would split every pot between two holdings that landed in the same
+    /// group — which at twenty groups is one showdown in twenty decided by a
+    /// tie that is not one.
+    #[test]
+    fn a_showdown_separates_hands_that_share_a_bucket() {
+        let textures = Textures::sample(4, 10, 24, 0x7E47, 4);
+        let mut sharing = 0;
+        let mut separated = 0;
+        for board in 0..textures.len() {
+            for first in 0..HOLDINGS {
+                for second in first + 1..HOLDINGS {
+                    let a = textures.strength(board, Street::River, first).expect("river");
+                    let b = textures.strength(board, Street::River, second).expect("river");
+                    if a != b {
+                        continue;
+                    }
+                    sharing += 1;
+                    if textures.showdown(board, first, second) != std::cmp::Ordering::Equal {
+                        separated += 1;
+                    }
+                }
+            }
+        }
+        assert!(sharing > 1_000, "only {sharing} pairs shared a bucket");
+        assert!(
+            separated * 2 > sharing,
+            "of {sharing} pairs sharing a bucket, only {separated} were actually              separated at showdown — buckets are being treated as strength itself"
+        );
+    }
+
+    #[test]
+    fn a_showdown_agrees_with_the_hand_that_is_actually_better() {
+        // A board where the nut flush is available; the hand holding it must
+        // beat one holding nothing, whatever buckets they fall in.
+        let textures = Textures::sample(1, 10, 8, 0x7E47, 2);
+        let board = textures.board(0).cards();
+        let holdings = textures.holdings(0);
+        let mut hand = [board[0]; 7];
+        hand[2..].copy_from_slice(board);
+
+        // Compare every pair against a fresh evaluation of the same two hands.
+        for first in (0..HOLDINGS).step_by(97) {
+            for second in (0..HOLDINGS).step_by(89) {
+                hand[..2].copy_from_slice(&holdings[first]);
+                let a = crate::eval::evaluate(&hand);
+                hand[..2].copy_from_slice(&holdings[second]);
+                let b = crate::eval::evaluate(&hand);
+                assert_eq!(
+                    textures.showdown(0, first, second),
+                    a.cmp(&b),
+                    "{:?} against {:?}",
+                    holdings[first],
+                    holdings[second]
+                );
+            }
+        }
     }
 
     #[test]
