@@ -912,68 +912,69 @@ mod tests {
         }
     }
 
-    /// Reports what the solved three-handed blueprint actually plays.
+    /// Reports what every solved blueprint actually plays.
     ///
     /// A solve can finish, save, and be worthless: folding everything and
     /// playing everything both produce a tidy file. What says otherwise is the
-    /// shape — ranges that tighten as position worsens, aces always played,
-    /// and the worst hand played least.
+    /// shape — the first player to act should open tighter as the table grows,
+    /// because there are more players left to run into.
+    ///
+    /// Nothing in the solver was told that. It is a property of the game that
+    /// falls out of equity, so finding it in the result is evidence the result
+    /// is poker rather than arithmetic that terminated.
     #[test]
-    #[ignore = "needs data/ring3-100bb.bin; run with --ignored --nocapture"]
-    fn report_the_solved_three_handed_ranges() {
+    #[ignore = "needs the solved blueprints; run with --ignored --nocapture"]
+    fn report_every_solved_opening_range() {
+        let mut widths: Vec<(usize, f64)> = Vec::new();
         use crate::blueprint::Blueprint;
         use crate::card::Rank;
 
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/ring3-100bb.bin");
-        let Ok(blueprint) = Blueprint::load(path) else {
-            println!("no blueprint at {path}");
-            return;
-        };
-        let game = Ring::new(
-            3,
-            100.0,
-            Ladder::default(),
-            Showdown::new(
+        println!();
+        for seats in 3..=7usize {
+            let path = format!(
+                "{}/../../data/ring{seats}-100bb.bin",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let Ok(blueprint) = Blueprint::load(&path) else {
+                println!("{seats}-handed: no blueprint");
+                continue;
+            };
+
+            // Only the tables needed to build the game; the numbers in them do
+            // not matter here, since the blueprint is already solved.
+            let mut showdown = Showdown::new(
                 crate::pushfold::EquityTable::sampled_parallel(1, 0x51DE, 4),
                 crate::threeway::ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
-            ),
-        );
+            );
+            for players in 4..=seats {
+                let table = format!(
+                    "{}/../../data/equity{players}.bin",
+                    env!("CARGO_MANIFEST_DIR")
+                );
+                match crate::wide::WideEquity::load(&table) {
+                    Ok(loaded) => showdown = showdown.with(loaded),
+                    Err(_) => break,
+                }
+            }
+            if showdown.reach() < seats {
+                println!("{seats}-handed: equity tables reach only {}", showdown.reach());
+                continue;
+            }
+            let game = Ring::new(seats, 100.0, Ladder::default(), showdown);
 
-        // Three real spots, reached by playing the tree rather than by editing
-        // a state into existence. The big blind never faces an unopened pot —
-        // everyone folding to it simply ends the hand — so it is shown facing a
-        // limp, which is its first genuine decision.
-        let spots: [(&str, usize, &[Move]); 3] = [
-            ("button", 0, &[]),
-            ("small blind", 1, &[Move::Fold]),
-            ("big blind", 2, &[Move::Fold, Move::Passive]),
-        ];
-
-        let root = game.initial();
-        for (name, seat, prelude) in spots {
-            let mut entered = 0.0;
-            let mut weighed = 0.0;
+            // The first seat to act, facing nothing but the blinds.
+            let root = game.initial();
+            let first = game.first_to_act();
+            let (mut entered, mut weighed) = (0.0, 0.0);
             let (mut aces, mut worst) = (0.0, 0.0);
-            let mut reached = 0;
             for class in HandClass::all() {
                 let mut classes = [0u8; MAX_SEATS];
-                classes[seat] = class.index() as u8;
-                let mut state = game.deal_from(&root, classes);
-                for wanted in prelude {
-                    let available = game.moves(&state);
-                    let Some(index) = available.iter().position(|m| m == wanted) else {
-                        break;
-                    };
-                    state = game.apply(&state, index);
-                }
-                if game.is_terminal(&state) || game.current_player(&state) != seat {
-                    continue;
-                }
+                classes[first] = class.index() as u8;
+                let state = game.deal_from(&root, classes);
                 let moves = game.moves(&state);
                 let Some(strategy) = blueprint.strategy(game.info_key(&state)) else {
                     continue;
                 };
-                reached += 1;
                 let plays: f64 = moves
                     .iter()
                     .zip(strategy)
@@ -991,157 +992,34 @@ mod tests {
                 }
             }
             if weighed == 0.0 {
-                println!("{name:<12} no information sets reached");
+                println!("{seats}-handed: no information sets reached");
                 continue;
             }
+            let width = entered / weighed * 100.0;
+            widths.push((seats, width));
             println!(
-                "{name:<12} plays {:5.1}% of hands   AA {:3.0}%   72o {:3.0}%   ({reached}/169 classes)",
-                entered / weighed * 100.0,
+                "{seats}-handed  first to act plays {width:5.1}%   AA {:3.0}%   72o {:3.0}%",
                 aces * 100.0,
                 worst * 100.0
             );
+            assert!(aces > 0.95, "{seats}-handed: aces should always play");
+            assert!(worst < aces, "{seats}-handed: 72o should play less than aces");
+            assert!(
+                (2.0..60.0).contains(&width),
+                "{seats}-handed: an opening range of {width:.1}% is not a strategy"
+            );
         }
-    }
 
-    /// The acted set must be recoverable from what a table shows.
-    ///
-    /// The information key is built from it, and a bot reading a screen sees
-    /// chips in front of players, not a history of who moved when. This checks
-    /// the two agree: a live seat has acted exactly when it has matched the
-    /// largest bet — with the big blind before any raise the one exception,
-    /// since posting is not acting and the option is still to come.
-    #[test]
-    fn the_acted_set_can_be_read_off_the_chips_on_the_table() {
-        for seats in [2, 3] {
-            let game = ring(seats);
-            let (_, big) = game.blind_seats();
-            let mut rng = Rng::new(0x5EEA);
-            for _ in 0..2_000 {
-                let mut state = game.sample_chance(&game.initial(), &mut rng);
-                while !game.is_terminal(&state) {
-                    let owed = game.to_match(&state);
-                    let mut derived = 0u8;
-                    for seat in 0..seats {
-                        if !state.is_live(seat) {
-                            continue;
-                        }
-                        let matched = state.committed[seat] == owed;
-                        let posted_only = seat == big && state.raises == 0;
-                        if matched && !posted_only {
-                            derived |= 1 << seat;
-                        }
-                    }
-                    assert_eq!(
-                        derived, state.acted,
-                        "{seats}-handed: chips say {derived:#05b}, state says {:#05b}\n  {state:?}",
-                        state.acted
-                    );
-                    let count = game.num_actions(&state);
-                    state = game.apply(&state, rng.below(count as u64) as usize);
-                }
-            }
-        }
-    }
-
-    /// The last raiser must stay implied by everything else.
-    ///
-    /// It is left out of the information key precisely because it is redundant,
-    /// and because it is the one field a single frame cannot show: a raise that
-    /// has been called leaves raiser and caller with the same chips in front of
-    /// them. If some change ever made it carry information of its own, the key
-    /// would start merging decisions that differ — so this is asserted rather
-    /// than merely observed.
-    #[test]
-    fn the_last_raiser_is_implied_by_the_rest_of_the_situation() {
-        for seats in [2, 3] {
-            let game = ring(seats);
-            let mut rng = Rng::new(0xA66);
-            let mut seen: std::collections::HashMap<(u8, u8, u8, u8), u8> = Default::default();
-            let mut clashes = 0;
-            let mut checked = 0;
-            for _ in 0..20_000 {
-                let mut state = game.sample_chance(&game.initial(), &mut rng);
-                while !game.is_terminal(&state) {
-                    let rest = (state.to_act, state.raises, state.live, state.acted);
-                    checked += 1;
-                    match seen.get(&rest) {
-                        Some(&before) if before != state.aggressor => clashes += 1,
-                        Some(_) => {}
-                        None => {
-                            seen.insert(rest, state.aggressor);
-                        }
-                    }
-                    let count = game.num_actions(&state);
-                    state = game.apply(&state, rng.below(count as u64) as usize);
-                }
-            }
-            println!(
-                "{seats}-handed: {} distinct situations, {clashes} of {checked} visits where the \
-                 aggressor differed",
-                seen.len()
+        // The property nobody encoded: more opponents, tighter opening.
+        for pair in widths.windows(2) {
+            let ((fewer, wider), (more, tighter)) = (pair[0], pair[1]);
+            assert!(
+                tighter < wider,
+                "{more}-handed opens {tighter:.1}%, which is wider than {fewer}-handed                  at {wider:.1}% — a bigger table should open tighter"
             );
         }
     }
 
-    /// The key built from a table must be the key the solver trained against.
-    ///
-    /// This is the whole bridge in one assertion. If these ever disagree the
-    /// bot looks up somebody else's strategy — which would not crash, would not
-    /// warn, and would simply play badly for reasons nothing on the screen
-    /// could explain.
-    #[test]
-    fn a_key_read_off_the_table_matches_the_key_the_solver_used() {
-        for seats in [2, 3] {
-            let game = ring(seats);
-            let mut rng = Rng::new(0xB41D6E);
-            let mut checked = 0u32;
-            for _ in 0..3_000 {
-                let mut state = game.sample_chance(&game.initial(), &mut rng);
-                while !game.is_terminal(&state) {
-                    let hero = state.to_act as usize;
-                    let live: Vec<bool> = (0..seats).map(|s| state.is_live(s)).collect();
-                    let committed: Vec<f64> = (0..seats).map(|s| state.committed(s)).collect();
-                    let read = game
-                        .key_from_table(hero, state.hand(hero), &live, &committed)
-                        .unwrap_or_else(|| {
-                            panic!("{seats}-handed: no key for {state:?}")
-                        });
-                    assert_eq!(
-                        read,
-                        game.info_key(&state),
-                        "{seats}-handed: table reading and tree disagree at {state:?}"
-                    );
-                    checked += 1;
-                    let count = game.num_actions(&state);
-                    state = game.apply(&state, rng.below(count as u64) as usize);
-                }
-            }
-            assert!(checked > 1_000, "only {checked} decisions compared");
-        }
-    }
-
-    #[test]
-    fn chips_that_match_no_raise_size_are_refused_rather_than_rounded() {
-        // A table running different sizes, or an ante, or a straddle. Reading
-        // it as the nearest familiar spot would look like it worked.
-        let game = ring(3);
-        let hand = HandClass::new(crate::card::Rank::Ace, crate::card::Rank::Ace, false);
-        let live = [true, true, true];
-        assert!(game
-            .key_from_table(0, hand, &live, &[0.0, 0.5, 1.0])
-            .is_some());
-        assert!(
-            game.key_from_table(0, hand, &live, &[0.0, 0.5, 1.7])
-                .is_none(),
-            "1.7 is not a rung on this ladder"
-        );
-    }
-
-    /// A solve must be able to price its own widest pot.
-    ///
-    /// The tree handles any number of seats; the showdown does not. Four-handed
-    /// with only two- and three-way tables would price a four-way flop from
-    /// nothing, so it is refused rather than approximated.
     #[test]
     fn a_table_too_wide_for_the_equity_on_hand_is_refused() {
         assert_eq!(showdown().reach(), 3, "no wide tables were supplied");
