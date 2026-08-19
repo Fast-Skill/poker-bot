@@ -57,6 +57,7 @@ fn main() -> ExitCode {
         Some("bench") => bench(&args[1..]),
         Some("play") => play(&args[1..]),
         Some("demo") => demo(&args[1..]),
+        Some("equity3") => equity3(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
@@ -88,8 +89,10 @@ USAGE
   poker bench <blueprint> [options] play it against baseline opponents
   poker play  <blueprint> [options] watch it play, hand by hand
   poker demo  [blueprint]          show the whole thing works, start to finish
+  poker equity3 [options]          build the three-way equity table a 3-handed solve needs
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide; --act fold to play
+                                   --keep-unread <dir> saves hands it cannot read
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -751,7 +754,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -761,6 +764,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         .map_err(|_| "--stop-loss wants a number of big blinds")?;
     let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
+    let keep_unread = flags.text("keep-unread", "");
 
     let acting = match act.as_str() {
         "off" => false,
@@ -797,14 +801,20 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         max_actions: 500,
     };
     let mut session = Session::new(table, cards, glyphs, hero, safety);
+    if !keep_unread.is_empty() {
+        session.keep_unread = Some(PathBuf::from(&keep_unread));
+    }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
     let mut rng = Rng::new(0x5EED_0BEE);
 
     println!("watching : {}", session.window_title());
     println!("acting   : {}", if acting { "yes - will fold when it is our turn" } else { "no - watching only" });
-    println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears
-", kill_switch.display());
+    println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears", kill_switch.display());
+    if !keep_unread.is_empty() {
+        println!("keeping  : frames whose hole cards would not read, into {keep_unread}");
+    }
+    println!();
 
     let until = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
     let mut last = String::new();
@@ -865,12 +875,76 @@ stopping: {}", reason.explain());
 
     println!("
 {} action(s) taken.", session.actions_taken());
+    if !keep_unread.is_empty() {
+        println!("{} unreadable frame(s) kept in {keep_unread}.", session.frames_kept());
+    }
     Ok(())
 }
 
 #[cfg(not(windows))]
 fn live_cmd(_args: &[String]) -> Result<(), String> {
     Err("playing a live window is only implemented on Windows".to_string())
+}
+
+
+/// Builds the three-way equity table.
+///
+/// A three-handed solve cannot reuse the pairwise table: multiplying pairwise
+/// equities misorders real spots, and three-way equity is not a function of the
+/// pairwise numbers. This measures all 818,805 triples of hand classes directly
+/// and caches them, because building costs minutes and reading costs
+/// milliseconds.
+fn equity3(args: &[String]) -> Result<(), String> {
+    use poker_core::threeway::{ThreeWayEquity, NUM_TRIPLES};
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["out", "samples", "threads", "seed"])?;
+    let out = flags.text("out", "data/threeway.bin");
+    let samples: u32 = flags
+        .text("samples", "300")
+        .parse()
+        .map_err(|_| "--samples wants a number")?;
+    let threads: usize = flags
+        .text("threads", "8")
+        .parse()
+        .map_err(|_| "--threads wants a number")?;
+    let seed: u64 = flags
+        .text("seed", "13371337")
+        .parse()
+        .map_err(|_| "--seed wants a number")?;
+
+    println!("measuring {NUM_TRIPLES} hand-class triples, {samples} runouts each");
+    println!("threads  : {threads}");
+    println!("seed     : {seed}  (the table is identical whatever the core count)");
+
+    let began = std::time::Instant::now();
+    let table = ThreeWayEquity::sampled_parallel(samples, seed, threads);
+    let took = began.elapsed();
+
+    table
+        .save(&out)
+        .map_err(|e| format!("could not write {out}: {e}"))?;
+    println!("
+built in {:.1}s, written to {out}", took.as_secs_f64());
+
+    // A spot worth printing, because it is the one that justifies the table.
+    let class = |text: &str| -> HandClass {
+        let mut chars = text.chars();
+        let high = Rank::from_char(chars.next().expect("rank")).expect("rank");
+        let low = Rank::from_char(chars.next().expect("rank")).expect("rank");
+        HandClass::new(high, low, chars.next() == Some('s'))
+    };
+    let shares = table.get(class("AA"), class("KK"), class("72o"));
+    println!(
+        "
+AA vs KK vs 72o, three-handed: {:.1}% / {:.1}% / {:.1}%",
+        shares[0] * 100.0,
+        shares[1] * 100.0,
+        shares[2] * 100.0
+    );
+    println!("Multiplying pairwise equities would give 72o under 2%, which is the");
+    println!("mistake this table exists to avoid.");
+    Ok(())
 }
 
 /// Looks at the live client and reports what the recogniser makes of it.

@@ -8,10 +8,33 @@ directly above it.
 Rank and suit are collected at their own natural sizes and never resized, the
 same rule the board and digit templates follow.
 """
-import glob, os
+import glob, os, struct
 import numpy as np
 from PIL import Image
 from scipy import ndimage
+
+
+def load(path):
+    """Reads a capture, whether it is a PNG or a raw frame the bot kept."""
+    if path.lower().endswith(".rgb"):
+        with open(path, "rb") as f:
+            w, h = struct.unpack("<II", f.read(8))
+            return np.frombuffer(f.read(w * h * 3), np.uint8).reshape(h, w, 3).astype(np.float32)
+    return np.asarray(Image.open(path).convert("RGB"), dtype=np.float32)
+
+
+def captures():
+    """Every usable frame: the templates are exact at one window size only."""
+    found = []
+    for pattern in ("*.png", "*.rgb", "unread/*.rgb"):
+        for path in sorted(glob.glob(os.path.join(CAPTURES, pattern))):
+            try:
+                a = load(path)
+            except Exception:
+                continue
+            if a.shape[:2] == (1040, 1430):
+                found.append(path)
+    return found
 
 CAPTURES = r"C:\poker\captures"
 # The hero's seat is always the bottom middle of the window, so unlike the
@@ -27,7 +50,7 @@ def card_face(a):
 
 
 def hero_cards(path):
-    a = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32)
+    a = load(path)
     luma = 0.299 * a[:, :, 0] + 0.587 * a[:, :, 1] + 0.114 * a[:, :, 2]
     face = card_face(a)
     x0, y0, x1, y1 = REGION
@@ -86,7 +109,7 @@ if __name__ == "__main__":
     pips = collections.Counter()
     ranks = collections.Counter()
     per_frame = collections.Counter()
-    frames = sorted(glob.glob(os.path.join(CAPTURES, "*.png")))
+    frames = captures()
     for path in frames:
         cards = hero_cards(path)
         per_frame[len(cards)] += 1

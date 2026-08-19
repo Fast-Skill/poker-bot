@@ -28,6 +28,7 @@ pub mod river;
 pub mod rng;
 pub mod table;
 pub mod telemetry;
+pub mod threeway;
 pub mod turnriver;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
