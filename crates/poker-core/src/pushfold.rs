@@ -220,7 +220,7 @@ fn pair_seed(seed: u64, a: usize, b: usize) -> u64 {
 ///
 /// Returns `None` if no conflict-free draw turned up, which only happens for
 /// heavily blocked classes such as a pair whose rank is already exhausted.
-fn sample_hand(class: HandClass, rng: &mut Rng, blocked: CardSet) -> Option<[Card; 2]> {
+pub(crate) fn sample_hand(class: HandClass, rng: &mut Rng, blocked: CardSet) -> Option<[Card; 2]> {
     let suit = |rng: &mut Rng| Suit::from_index(rng.below(4) as u8).expect("0..4");
     for _ in 0..64 {
         let (high, low) = (class.high(), class.low());

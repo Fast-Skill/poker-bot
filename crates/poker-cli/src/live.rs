@@ -142,8 +142,15 @@ pub struct Session {
     glyphs: GlyphTemplates,
     hero: HeroTemplates,
     pub safety: Safety,
+    /// Where to keep frames the reader could not fully read.
+    ///
+    /// Only those are worth keeping. A frame the bot understood teaches it
+    /// nothing, and at four and a half megabytes raw, keeping every frame of a
+    /// half-hour session would cost gigabytes to say so.
+    pub keep_unread: Option<PathBuf>,
     started_with: Option<f64>,
     actions: usize,
+    kept: usize,
 }
 
 /// How long to leave between the two captures that must agree.
@@ -169,9 +176,15 @@ impl Session {
             glyphs,
             hero,
             safety,
+            keep_unread: None,
             started_with: None,
             actions: 0,
+            kept: 0,
         }
+    }
+
+    pub fn frames_kept(&self) -> usize {
+        self.kept
     }
 
     pub fn actions_taken(&self) -> usize {
@@ -180,19 +193,42 @@ impl Session {
 
     /// Reads the table once.
     pub fn look(&self) -> Option<TableView> {
+        self.look_keeping(false).map(|(view, _)| view)
+    }
+
+    /// Reads the table, optionally keeping the frame if it could not be read.
+    fn look_keeping(&self, may_keep: bool) -> Option<(TableView, bool)> {
         let capture = self.window.capture()?;
         if capture.is_blank() {
             return None;
         }
         let frame = Frame::new(capture.width, capture.height, &capture.rgb);
-        Some(TableView::read(
+        let view = TableView::read(
             &frame,
             &self.cards,
             &self.glyphs,
             &self.hero,
             Thresholds::default(),
             TextThresholds::default(),
-        ))
+        );
+
+        // The frames worth keeping are the ones where the hero plainly holds
+        // cards and the reader could not name them — which is exactly what a
+        // rank with no template looks like from the outside.
+        let unread = view.hero().is_some_and(|h| h.in_hand) && view.hole.len() != 2;
+        let keep = may_keep && unread && self.keep_unread.is_some();
+        if keep {
+            if let Some(dir) = &self.keep_unread {
+                let _ = std::fs::create_dir_all(dir);
+                let name = format!("unread-{:04}-{}.rgb", self.kept, self.actions);
+                let mut bytes = Vec::with_capacity(8 + capture.rgb.len());
+                bytes.extend_from_slice(&(capture.width as u32).to_le_bytes());
+                bytes.extend_from_slice(&(capture.height as u32).to_le_bytes());
+                bytes.extend_from_slice(&capture.rgb);
+                let _ = std::fs::write(dir.join(name), bytes);
+            }
+        }
+        Some((view, keep))
     }
 
     /// Reads the table twice and returns the reading only if both agree.
@@ -213,6 +249,14 @@ impl Session {
     /// caller watching the bot work wants to see the table it is looking at
     /// even on the frames it declines.
     pub fn assess(&mut self) -> (Option<TableView>, Option<Held>) {
+        // One capture of the pair may be kept, so a frame the reader could not
+        // name is not lost just because it was never the hero's turn.
+        if let Some((_, kept)) = self.look_keeping(true) {
+            if kept {
+                self.kept += 1;
+            }
+        }
+
         let view = match self.look_settled() {
             Ok(view) => view,
             Err(held) => return (None, Some(held)),

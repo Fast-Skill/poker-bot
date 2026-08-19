@@ -27,7 +27,7 @@ param(
   [int]$Count = 30,
   [double]$Interval = 3.0,
   [int]$MinSize = 150,
-  [switch]$Resize,
+  [switch]$NoResize,
   [int]$Width = 1430,
   [int]$Height = 1040,
   [string]$OutDir = "c:\poker\captures"
@@ -152,7 +152,7 @@ Start-Sleep -Milliseconds 600
 # The card and glyph templates are pixel-exact at one window size. At any other
 # size the client reflows its layout rather than scaling it, so frames captured
 # at the wrong size cannot be read and cannot be used to build templates either.
-if ($Resize) {
+if (-not $NoResize) {
   $SWP_NOMOVE = 0x0002; $SWP_NOZORDER = 0x0004
   [void][Win]::SetWindowPos($target.Handle, [IntPtr]::Zero, 0, 0, $Width, $Height,
                             $SWP_NOMOVE -bor $SWP_NOZORDER)
