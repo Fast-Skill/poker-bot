@@ -7,14 +7,14 @@
 //! since the last raise, and how much each has in. The tree is then whatever
 //! that machine generates, and adding a seat costs nothing in this file.
 //!
-//! # Why the seat count is capped below the table size
+//! # The seat count is limited by equity, not by the tree
 //!
-//! The state machine handles any number of seats. What does not is the
+//! The state machine handles any number of seats. What limits it is the
 //! showdown: a pot contested by `n` players needs `n`-way equity, and
 //! [`crate::multiway::approximate_shares`] documents in detail why that cannot
-//! be assembled from pairwise numbers. Two-way and three-way tables exist, so
-//! this accepts two or three seats and refuses more — rather than quietly
-//! settling four-way pots with arithmetic known to be wrong.
+//! be assembled from pairwise numbers. So a game is refused up front unless the
+//! [`Showdown`] it is given can settle the widest pot it could ever produce —
+//! which is every seat reaching a flop together.
 //!
 //! # Heads-up is not a special case here
 //!
@@ -25,9 +25,8 @@
 use crate::abstraction::{HandClass, NUM_HAND_CLASSES};
 use crate::card::{Card, CardSet};
 use crate::cfr::{Game, InfoKey};
-use crate::pushfold::EquityTable;
 use crate::rng::Rng;
-use crate::threeway::ThreeWayEquity;
+use crate::wide::Showdown;
 
 /// The most seats the state machine carries. Showdowns are limited separately.
 pub const MAX_SEATS: usize = 7;
@@ -150,36 +149,35 @@ pub struct Ring {
     seats: usize,
     stack: u32,
     ladder: Ladder,
-    heads_up: EquityTable,
-    three_way: ThreeWayEquity,
+    showdown: Showdown,
 }
 
 impl Ring {
     /// Builds a game for `seats` players, each `stack` big blinds deep.
     ///
     /// # Panics
-    /// Panics outside two or three seats. The tree would be fine; the showdown
-    /// would not, for want of a four-way equity table.
-    pub fn new(
-        seats: usize,
-        stack: f64,
-        ladder: Ladder,
-        heads_up: EquityTable,
-        three_way: ThreeWayEquity,
-    ) -> Ring {
+    /// Panics when `showdown` cannot settle a pot of `seats` players. The tree
+    /// would be fine; the showdown would not, and a solve unable to price its
+    /// own widest pot would be learning from a number nobody measured.
+    pub fn new(seats: usize, stack: f64, ladder: Ladder, showdown: Showdown) -> Ring {
         assert!(
-            (2..=3).contains(&seats),
-            "this solves two- or three-handed pots; {seats} seats would need \
-             {seats}-way equity, which is not a function of the pairwise numbers"
+            (2..=crate::wide::MAX_PLAYERS).contains(&seats),
+            "a table seats between two and {}, not {seats}",
+            crate::wide::MAX_PLAYERS
+        );
+        assert!(
+            seats <= showdown.reach(),
+            "solving {seats}-handed needs {seats}-way equity, and the tables given reach only {}",
+            showdown.reach()
         );
         Ring {
             seats,
             stack: to_chips(stack),
             ladder,
-            heads_up,
-            three_way,
+            showdown,
         }
     }
+
 
     pub fn seats(&self) -> usize {
         self.seats
@@ -270,22 +268,11 @@ impl Ring {
         moves
     }
 
-    /// Shares of the pot at a showdown, indexed by seat.
+    /// Shares of the pot at a showdown, indexed by position within `live`.
     fn shares(&self, state: &State, live: &[usize]) -> Vec<f64> {
-        match live.len() {
-            1 => vec![1.0],
-            2 => {
-                let equity = self
-                    .heads_up
-                    .get(state.hand(live[0]), state.hand(live[1]));
-                vec![equity, 1.0 - equity]
-            }
-            3 => self
-                .three_way
-                .get(state.hand(live[0]), state.hand(live[1]), state.hand(live[2]))
-                .to_vec(),
-            other => unreachable!("{other} live seats needs {other}-way equity"),
-        }
+        let hands: Vec<crate::abstraction::HandClass> =
+            live.iter().map(|&seat| state.hand(seat)).collect();
+        self.showdown.shares(&hands)
     }
 
     /// Builds an information key from what a table shows.
@@ -493,7 +480,7 @@ impl Game for Ring {
         debug_assert!(self.is_chance(state));
         assert_eq!(
             self.seats, 2,
-            "enumerating every three-handed deal is not tractable; train by sampling"
+            "enumerating every deal past two players is not tractable; train by sampling"
         );
 
         let mut outcomes = Vec::with_capacity(NUM_HAND_CLASSES * NUM_HAND_CLASSES);
@@ -618,16 +605,16 @@ impl Game for Ring {
 mod tests {
     use super::*;
 
-    fn tables() -> (EquityTable, ThreeWayEquity) {
-        (
-            EquityTable::sampled_parallel(64, 0x51DE, 4),
-            ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+    /// Cheap tables: these tests exercise the tree, not the equity numbers.
+    fn showdown() -> Showdown {
+        Showdown::new(
+            crate::pushfold::EquityTable::sampled_parallel(64, 0x51DE, 4),
+            crate::threeway::ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
         )
     }
 
     fn ring(seats: usize) -> Ring {
-        let (heads_up, three_way) = tables();
-        Ring::new(seats, 100.0, Ladder::default(), heads_up, three_way)
+        Ring::new(seats, 100.0, Ladder::default(), showdown())
     }
 
     /// Walks a state forward by naming moves, which reads like a hand does.
@@ -840,8 +827,10 @@ mod tests {
                 three_bet_to: 8.0,
                 four_bet_to: 18.0,
             },
-            EquityTable::sampled_parallel(400, 0x51DE, 4),
-            ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            Showdown::new(
+                crate::pushfold::EquityTable::sampled_parallel(400, 0x51DE, 4),
+                crate::threeway::ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            ),
         );
         let mut solver = Solver::new(game);
         solver.train_sampled(400_000, &mut rng);
@@ -944,8 +933,10 @@ mod tests {
             3,
             100.0,
             Ladder::default(),
-            EquityTable::sampled_parallel(1, 0x51DE, 4),
-            ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            Showdown::new(
+                crate::pushfold::EquityTable::sampled_parallel(1, 0x51DE, 4),
+                crate::threeway::ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            ),
         );
 
         // Three real spots, reached by playing the tree rather than by editing
@@ -1146,12 +1137,29 @@ mod tests {
         );
     }
 
+    /// A solve must be able to price its own widest pot.
+    ///
+    /// The tree handles any number of seats; the showdown does not. Four-handed
+    /// with only two- and three-way tables would price a four-way flop from
+    /// nothing, so it is refused rather than approximated.
     #[test]
     fn a_table_too_wide_for_the_equity_on_hand_is_refused() {
-        let (heads_up, three_way) = tables();
+        assert_eq!(showdown().reach(), 3, "no wide tables were supplied");
         let built = std::panic::catch_unwind(|| {
-            Ring::new(4, 100.0, Ladder::default(), heads_up, three_way)
+            Ring::new(4, 100.0, Ladder::default(), showdown())
         });
         assert!(built.is_err(), "four-handed needs four-way equity");
+    }
+
+    #[test]
+    fn a_showdown_given_a_wide_table_reaches_further() {
+        use crate::wide::{Buckets, WideEquity};
+        let equity = crate::pushfold::EquityTable::sampled_parallel(64, 0x51DE, 4);
+        let wide = WideEquity::sampled_parallel(4, Buckets::by_strength(&equity, 6), 4, 0x4EED, 4);
+        let reaching = showdown().with(wide);
+        assert_eq!(reaching.reach(), 4);
+        // And the tree accepts the seat count it can now price.
+        let game = Ring::new(4, 100.0, Ladder::default(), reaching);
+        assert_eq!(game.seats(), 4);
     }
 }

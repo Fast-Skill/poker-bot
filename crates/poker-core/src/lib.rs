@@ -31,6 +31,7 @@ pub mod table;
 pub mod telemetry;
 pub mod threeway;
 pub mod turnriver;
+pub mod wide;
 
 pub use abstraction::{bucket_by_strength, BetSizing, HandClass, NUM_HAND_CLASSES};
 pub use betting::{Action, ActionError, BettingRound, LegalActions, Seat, Street};

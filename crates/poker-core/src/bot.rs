@@ -45,9 +45,15 @@ pub struct BlueprintAgent {
     name: String,
     blueprint: Blueprint,
     sizing: Sizing,
-    /// A three-handed preflop blueprint, and the game whose keys it is stored
-    /// against. Absent unless one has been solved and attached.
-    ring: Option<(Blueprint, Ring)>,
+    /// Solved multiway preflop strategies, each with the game whose information
+    /// keys it is stored against, indexed by how many players the pot has.
+    ///
+    /// A table seats up to seven but a pot is contested by however many have
+    /// not folded, and those are different problems: five-handed with two live
+    /// is a heads-up pot with dead money in it. So the choice is made by the
+    /// pot, and a size with no blueprint falls through rather than borrowing
+    /// one solved for a different number of opponents.
+    rings: Vec<Option<(Blueprint, Ring)>>,
     /// Covers postflop, and any preflop spot the blueprint does not hold.
     fallback: ChartBot,
     /// Preflop decisions taken so far this hand, used to tell an open from a
@@ -74,7 +80,7 @@ impl BlueprintAgent {
     pub fn new(name: impl Into<String>, blueprint: Blueprint, sizing: Sizing) -> BlueprintAgent {
         BlueprintAgent {
             name: name.into(),
-            ring: None,
+            rings: vec![None; crate::wide::MAX_PLAYERS + 1],
             blueprint,
             sizing,
             fallback: ChartBot::default(),
@@ -86,18 +92,28 @@ impl BlueprintAgent {
         }
     }
 
-    /// Attaches a three-handed preflop strategy.
+    /// Attaches a solved multiway preflop strategy.
     ///
-    /// Without one, pots with three players live fall through to the heuristic:
-    /// the heads-up blueprint has nothing to say about them, and playing a
-    /// two-player strategy three-handed is worse than not trying.
+    /// Without one for a given pot size, pots of that size fall through to the
+    /// heuristic: a blueprint solved for a different number of players has
+    /// nothing useful to say, and using it anyway is worse than not trying.
     ///
     /// The `ring` must be the game the blueprint was solved from — same seats,
     /// same stack, same ladder — because the blueprint is keyed against that
     /// game's information sets and a mismatch would look up the wrong ones.
+    ///
+    /// Call it once per size; each replaces only its own.
     pub fn with_ring(mut self, blueprint: Blueprint, ring: Ring) -> BlueprintAgent {
-        self.ring = Some((blueprint, ring));
+        let seats = ring.seats();
+        self.rings[seats] = Some((blueprint, ring));
         self
+    }
+
+    /// The pot sizes this agent has a solved strategy for, ascending.
+    pub fn solved_sizes(&self) -> Vec<usize> {
+        (0..self.rings.len())
+            .filter(|&seats| self.rings[seats].is_some())
+            .collect()
     }
 
     /// Looks up a three-handed preflop decision, if one applies here.
@@ -110,10 +126,11 @@ impl BlueprintAgent {
         view: &View,
         rng: &mut Rng,
     ) -> Option<Consulted> {
-        let (blueprint, ring) = self.ring.as_ref()?;
-        if view.street != Street::Preflop || view.active != ring.seats() {
+        if view.street != Street::Preflop {
             return None;
         }
+        // Chosen by how many are still in the pot, not by how many are seated.
+        let (blueprint, ring) = self.rings.get(view.active)?.as_ref()?;
 
         let committed: Vec<f64> = view
             .committed
@@ -572,6 +589,66 @@ mod tests {
         assert_eq!(bot.stage_for(&view), Some(preflop::Stage::SbVsJam));
     }
 
+    #[test]
+    fn a_pot_size_with_no_solve_falls_through_rather_than_borrowing_one() {
+        use crate::cfr::Solver;
+        use crate::pushfold::EquityTable;
+        use crate::ring::{Ladder, Ring};
+        use crate::threeway::ThreeWayEquity;
+
+        let ring = Ring::new(
+            3,
+            100.0,
+            Ladder::default(),
+            crate::wide::Showdown::new(
+                EquityTable::sampled_parallel(8, 0x51DE, 4),
+                ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            ),
+        );
+        let mut rng = Rng::new(4);
+        let mut solver = Solver::new(ring.clone());
+        solver.train_sampled(5_000, &mut rng);
+        let bot = agent(100.0).with_ring(Blueprint::from_solver(&solver, "ring3/100bb"), ring);
+
+        assert_eq!(bot.solved_sizes(), vec![3], "only three-handed is solved");
+
+        // A four-way pot has no strategy here. Reaching for the three-handed
+        // one would be answering a different question with confidence.
+        let mut bot = bot;
+        let hole = crate::card::parse_cards("AsAd").expect("valid");
+        let legal = crate::betting::LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(100),
+            raise_to: Some((200, 10_000)),
+        };
+        let view = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Preflop,
+            position: Position::Button,
+            seat: 0,
+            players: 4,
+            active: 4,
+            pot: 250,
+            to_call: 100,
+            stack: 10_000,
+            stacks: &[10_000; 4],
+            committed: &[0, 50, 100, 100],
+            live: &[true, true, true, true],
+            big_blind: 100,
+            legal: &legal,
+        };
+        let (solved_before, _) = bot.coverage();
+        bot.act(&view, &mut rng);
+        let (solved_after, total) = bot.coverage();
+        assert_eq!(total, 1);
+        assert_eq!(
+            solved_after, solved_before,
+            "a four-way pot must not be answered from a three-handed solve"
+        );
+    }
+
     /// A three-handed pot must reach the three-handed solve, not the heuristic.
     #[test]
     fn a_three_handed_preflop_pot_is_decided_by_the_ring_blueprint() {
@@ -585,8 +662,10 @@ mod tests {
             3,
             100.0,
             Ladder::default(),
-            EquityTable::sampled_parallel(8, 0x51DE, 4),
-            ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            crate::wide::Showdown::new(
+                EquityTable::sampled_parallel(8, 0x51DE, 4),
+                ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            ),
         );
         let mut rng = Rng::new(4);
         let mut solver = Solver::new(ring.clone());

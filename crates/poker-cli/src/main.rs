@@ -34,6 +34,7 @@ use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
 use poker_core::ring::{Ladder, Ring};
 use poker_core::threeway::ThreeWayEquity;
+use poker_core::wide::{Showdown, WideEquity};
 use poker_core::rng::Rng;
 
 /// Where the shared preflop equity table is cached.
@@ -61,6 +62,7 @@ fn main() -> ExitCode {
         Some("play") => play(&args[1..]),
         Some("demo") => demo(&args[1..]),
         Some("equity3") => equity3(&args[1..]),
+        Some("equity") => equity_wide(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
@@ -94,6 +96,7 @@ USAGE
   poker play  <blueprint> [options] watch it play, hand by hand
   poker demo  [blueprint]          show the whole thing works, start to finish
   poker equity3 [options]          build the three-way equity table a 3-handed solve needs
+  poker equity  [options]          build a wide equity table (--players 4..7)
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide; --act fold to play
   poker typetest [options]         check the bot can set a raise amount (commits nothing)
@@ -101,7 +104,7 @@ USAGE
 
 GAMES
   pushfold    heads-up jam-or-fold
-  ring3       three-handed preflop (needs `poker equity3` first)
+  ring3..7    multiway preflop (needs `poker equity3` and `poker equity` first)
   preflop     heads-up open / 3-bet / 4-bet / jam
 
 SOLVE OPTIONS
@@ -145,10 +148,11 @@ STAGES
 enum Kind {
     PushFold,
     Preflop,
-    /// Three-handed preflop, solved from a state machine rather than a named
-    /// ladder of stages. Its information sets are packed bit fields, so it has
-    /// no stage names for `query` and `chart` to work from.
-    Ring3,
+    /// Multiway preflop for a table of this many seats, solved from a state
+    /// machine rather than a named ladder of stages. Its information sets are
+    /// packed bit fields, so there are no stage names for `query` and `chart`
+    /// to work from.
+    Ring(usize),
 }
 
 impl Kind {
@@ -156,9 +160,20 @@ impl Kind {
         match name {
             "pushfold" => Ok(Kind::PushFold),
             "preflop" => Ok(Kind::Preflop),
-            "ring3" => Ok(Kind::Ring3),
+            other if other.starts_with("ring") => {
+                let seats: usize = other[4..]
+                    .parse()
+                    .map_err(|_| format!("unknown game {other:?}; try ring3 to ring7"))?;
+                if !(3..=poker_core::wide::MAX_PLAYERS).contains(&seats) {
+                    return Err(format!(
+                        "ring games run from three to {} seats; heads-up is `preflop`",
+                        poker_core::wide::MAX_PLAYERS
+                    ));
+                }
+                Ok(Kind::Ring(seats))
+            }
             other => Err(format!(
-                "unknown game {other:?}; try pushfold, preflop or ring3"
+                "unknown game {other:?}; try pushfold, preflop, or ring3 to ring7"
             )),
         }
     }
@@ -167,7 +182,11 @@ impl Kind {
         match self {
             Kind::PushFold => "pushfold",
             Kind::Preflop => "preflop",
-            Kind::Ring3 => "ring3",
+            Kind::Ring(3) => "ring3",
+            Kind::Ring(4) => "ring4",
+            Kind::Ring(5) => "ring5",
+            Kind::Ring(6) => "ring6",
+            Kind::Ring(_) => "ring7",
         }
     }
 
@@ -187,7 +206,7 @@ impl Kind {
             // big blind is facing a raise from the button or from the small
             // blind is part of the situation, and there are far too many of
             // those to give each a name.
-            Kind::Ring3 => &[],
+            Kind::Ring(_) => &[],
             Kind::Preflop => &[
                 ("sb-open", &["fold", "raise", "jam"]),
                 ("bb-vs-open", &["fold", "call", "raise", "jam"]),
@@ -205,7 +224,7 @@ impl Kind {
             // Its information sets are packed bit fields describing who is
             // live, who has acted and who raised last. There is no short name
             // for a situation like that, so there is nothing to look up by.
-            Kind::Ring3 => Err(
+            Kind::Ring(_) => Err(
                 "ring3 blueprints have no named stages to query; the bot reads them                  directly. Use `poker info` to see what one contains."
                     .to_string(),
             ),
@@ -263,7 +282,7 @@ fn solve(args: &[String]) -> Result<(), String> {
 
     let stack: f64 = flags.number("stack", match kind {
         Kind::PushFold => 10.0,
-        Kind::Preflop | Kind::Ring3 => 100.0,
+        Kind::Preflop | Kind::Ring(_) => 100.0,
     })?;
     let iterations = flags.number("iterations", 2_000_000.0)? as usize;
     let out = flags.required("out")?;
@@ -293,20 +312,29 @@ fn solve(args: &[String]) -> Result<(), String> {
             solver.train_sampled(iterations, &mut rng);
             Blueprint::from_solver(&solver, label)
         }
-        Kind::Ring3 => {
-            // Three-way showdowns cannot be settled from pairwise equity, so
-            // this needs its own table. It costs a minute to measure and is
-            // cached, which is why it is read here rather than rebuilt.
+        Kind::Ring(seats) => {
+            // A pot of n players needs n-way equity, and none of it can be
+            // assembled from the pairwise numbers. Each table costs minutes to
+            // measure and is cached, so they are read here rather than rebuilt.
             eprint!("
-  three-way equity... ");
+  equity tables... ");
             let three_way = ThreeWayEquity::load(THREE_WAY_CACHE).map_err(|e| {
-                format!(
-                    "could not read {THREE_WAY_CACHE}: {e}
-                       Build it first with `poker equity3`."
-                )
+                format!("could not read {THREE_WAY_CACHE}: {e}
+  Build it with `poker equity3`.")
             })?;
-            eprint!("ready, solving... ");
-            let ring = Ring::new(3, stack, Ladder::default(), equity, three_way);
+            let mut showdown = Showdown::new(equity, three_way);
+            for players in 4..=seats {
+                let path = format!("data/equity{players}.bin");
+                let table = WideEquity::load(&path).map_err(|e| {
+                    format!(
+                        "could not read {path}: {e}
+                           Build it with `poker equity --players {players}`."
+                    )
+                })?;
+                showdown = showdown.with(table);
+            }
+            eprint!("reaching {}-way, solving... ", showdown.reach());
+            let ring = Ring::new(seats, stack, Ladder::default(), showdown);
             let mut solver = Solver::new(ring);
             solver.train_sampled(iterations, &mut rng);
             Blueprint::from_solver(&solver, label)
@@ -393,7 +421,7 @@ fn chart(args: &[String]) -> Result<(), String> {
             (Kind::PushFold, _) => "sb".to_string(),
             (Kind::Preflop, "bb") => "bb-vs-open".to_string(),
             (Kind::Preflop, _) => "sb-open".to_string(),
-            (Kind::Ring3, _) => {
+            (Kind::Ring(_), _) => {
                 return Err(
                     "ring3 blueprints have no named stages to chart; try `poker info`"
                         .to_string(),
@@ -985,7 +1013,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         .map_err(|_| "--stop-loss wants a number of big blinds")?;
     let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
-    let ring_path = flags.text("ring", "data/ring3-100bb.bin");
+    let ring_dir = flags.text("ring", "data");
     let keep_unread = flags.text("keep-unread", "");
 
     let acting = match act.as_str() {
@@ -1038,23 +1066,47 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
 
-    // Three-handed pots get their own solve when one is available. Without it
-    // they fall through to the heuristic, which is a real loss of strength but
-    // not a reason to refuse to play.
-    match (open(&ring_path), ThreeWayEquity::load(THREE_WAY_CACHE)) {
-        (Ok(solved), Ok(three_way)) => {
-            let equity = EquityTable::load_or_build(
-                EQUITY_CACHE,
-                EQUITY_SAMPLES,
-                EQUITY_SEED,
-                std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
-            )
-            .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
-            let ring = Ring::new(3, 100.0, Ladder::default(), equity, three_way);
+    // Every multiway solve that has been built gets loaded, and pots of a size
+    // with no solve fall through to the heuristic. That is a real loss of
+    // strength at that size, but not a reason to refuse to play the rest.
+    let mut solved_sizes = Vec::new();
+    if let Ok(three_way) = ThreeWayEquity::load(THREE_WAY_CACHE) {
+        let pairwise = EquityTable::load_or_build(
+            EQUITY_CACHE,
+            EQUITY_SAMPLES,
+            EQUITY_SEED,
+            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
+        )
+        .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
+
+        // Built up one size at a time, because a game of n seats needs every
+        // table from two-way up to n-way, not just the widest.
+        let mut showdown = Showdown::new(pairwise, three_way);
+        for seats in 3..=poker_core::wide::MAX_PLAYERS {
+            if seats > 3 {
+                match WideEquity::load(format!("data/equity{seats}.bin")) {
+                    Ok(table) => showdown = showdown.with(table),
+                    Err(_) => break,
+                }
+            }
+            let path = format!("{ring_dir}/ring{seats}-100bb.bin");
+            let Ok(solved) = open(&path) else { continue };
+            let ring = Ring::new(seats, 100.0, Ladder::default(), showdown.clone());
             agent = agent.with_ring(solved, ring);
-            println!("3-handed : {ring_path}");
+            solved_sizes.push(seats);
         }
-        _ => println!("3-handed : none loaded - multiway pots use the heuristic"),
+    }
+    if solved_sizes.is_empty() {
+        println!("solved   : heads-up only - multiway pots use the heuristic");
+    } else {
+        println!(
+            "solved   : heads-up, and {} players",
+            solved_sizes
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join("/")
+        );
     }
     let mut rng = Rng::new(0x5EED_0BEE);
 
@@ -1136,6 +1188,82 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
     Err("playing a live window is only implemented on Windows".to_string())
 }
 
+
+
+/// Builds a showdown equity table for pots wider than three players.
+///
+/// Four players is the last size that can be tabulated hand-class by hand-class
+/// — 35 million entries, about an hour. Beyond that the entries grow as a
+/// rising factorial: five players would be 23 GB and two days, six would be
+/// 790 GB. So five and up group the classes by measured strength first, which
+/// is where `--buckets` comes in.
+fn equity_wide(args: &[String]) -> Result<(), String> {
+    use poker_core::wide::{entries, Buckets, WideEquity};
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["players", "buckets", "samples", "threads", "seed", "out"])?;
+    let players: usize = flags
+        .text("players", "4")
+        .parse()
+        .map_err(|_| "--players wants a number")?;
+    let buckets: usize = flags
+        .text("buckets", "0")
+        .parse()
+        .map_err(|_| "--buckets wants a number")?;
+    let samples: u32 = flags
+        .text("samples", "400")
+        .parse()
+        .map_err(|_| "--samples wants a number")?;
+    let threads: usize = flags
+        .text("threads", "8")
+        .parse()
+        .map_err(|_| "--threads wants a number")?;
+    let seed: u64 = flags
+        .text("seed", "24682468")
+        .parse()
+        .map_err(|_| "--seed wants a number")?;
+    let out = flags.text("out", &format!("data/equity{players}.bin"));
+
+    // Sensible groupings by size, from the arithmetic above: full precision
+    // while it is affordable, then as fine as each size allows.
+    let buckets = if buckets > 0 {
+        buckets
+    } else {
+        match players {
+            0..=4 => 169,
+            5 => 40,
+            6 => 30,
+            _ => 25,
+        }
+    };
+
+    eprint!("pairwise equity... ");
+    let pairwise = EquityTable::load_or_build(EQUITY_CACHE, EQUITY_SAMPLES, EQUITY_SEED, threads)
+        .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
+    eprintln!("ready");
+
+    let grouping = if buckets >= 169 {
+        Buckets::none()
+    } else {
+        Buckets::by_strength(&pairwise, buckets)
+    };
+    let count = entries(players, grouping.count());
+    println!("{players}-way pots over {} groups", grouping.count());
+    println!("  entries : {count}");
+    println!("  memory  : {:.0} MB", (count * players * 4) as f64 / 1_048_576.0);
+    println!("  samples : {samples} runouts each");
+    println!("  seed    : {seed}  (identical whatever the core count)");
+
+    let began = std::time::Instant::now();
+    let table = WideEquity::sampled_parallel(players, grouping, samples, seed, threads);
+    let took = began.elapsed();
+    table
+        .save(&out)
+        .map_err(|e| format!("could not write {out}: {e}"))?;
+    println!("
+built in {:.0}s, written to {out}", took.as_secs_f64());
+    Ok(())
+}
 
 /// Builds the three-way equity table.
 ///
