@@ -68,9 +68,11 @@ LABELS = {
     # labels on the felt. Same ink, its own size, its own templates: the
     # thirteen-pixel set matched every twelve-pixel glyph about equally
     # badly, so nothing won by a margin and every reading was refused.
-    # The second class is the text caret, not a character - which is itself
-    # worth knowing, since a caret means the field takes keyboard focus.
-    ("white", 12): "B_1274659",
+    # The second class is the text caret. It is labelled rather than skipped:
+    # left unlabelled it reads as an unreadable glyph, and one of those voids
+    # the whole run - so the field could never be read while it had focus,
+    # which is exactly when the bot needs to read it.
+    ("white", 12): "B|1274659803",
     ("white", 1):  ".",
 }
 MIN_SAMPLES = 3

@@ -170,26 +170,47 @@ pub fn read_action_panel(frame: &Frame) -> Option<ActionPanel> {
 /// keystrokes says nothing about what the field now holds, and committing a
 /// raise without looking is how a bot bets 23 into a pot it meant to bet 2 —
 /// so the caller writes, reads back, and only then presses the button.
+///
+/// # The field is not a readout
+///
+/// Everywhere else on this table, a figure is settled and carries its `BB`.
+/// This one is being edited, and behaves accordingly: a caret sits after the
+/// number, and the suffix is absent until the field loses focus. Both were
+/// found by typing into it and photographing the result — every value read as
+/// nothing, though every value had in fact arrived correctly.
+///
+/// So the general rules are relaxed here, and only here. The caret is dropped
+/// rather than treated as an unreadable character, and the suffix is optional
+/// rather than required.
 pub fn read_amount(
     frame: &Frame,
     panel: &ActionPanel,
     glyphs: &crate::GlyphTemplates,
 ) -> Option<f64> {
     let box_ = panel.amount_box?;
-    crate::read_number_in(
+    let read = crate::read_number_in(
         frame,
         glyphs,
         crate::TextThresholds::default(),
         crate::Ink::White,
-        (
-            box_.x,
-            box_.y,
-            box_.x + box_.width,
-            box_.y + box_.height,
-        ),
-    )?
-    .value
+        (box_.x, box_.y, box_.x + box_.width, box_.y + box_.height),
+    )?;
+
+    // An unreadable character still voids it: half an amount is worse here than
+    // no amount, because the caller is about to commit chips against it.
+    if read.text.contains('?') {
+        return None;
+    }
+    let digits = read.text.replace(CARET, "");
+    let digits = digits.strip_suffix("BB").unwrap_or(&digits);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+        return None;
+    }
+    digits.parse::<f64>().ok()
 }
+
+/// How the text caret is labelled in the glyph templates.
+const CARET: char = '|';
 
 /// How far the white label runs across a button.
 ///
@@ -253,19 +274,29 @@ mod tests {
         assert_eq!(read_amount(&frame, &panel, &glyphs), Some(9.5));
     }
 
-    /// A known gap, recorded rather than papered over.
+    /// The field can be read while it is being edited.
     ///
-    /// The amount box is drawn in its own twelve-pixel face, and the templates
-    /// for it were harvested from amounts the client happened to display —
-    /// which never included a nought, a three or an eight. An amount using one
-    /// of those reads as nothing rather than as something plausible, so the bot
-    /// declines to commit a raise it cannot verify.
-    ///
-    /// It closes the same way the hero's cards did: by collecting frames where
-    /// the reading fails. Typing an amount and photographing the result would
-    /// do it in one pass, since the bot chooses what to type.
+    /// This frame was captured by the bot immediately after typing into the
+    /// box, and it is the case that mattered: a caret sits after the number and
+    /// the `BB` suffix is gone until focus leaves. Before those were handled,
+    /// every typed value read as nothing — while every typed value had in fact
+    /// arrived correctly, which is the worst way for a check to fail, since it
+    /// looks like the write did not work.
     #[test]
-    fn an_amount_using_a_digit_with_no_template_is_refused() {
+    fn an_amount_being_typed_reads_despite_the_caret() {
+        let (w, h, bytes) = frame_bytes("raise-ui-typed.rgb");
+        let frame = Frame::new(w, h, &bytes);
+        let panel = read_action_panel(&frame).expect("the buttons are showing");
+        let glyphs = crate::GlyphTemplates::load(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../data/digit_templates.bin"),
+        )
+        .expect("glyph templates");
+        assert_eq!(read_amount(&frame, &panel, &glyphs), Some(16.4));
+    }
+
+    #[test]
+    fn a_settled_amount_reads_with_its_suffix() {
         let (w, h, bytes) = frame_bytes("raise-ui-unreadable.rgb");
         let frame = Frame::new(w, h, &bytes);
         let panel = read_action_panel(&frame).expect("the buttons are showing");
@@ -274,9 +305,9 @@ mod tests {
                 .join("../../data/digit_templates.bin"),
         )
         .expect("glyph templates");
-        // This frame's box reads 18.7BB, and there is no template for an eight.
-        // Reading it as 1.7 or 17 would both be plausible and both be wrong.
-        assert_eq!(read_amount(&frame, &panel, &glyphs), None);
+        // Reads 18.7BB. The eight arrived only once the bot typed one and
+        // photographed the result, since the client never displayed it.
+        assert_eq!(read_amount(&frame, &panel, &glyphs), Some(18.7));
     }
 
     #[test]

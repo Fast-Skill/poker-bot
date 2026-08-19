@@ -320,7 +320,7 @@ pub fn read_number_in(
     placed.sort_by_key(|p| p.bounds.x0);
 
     // One box holds one number, so the widest run is it.
-    group_runs(&placed, ink, thresholds)
+    group_runs(&placed, ink, thresholds, true)
         .into_iter()
         .max_by_key(|run| run.width)
 }
@@ -374,7 +374,7 @@ fn read_ink(
 
     // Left to right, so runs build in reading order.
     placed.sort_by_key(|p| p.bounds.x0);
-    group_runs(&placed, ink, thresholds)
+    group_runs(&placed, ink, thresholds, false)
 }
 
 /// Joins accepted glyphs into readouts.
@@ -382,7 +382,12 @@ fn read_ink(
 /// Characters of one readout share a baseline and sit close together, while two
 /// readouts are hundreds of pixels apart, so a gap test and a baseline test
 /// separate them with a wide safety margin.
-fn group_runs(placed: &[Placed], ink: Ink, thresholds: TextThresholds) -> Vec<NumberRead> {
+fn group_runs(
+    placed: &[Placed],
+    ink: Ink,
+    thresholds: TextThresholds,
+    named: bool,
+) -> Vec<NumberRead> {
     let mut runs: Vec<Vec<&Placed>> = Vec::new();
     for glyph in placed {
         let joined = runs.iter_mut().rev().find(|run| {
@@ -416,7 +421,12 @@ fn group_runs(placed: &[Placed], ink: Ink, thresholds: TextThresholds) -> Vec<Nu
             // with an unreadable character is kept and refused, because that
             // one might have been a readout, and losing it quietly is the
             // failure this whole module is built to avoid.
-            if complete && value.is_none() {
+            //
+            // Except when the caller named the place it was looking. Then
+            // "not an amount" is not a category: the raise field holds a number
+            // with no suffix while it is being edited, and dropping it would
+            // report an empty box where a perfectly legible one sits.
+            if !named && complete && value.is_none() {
                 return None;
             }
             let x0 = run.iter().map(|g| g.bounds.x0).min().expect("non-empty");
@@ -584,7 +594,11 @@ mod tests {
         for wanted in "0123456789.B".chars() {
             assert!(alphabet.contains(&wanted), "no template for {wanted:?}");
         }
-        assert_eq!(alphabet.len(), 12, "nothing beyond digits, a point and B");
+        // Thirteen, not twelve: the text caret in the raise field is a template
+        // too. Labelling it is what lets that field be read while it has focus,
+        // which is the only time the bot needs to read it.
+        assert_eq!(alphabet.len(), 13, "digits, a point, B, and the caret");
+        assert!(alphabet.contains(&'|'), "the caret is labelled");
     }
 
     #[test]
