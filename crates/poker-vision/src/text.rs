@@ -46,11 +46,25 @@ pub enum Ink {
     White,
 }
 
-/// The smallest character the client draws is the decimal point, at three to
-/// four lit pixels. Anything smaller is anti-aliasing speckle on the felt
-/// rather than a glyph, and admitting it would condemn every readout it
-/// happened to sit beside.
-const MIN_INK: usize = 3;
+/// The least ink a blob may carry and still be considered a character.
+///
+/// This was three, chosen when the smallest known character — the decimal point
+/// on the felt — carried four lit pixels. Then the raise amount box turned out
+/// to draw its point with **two**, and a floor of three deleted it: `9.5` read
+/// as `95`. A dropped digit is caught, because an unreadable character voids
+/// its whole run; a dropped *point* is not, since what remains still parses,
+/// and parses to ten times the truth.
+///
+/// Deriving the floor from the templates was the next attempt and was worse: a
+/// glyph the client has drawn faded — mid-animation, or on a ghosted seat —
+/// legitimately carries less ink than the template it matches, so that floor
+/// dropped real characters too.
+///
+/// So it sits at two, which no single stray pixel can reach. Speckle that gets
+/// through matches no template and therefore voids whatever run it lands in,
+/// which costs a reading. That is the right way round: a refusal is a reading
+/// not taken, while a dropped character is a number that is wrong.
+const MIN_INK: usize = 2;
 
 impl Ink {
     /// Whether a pixel belongs to this readout.
@@ -254,6 +268,61 @@ pub fn read_numbers(
     }
     reads.sort_by_key(|r| (r.y, r.x));
     reads
+}
+
+/// Reads a number inside one named rectangle.
+///
+/// [`read_numbers`] sweeps the whole frame and requires white glyphs to sit on
+/// green felt, which is what tells a bet from a player's name. That test is
+/// wrong for a box the client draws on black — the bet amount field — so this
+/// reads a place the caller already knows, and skips it.
+pub fn read_number_in(
+    frame: &Frame,
+    templates: &GlyphTemplates,
+    thresholds: TextThresholds,
+    ink: Ink,
+    at: (usize, usize, usize, usize),
+) -> Option<NumberRead> {
+    let (x0, y0, x1, y1) = at;
+    if x0 >= x1 || y0 >= y1 || x1 > frame.width || y1 > frame.height {
+        return None;
+    }
+
+    let (w, h) = (frame.width, frame.height);
+    let mut mask = vec![false; w * h];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            mask[y * w + x] = ink.matches(frame.pixel(x, y));
+        }
+    }
+
+    let sizes = templates.heights(ink);
+    let mut placed: Vec<Placed> = components(&mask, w, h)
+        .into_iter()
+        .filter(|b| {
+            sizes.iter().any(|size| size.abs_diff(b.height()) <= 1)
+                && b.width() <= 32
+                && ink_area(&mask, w, *b) >= MIN_INK
+        })
+        .map(|b| match best_glyph(&mask, w, h, b, ink, templates, thresholds) {
+            Some((label, distance)) => Placed {
+                bounds: b,
+                label: Some(label),
+                distance,
+            },
+            None => Placed {
+                bounds: b,
+                label: None,
+                distance: f32::INFINITY,
+            },
+        })
+        .collect();
+    placed.sort_by_key(|p| p.bounds.x0);
+
+    // One box holds one number, so the widest run is it.
+    group_runs(&placed, ink, thresholds)
+        .into_iter()
+        .max_by_key(|run| run.width)
 }
 
 fn read_ink(
@@ -531,7 +600,9 @@ mod tests {
         let tpl = templates();
         assert_eq!(tpl.heights(Ink::Cyan), vec![3, 4, 14, 17, 18, 22]);
         assert_eq!(tpl.heights(Ink::Gold), vec![3, 11, 15]);
-        assert_eq!(tpl.heights(Ink::White), vec![2, 13]);
+        // Two white sizes on the felt, and two a pixel smaller inside the
+        // raise amount box, which the client draws in its own face.
+        assert_eq!(tpl.heights(Ink::White), vec![1, 2, 12, 13]);
     }
 
     #[test]

@@ -55,12 +55,33 @@ struct MouseInput {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+struct KeyboardInput {
+    virtual_key: u16,
+    scan_code: u16,
+    flags: u32,
+    time: u32,
+    extra: usize,
+}
+
+/// The union `INPUT` carries, modelled as one rather than approximated.
+///
+/// An earlier version declared only the mouse member and reached the keyboard
+/// one by transmuting into it. The compiler rejected that once a keyboard
+/// member existed, for the good reason that the two are different sizes — and
+/// writing the smaller through the larger would have left the tail
+/// uninitialised. Declaring the union lets the compiler size and align it.
+#[repr(C)]
+#[derive(Clone, Copy)]
+union InputValue {
+    mouse: MouseInput,
+    keyboard: KeyboardInput,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 struct Input {
     kind: u32,
-    // The real INPUT is a union; the mouse variant is the largest member this
-    // crate uses, and padding to the union's alignment is handled by repr(C)
-    // placing the usize-aligned `extra` field last.
-    mouse: MouseInput,
+    value: InputValue,
 }
 
 #[repr(C)]
@@ -86,6 +107,14 @@ struct BitmapInfo {
 }
 
 const INPUT_MOUSE: u32 = 0;
+const INPUT_KEYBOARD: u32 = 1;
+/// Send the character itself rather than a key code, so the layout the user
+/// happens to have does not change what arrives.
+const KEYEVENTF_UNICODE: u32 = 0x0004;
+const KEYEVENTF_KEYUP: u32 = 0x0002;
+const VK_BACK: u16 = 0x08;
+const VK_CONTROL: u16 = 0x11;
+const VK_A: u16 = 0x41;
 const MOUSEEVENTF_LEFTDOWN: u32 = 0x0002;
 const MOUSEEVENTF_LEFTUP: u32 = 0x0004;
 const SWP_NOMOVE: u32 = 0x0002;
@@ -328,6 +357,34 @@ impl Window {
         }
     }
 
+    /// Replaces the contents of a focused text box with `text`.
+    ///
+    /// Used for the bet amount, where the client's preset buttons offer only a
+    /// few sizes and a solved strategy means a specific one. A blueprint that
+    /// decided to raise meant an amount, and clicking the nearest preset
+    /// instead plays a strategy nobody solved for.
+    ///
+    /// Characters are sent as Unicode rather than as key codes, so whatever
+    /// keyboard layout is installed cannot change what arrives — a scan code
+    /// for `2` is a different character on a French layout, a Unicode `2`
+    /// never is.
+    ///
+    /// Returns false if the system declined any event. As with clicking, that
+    /// is not the same as the client having accepted it: the caller must read
+    /// the box back and see what actually landed.
+    pub fn type_text(&self, text: &str) -> bool {
+        let events = text_events(text);
+        // SAFETY: `events` is a correctly sized array of correctly laid out
+        // structures, and the count matches its length.
+        unsafe {
+            SendInput(
+                events.len() as u32,
+                events.as_ptr(),
+                std::mem::size_of::<Input>() as i32,
+            ) == events.len() as u32
+        }
+    }
+
     /// Clicks a point given relative to the window's top-left corner.
     ///
     /// Returns false if the cursor could not be placed, which is a different
@@ -349,28 +406,8 @@ impl Window {
             }
 
             let events = [
-                Input {
-                    kind: INPUT_MOUSE,
-                    mouse: MouseInput {
-                        dx: 0,
-                        dy: 0,
-                        mouse_data: 0,
-                        flags: MOUSEEVENTF_LEFTDOWN,
-                        time: 0,
-                        extra: 0,
-                    },
-                },
-                Input {
-                    kind: INPUT_MOUSE,
-                    mouse: MouseInput {
-                        dx: 0,
-                        dy: 0,
-                        mouse_data: 0,
-                        flags: MOUSEEVENTF_LEFTUP,
-                        time: 0,
-                        extra: 0,
-                    },
-                },
+                mouse_event(MOUSEEVENTF_LEFTDOWN),
+                mouse_event(MOUSEEVENTF_LEFTUP),
             ];
             SendInput(
                 events.len() as u32,
@@ -378,6 +415,86 @@ impl Window {
                 std::mem::size_of::<Input>() as i32,
             ) == events.len() as u32
         }
+    }
+}
+
+/// The events that replace a text box's contents with `text`.
+///
+/// Built separately from sending them so the sequence can be checked without a
+/// window: a short or malformed sequence would put half an amount in the box,
+/// and `1` where `18.7` was meant is a bet rather than a typo.
+fn text_events(text: &str) -> Vec<Input> {
+    let mut events = Vec::with_capacity(text.len() * 2 + 6);
+    // Select whatever is there and delete it, so this replaces rather than
+    // appends. Appending to a box already reading "2" would bet 23.
+    events.extend(chord(VK_CONTROL, VK_A));
+    events.extend(stroke(VK_BACK));
+    for unit in text.encode_utf16() {
+        for release in [false, true] {
+            events.push(Input {
+                kind: INPUT_KEYBOARD,
+                value: InputValue {
+                    keyboard: KeyboardInput {
+                        virtual_key: 0,
+                        scan_code: unit,
+                        flags: KEYEVENTF_UNICODE | if release { KEYEVENTF_KEYUP } else { 0 },
+                        time: 0,
+                        extra: 0,
+                    },
+                },
+            });
+        }
+    }
+    events
+}
+
+/// One mouse event at the cursor's current position.
+fn mouse_event(flags: u32) -> Input {
+    Input {
+        kind: INPUT_MOUSE,
+        value: InputValue {
+            mouse: MouseInput {
+                dx: 0,
+                dy: 0,
+                mouse_data: 0,
+                flags,
+                time: 0,
+                extra: 0,
+            },
+        },
+    }
+}
+
+/// Press and release one key.
+fn stroke(key: u16) -> Vec<Input> {
+    [false, true]
+        .into_iter()
+        .map(|release| key_event(key, release))
+        .collect()
+}
+
+/// Hold one key, press another, release both.
+fn chord(modifier: u16, key: u16) -> Vec<Input> {
+    vec![
+        key_event(modifier, false),
+        key_event(key, false),
+        key_event(key, true),
+        key_event(modifier, true),
+    ]
+}
+
+fn key_event(key: u16, release: bool) -> Input {
+    Input {
+        kind: INPUT_KEYBOARD,
+        value: InputValue {
+            keyboard: KeyboardInput {
+                virtual_key: key,
+                scan_code: 0,
+                flags: if release { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                extra: 0,
+            },
+        },
     }
 }
 
@@ -494,6 +611,49 @@ mod tests {
             rgb: Vec::new(),
         };
         assert!(empty.is_blank());
+    }
+
+    /// The keyboard member has to fit the union the API expects.
+    ///
+    /// `SendInput` is told one size for every event, so a keyboard event has to
+    /// occupy the same `INPUT` as a mouse event. Getting this wrong does not
+    /// crash — the call reports fewer events accepted, or the wrong keys
+    /// arrive, both of which look like the application ignoring input.
+    #[test]
+    fn a_keyboard_event_fits_the_same_input_as_a_mouse_event() {
+        assert_eq!(std::mem::size_of::<KeyboardInput>(), 24);
+        assert_eq!(std::mem::size_of::<InputValue>(), 32, "the union is as wide as its widest member");
+        assert_eq!(std::mem::size_of::<Input>(), 40, "what SendInput is told");
+        assert_eq!(
+            std::mem::align_of::<InputValue>(),
+            std::mem::align_of::<MouseInput>()
+        );
+    }
+
+    #[test]
+    fn typing_an_amount_clears_the_box_before_writing_to_it() {
+        let events = text_events("18.7");
+        // Four to hold control and press A, two to delete, then a press and a
+        // release for each of the four characters.
+        assert_eq!(events.len(), 4 + 2 + 8);
+
+        // SAFETY: every event here was built as a keyboard event.
+        unsafe {
+            assert_eq!(events[0].value.keyboard.virtual_key, VK_CONTROL);
+            assert_eq!(events[1].value.keyboard.virtual_key, VK_A);
+            assert_eq!(events[4].value.keyboard.virtual_key, VK_BACK);
+            // The characters go as Unicode, so no virtual key at all.
+            assert_eq!(events[6].value.keyboard.virtual_key, 0);
+            assert_eq!(events[6].value.keyboard.scan_code, u16::from(b'1'));
+            assert_eq!(events[6].value.keyboard.flags & KEYEVENTF_UNICODE, KEYEVENTF_UNICODE);
+        }
+        assert!(events.iter().all(|e| e.kind == INPUT_KEYBOARD));
+    }
+
+    #[test]
+    fn an_empty_amount_still_clears_the_box() {
+        // Otherwise a failed read could leave the previous bet sitting there.
+        assert_eq!(text_events("").len(), 6);
     }
 
     #[test]
