@@ -1211,6 +1211,13 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                     }
                 }
             }
+            // Sitting back in is a recovery, not a poker decision, so it is
+            // done whenever the bot is allowed to touch the table at all.
+            (_, Some(live::Held::SatOut)) if acting != Acting::Never => {
+                if session.recover_from_sit_out() {
+                    println!("  sat out - clicked back in");
+                }
+            }
             (_, Some(reason))
                 if matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) =>
             {
