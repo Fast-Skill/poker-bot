@@ -29,6 +29,9 @@ CAPTURES = r"C:\poker\captures"
 OUT_BIN = r"C:\poker\data\digit_templates.bin"
 MAGIC, VERSION = b"PKGT", 1
 UNREAD = os.path.join(CAPTURES, "unread")
+# Frames kept by `poker typetest`, where the bot chose what to type and so
+# could cover digits the client never happened to display on its own.
+TYPED = os.path.join(CAPTURES, "typetest")
 # Where the client draws the raise amount, at a 1430x1040 table.
 AMOUNT_BOX = (1184, 902, 1299, 935)
 # The one window size the templates are exact at. A frame captured at any
@@ -90,7 +93,9 @@ def raw_frames():
     """The frames the bot kept, which include raises in progress."""
     import struct
 
-    for path in sorted(glob.glob(os.path.join(UNREAD, "*.rgb"))):
+    sources = sorted(glob.glob(os.path.join(UNREAD, "*.rgb")))
+    sources += sorted(glob.glob(os.path.join(TYPED, "*.rgb")))
+    for path in sources:
         with open(path, "rb") as f:
             w, h = struct.unpack("<II", f.read(8))
             if (w, h) != TABLE:
