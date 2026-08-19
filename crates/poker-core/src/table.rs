@@ -61,6 +61,14 @@ pub struct View<'a> {
     pub stack: u64,
     /// Every seat's remaining stack, indexed by seat.
     pub stacks: &'a [u64],
+    /// Every seat's total commitment this hand, indexed by seat.
+    ///
+    /// An agent that consults a solved strategy needs this: which decision it
+    /// is facing depends on who has matched the current bet and who has not,
+    /// and one seat's own `to_call` cannot say that about the others.
+    pub committed: &'a [u64],
+    /// Which seats still hold cards, indexed by seat.
+    pub live: &'a [bool],
     /// The big blind, so sizes can be reasoned about in blinds.
     pub big_blind: u64,
     /// What is legal here. An agent returning anything else is a bug.
@@ -291,6 +299,8 @@ impl Table {
                 let legal = round.legal_actions();
                 let board = &full_board[..street.board_cards()];
                 let stacks: Vec<u64> = round.seats().iter().map(|s| s.stack).collect();
+                let committed = round.contributions();
+                let live: Vec<bool> = round.seats().iter().map(|s| !s.folded).collect();
                 let view = View {
                     hole: hole[seat],
                     board,
@@ -303,6 +313,8 @@ impl Table {
                     to_call: legal.call_cost.unwrap_or(0),
                     stack: stacks[seat],
                     stacks: &stacks,
+                    committed: &committed,
+                    live: &live,
                     big_blind: self.big_blind,
                     legal: &legal,
                 };
