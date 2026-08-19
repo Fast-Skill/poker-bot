@@ -740,6 +740,50 @@ fn cards_of(text: &str) -> Result<Vec<poker_core::card::Card>, String> {
     poker_core::card::parse_cards(text).map_err(|e| format!("bad cards {text:?}: {e}"))
 }
 
+
+/// Picks the poker table out of the client's windows.
+///
+/// The client shows a lobby and a table, and "the biggest one" is not a safe
+/// way to tell them apart: the lobby is tall and narrow, so once the table is
+/// opened at a modest size the lobby has the larger area and wins. It cost a
+/// run to learn that, with the resize landing on a 569x1040 lobby.
+///
+/// Shape is the reliable test. A poker table is always wider than it is tall
+/// and a lobby never is.
+#[cfg(windows)]
+fn pick_table(windows: &[poker_win::Window]) -> Result<poker_win::Window, String> {
+    let mut landscape: Vec<&poker_win::Window> = windows
+        .iter()
+        .filter(|w| {
+            let (width, height) = w.size();
+            width > height
+        })
+        .collect();
+    landscape.sort_by_key(|w| {
+        let (width, height) = w.size();
+        std::cmp::Reverse(width * height)
+    });
+
+    match landscape.first() {
+        Some(table) => Ok(**table),
+        None => {
+            let mut message = String::new();
+            message.push_str("no table window found. Every window the client has open is ");
+            message.push_str("taller than it is wide,
+which is the shape of the lobby rather ");
+            message.push_str("than a table. Open a table first.
+
+Windows seen:");
+            for window in windows {
+                let (w, h) = window.size();
+                message.push_str(&format!("
+  {w:5} x {h:<5}  {}", window.title()));
+            }
+            Err(message)
+        }
+    }
+}
+
 /// Watches a live table, reporting what it sees and what it would do.
 ///
 /// The only action it will actually take is folding, and only when asked with
@@ -777,15 +821,24 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     };
 
     let windows = Window::find_by_process(&process);
-    let table = *windows
-        .first()
-        .ok_or_else(|| format!("no visible window from a process matching {process:?}"))?;
+    if windows.is_empty() {
+        return Err(format!("no visible window from a process matching {process:?}"));
+    }
+    let table = pick_table(&windows)?;
+    println!("windows from {process:?}:");
+    for window in &windows {
+        let (w, h) = window.size();
+        let shape = if w > h { "table" } else { "lobby" };
+        println!("  {w:5} x {h:<5}  {shape:<6} {}", window.title());
+    }
+
     let (w, h) = table.size();
     if (w, h) != (TABLE_W, TABLE_H) {
         let (w, h) = table.resize(TABLE_W, TABLE_H);
         if (w, h) != (TABLE_W, TABLE_H) {
             return Err(format!(
-                "the table must be {TABLE_W}x{TABLE_H} for the templates to fit;                  the client settled at {w}x{h}"
+                "the table must be {TABLE_W}x{TABLE_H} for the templates to fit,                  but the client settled at {w}x{h}.
+                 If that is the whole screen, the display is too small for this                  layout; if it is a lobby, open a table first."
             ));
         }
     }
@@ -975,8 +1028,7 @@ fn see(args: &[String]) -> Result<(), String> {
         println!("  {w:5} x {h:<5}  {}", window.title());
     }
 
-    // The table is the largest; the lobby is the small portrait one.
-    let table = windows[0];
+    let table = pick_table(&windows)?;
     println!("
 reading: {}", table.title());
 
@@ -991,7 +1043,8 @@ reading: {}", table.title());
     let (w, h) = table.size();
     if (w, h) != (TABLE_W, TABLE_H) {
         println!(
-            "  warning: templates were measured at {TABLE_W}x{TABLE_H}; at {w}x{h} the              layout reflows and reading will fail. Re-run with --resize on."
+            "  warning: templates were measured at {TABLE_W}x{TABLE_H}; at {w}x{h} the \
+             layout reflows and reading will fail. Re-run with --resize on."
         );
     }
 
@@ -1000,7 +1053,8 @@ reading: {}", table.title());
 
     let capture = table.capture().ok_or("the window could not be captured")?;
     if capture.is_blank() {
-        return Err("the capture came back a single flat colour - the window was covered,                     or the client is blocking capture"
+        return Err("the capture came back a single flat colour - the window was covered, or \
+             the client is blocking capture"
             .to_string());
     }
     println!("captured {} x {}", capture.width, capture.height);
