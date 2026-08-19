@@ -25,9 +25,13 @@
 
 #![forbid(unsafe_code)]
 
+mod action;
+mod hero;
 mod text;
 mod view;
 
+pub use action::{read_action_panel, ActionButton, ActionPanel};
+pub use hero::{read_hole_cards, HeroTemplates, HeroThresholds};
 pub use text::{read_numbers, GlyphTemplates, Ink, NumberRead, TextThresholds};
 pub use view::{SeatView, TableView};
 
@@ -279,24 +283,6 @@ impl Default for Thresholds {
     }
 }
 
-impl Thresholds {
-    /// Slightly looser bounds for the hero's own two cards.
-    ///
-    /// They are drawn larger than board cards, at a tilt, and with a decorative
-    /// flame over one corner, so the same card scores a higher absolute
-    /// distance than it would on the board — measured at up to 26 against the
-    /// board's 25. None of that makes the card *ambiguous*, though, so the
-    /// margin over the runner-up is tightened in exchange, and that is the test
-    /// that actually decides which card it is.
-    pub fn hole_cards() -> Thresholds {
-        Thresholds {
-            max_distance: 30.0,
-            min_margin: 5.0,
-            search: 2,
-        }
-    }
-}
-
 /// One card position and what was read there.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CardRead {
@@ -519,189 +505,106 @@ fn detect_cards(frame: &Frame) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// Rows between the rank glyph and the suit pip below it.
+/// Finds the dealer button.
 ///
-/// Taken from the board-card geometry, where the two boxes share an x and sit
-/// this far apart. The hero's cards are drawn larger and at a slight tilt, but
-/// the gap between a card's own rank and pip is a property of the card face
-/// rather than of how it is placed, so it carries over.
-const RANK_TO_SUIT: usize = geometry::SUIT_TOP - geometry::RANK_TOP;
-
-/// Reads the two cards the client deals the hero.
+/// It is a gold disc with a dark `D`, and the only thing on the table shaped
+/// like one. Colour alone is not enough — chips, the straddle tag and the
+/// countdown flames are all gold too — but those are open shapes while the
+/// button is a solid disc, and how much of its own bounding box a shape fills
+/// separates them completely: the button measures 0.50 to 0.80 across the
+/// captures and nothing else reaches 0.36.
 ///
-/// These cannot be found the way board cards are. The hero's pair is drawn
-/// overlapping, so the bright card faces merge into one blob nearly twice the
-/// width of a card, and the blob's top edge is the avatar disc behind them
-/// rather than a card corner — there is no rectangle to measure offsets from.
-///
-/// So the anchor is the corner suit pip instead: one solid shape, sitting on a
-/// card face, at a known distance below its own rank. The rank and suit
-/// templates are the board ones unchanged, which measurement bears out — the
-/// hero's `10` matches the board `10` at a distance of 17 against a threshold
-/// of 25, beating the nearest rival label by 15.
-///
-/// `near` is the hero's seat, in frame coordinates; the search is confined to
-/// the area just above it.
-pub fn read_hole_cards(
-    frame: &Frame,
-    templates: &Templates,
-    thresholds: Thresholds,
-    near: (usize, usize),
-) -> Vec<CardRead> {
-    use geometry::*;
-
-    let mut reads: Vec<CardRead> = detect_pips(frame, near)
-        .into_iter()
-        .filter_map(|pip| {
-            // Centre the template boxes on the pip, then let the offset search
-            // take up the slack from the tilt.
-            let sx = (pip.x0 + pip.width() / 2).saturating_sub(SUIT_W / 2);
-            let sy = (pip.y0 + pip.height() / 2).saturating_sub(SUIT_H / 2);
-            let ry = sy.checked_sub(RANK_TO_SUIT)?;
-
-            let (rank, rank_distance, rank_margin) = best_match(
-                frame,
-                sx,
-                ry,
-                RANK_W,
-                RANK_H,
-                templates.ranks.iter().map(|(r, g)| (*r, g)),
-                RANK_SEARCH,
-            )?;
-            // Redness is judged on the pip's own pixels rather than on the box
-            // around it. The client draws a decorative flame over the corner of
-            // the hero's cards, and a box wide enough to hold a suit template
-            // catches enough of it to make a black spade read as red.
-            let red = ink_is_red(frame, pip);
-            let candidates = templates
-                .suits
-                .iter()
-                .filter(|(s, _)| matches!(s, Suit::Hearts | Suit::Diamonds) == red)
-                .map(|(s, g)| (*s, g));
-            let (suit, suit_distance, suit_margin) =
-                best_match(frame, sx, sy, SUIT_W, SUIT_H, candidates, SUIT_SEARCH)?;
-
-            let distance = rank_distance.max(suit_distance);
-            let margin = rank_margin.min(suit_margin);
-            // Anything that is not a card is expected here — a countdown badge
-            // is pip-shaped and pip-sized — so a candidate that fails is simply
-            // not one of the hero's cards, not a refusal to report.
-            (distance <= thresholds.max_distance && margin >= thresholds.min_margin).then(|| {
-                CardRead {
-                    x: pip.x0,
-                    y: pip.y0,
-                    card: Some(Card::new(rank, suit)),
-                    distance,
-                    margin,
-                }
-            })
-        })
-        .collect();
-
-    reads.sort_by_key(|r| r.x);
-    reads.dedup_by_key(|r| r.card);
-    reads.truncate(2);
-    reads
-}
-
-/// How far to hunt for the rank and the suit around a pip.
-///
-/// Much wider than the board search. A board card is found as a rectangle, so
-/// its glyphs are a known offset from a known corner; a hero card is found only
-/// by its pip, and the two cards are drawn at different tilts, so the same
-/// offset was measured nine pixels out on one of them.
-const RANK_SEARCH: i32 = 10;
-const SUIT_SEARCH: i32 = 6;
-
-/// Mean red-minus-blue over the ink of a shape, ignoring whatever is behind it.
-fn ink_is_red(frame: &Frame, bounds: Bounds) -> bool {
-    let mut sum = 0i64;
-    let mut count = 0i64;
-    for y in bounds.y0..=bounds.y1 {
-        for x in bounds.x0..=bounds.x1 {
-            let (r, g, b) = frame.pixel(x, y);
-            let luma = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
-            if luma < 110.0 {
-                sum += r as i64 - b as i64;
-                count += 1;
-            }
-        }
-    }
-    count > 0 && sum as f32 / count as f32 > 20.0
-}
-
-/// Finds corner suit pips on card faces near a point.
-fn detect_pips(frame: &Frame, near: (usize, usize)) -> Vec<Bounds> {
-    /// How far around the hero's seat the cards can be.
-    const REACH_X: usize = 150;
-    const ABOVE: usize = 240;
-    const CLEAR: usize = 70;
-    /// A corner pip is roughly square and about this size. The large decorative
-    /// pips in the middle of a card are wider, and the rank digits narrower.
-    const PIP: (usize, usize) = (22, 40);
+/// Returns `None` unless exactly one candidate is found. Two would mean the
+/// frame was caught mid-animation as the button slides to the next seat, and
+/// there is no safe way to pick between them.
+pub fn detect_dealer_button(frame: &Frame) -> Option<(usize, usize)> {
+    /// Measured at a 1430x1040 table.
+    const SIZE: (usize, usize) = (26, 48);
+    const MIN_FILL: f32 = 0.42;
 
     let (w, h) = (frame.width, frame.height);
-    let x0 = near.0.saturating_sub(REACH_X);
-    let x1 = (near.0 + REACH_X).min(w);
-    let y0 = near.1.saturating_sub(ABOVE);
-    let y1 = near.1.saturating_sub(CLEAR).min(h);
-    if x0 >= x1 || y0 >= y1 {
-        return Vec::new();
-    }
-
-    // Ink is anything dark enough to be printing. The threshold has to clear a
-    // red pip, which measures 71, while staying under the grey outline drawn
-    // around a card, which is above 120 — at 140 that outline joins the pip to
-    // the dark plate behind the cards and the pip stops being its own shape.
-    const INK: f32 = 110.0;
-    let mut mask = vec![false; w * h];
-    for y in y0..y1 {
-        for x in x0..x1 {
+    let mut gold = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
             let (r, g, b) = frame.pixel(x, y);
-            let luma = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
-            mask[y * w + x] = luma < INK;
+            let (r, g, b) = (r as i16, g as i16, b as i16);
+            gold[y * w + x] = r > 150 && g > 110 && b < 120 && r - b > 70 && g - b > 40;
         }
     }
 
-    components(&mask, w, h)
-        .into_iter()
-        .filter(|b| {
-            (PIP.0..=PIP.1).contains(&b.width())
-                && (PIP.0..=PIP.1).contains(&b.height())
-                && on_card_face(frame, *b)
-        })
-        .collect()
+    let mut found = None;
+    for bounds in components(&gold, w, h) {
+        if !(SIZE.0..=SIZE.1).contains(&bounds.width())
+            || !(SIZE.0..=SIZE.1).contains(&bounds.height())
+            || solidity(&gold, w, bounds) < MIN_FILL
+        {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some((
+            bounds.x0 + bounds.width() / 2,
+            bounds.y0 + bounds.height() / 2,
+        ));
+    }
+    found
 }
 
-/// Whether a shape is printed on a card rather than on the felt or a badge.
+/// What fraction of a shape's bounding box the shape encloses.
 ///
-/// The countdown timer badge is pip-sized and pip-shaped, so shape alone does
-/// not settle it. What does is the background: a card face is bright and very
-/// nearly colourless, while the badge sits on orange.
-fn on_card_face(frame: &Frame, bounds: Bounds) -> bool {
-    const PAD: usize = 8;
-    let x0 = bounds.x0.saturating_sub(PAD);
-    let y0 = bounds.y0.saturating_sub(PAD);
-    let x1 = (bounds.x1 + PAD).min(frame.width - 1);
-    let y1 = (bounds.y1 + PAD).min(frame.height - 1);
+/// Holes count as enclosed: the `D` printed on the button is a hole, and so is
+/// the gap left where the disc's shaded lower edge falls out of the colour mask.
+/// Anything reachable from the edge of the box is outside the shape.
+fn solidity(mask: &[bool], stride: usize, bounds: Bounds) -> f32 {
+    let (w, h) = (bounds.width(), bounds.height());
+    let mut outside = vec![false; w * h];
+    let mut stack = Vec::new();
 
-    let mut face = 0usize;
-    let mut total = 0usize;
-    for y in y0..=y1 {
-        for x in x0..=x1 {
-            let (r, g, b) = frame.pixel(x, y);
-            let lo = r.min(g).min(b);
-            let hi = r.max(g).max(b);
-            total += 1;
-            if lo > 110 && hi - lo < 60 {
-                face += 1;
+    for x in 0..w {
+        for y in [0, h - 1] {
+            if !mask[(bounds.y0 + y) * stride + bounds.x0 + x] && !outside[y * w + x] {
+                outside[y * w + x] = true;
+                stack.push((x, y));
             }
         }
     }
-    total > 0 && face * 100 / total > 40
+    for y in 0..h {
+        for x in [0, w - 1] {
+            if !mask[(bounds.y0 + y) * stride + bounds.x0 + x] && !outside[y * w + x] {
+                outside[y * w + x] = true;
+                stack.push((x, y));
+            }
+        }
+    }
+
+    while let Some((x, y)) = stack.pop() {
+        let mut visit = |nx: usize, ny: usize, stack: &mut Vec<(usize, usize)>| {
+            let i = ny * w + nx;
+            if !outside[i] && !mask[(bounds.y0 + ny) * stride + bounds.x0 + nx] {
+                outside[i] = true;
+                stack.push((nx, ny));
+            }
+        };
+        if x + 1 < w {
+            visit(x + 1, y, &mut stack);
+        }
+        if x > 0 {
+            visit(x - 1, y, &mut stack);
+        }
+        if y + 1 < h {
+            visit(x, y + 1, &mut stack);
+        }
+        if y > 0 {
+            visit(x, y - 1, &mut stack);
+        }
+    }
+
+    let enclosed = outside.iter().filter(|o| !**o).count();
+    enclosed as f32 / (w * h) as f32
 }
 
-fn parse_rank(label: &str) -> Option<Rank> {
+pub(crate) fn parse_rank(label: &str) -> Option<Rank> {
     // The client draws a ten as "10", two characters, where card notation
     // elsewhere uses a single "T".
     if label == "10" {

@@ -27,6 +27,9 @@ param(
   [int]$Count = 30,
   [double]$Interval = 3.0,
   [int]$MinSize = 150,
+  [switch]$Resize,
+  [int]$Width = 1430,
+  [int]$Height = 1040,
   [string]$OutDir = "c:\poker\captures"
 )
 
@@ -42,6 +45,7 @@ public class Win {
   [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int t, uint flags);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   public delegate bool EnumProc(IntPtr h, IntPtr l);
@@ -144,6 +148,25 @@ Write-Host "saving   : $OutDir`n"
 
 [void][Win]::SetForegroundWindow($target.Handle)
 Start-Sleep -Milliseconds 600
+
+# The card and glyph templates are pixel-exact at one window size. At any other
+# size the client reflows its layout rather than scaling it, so frames captured
+# at the wrong size cannot be read and cannot be used to build templates either.
+if ($Resize) {
+  $SWP_NOMOVE = 0x0002; $SWP_NOZORDER = 0x0004
+  [void][Win]::SetWindowPos($target.Handle, [IntPtr]::Zero, 0, 0, $Width, $Height,
+                            $SWP_NOMOVE -bor $SWP_NOZORDER)
+  Start-Sleep -Milliseconds 500
+  $check = New-Object Win+RECT
+  [void][Win]::GetWindowRect($target.Handle, [ref]$check)
+  $now = "$($check.Right - $check.Left) x $($check.Bottom - $check.Top)"
+  if ($now -eq "$Width x $Height") {
+    Write-Host "resized  : $now" -ForegroundColor Green
+  } else {
+    Write-Host "resized  : asked for $Width x $Height, got $now" -ForegroundColor Yellow
+    Write-Host "           Frames at any other size cannot be read." -ForegroundColor Yellow
+  }
+}
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $blank = 0

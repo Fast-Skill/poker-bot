@@ -12,6 +12,9 @@
 //! poker chart data/pushfold-10bb.bin --player sb
 //! ```
 
+#[cfg(windows)]
+mod live;
+
 use std::collections::HashMap;
 use std::process::ExitCode;
 
@@ -41,6 +44,7 @@ const TABLE_W: usize = 1430;
 const TABLE_H: usize = 1040;
 const TEMPLATES: &str = "data/card_templates.bin";
 const GLYPHS: &str = "data/digit_templates.bin";
+const HERO_CARDS: &str = "data/hero_cards.bin";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -53,6 +57,7 @@ fn main() -> ExitCode {
         Some("play") => play(&args[1..]),
         Some("demo") => demo(&args[1..]),
         Some("see") => see(&args[1..]),
+        Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             Ok(())
@@ -730,6 +735,122 @@ fn cards_of(text: &str) -> Result<Vec<poker_core::card::Card>, String> {
     poker_core::card::parse_cards(text).map_err(|e| format!("bad cards {text:?}: {e}"))
 }
 
+/// Watches a live table, reporting what it sees and what it would do.
+///
+/// The only action it will actually take is folding, and only when asked with
+/// `--act fold`. That is deliberate for a first outing: folding is the one
+/// choice that cannot lose more than what is already committed, so the loop can
+/// be proven end to end — see a turn, press a button, confirm the client took
+/// it — before a decision engine is allowed near the controls.
+#[cfg(windows)]
+fn live_cmd(args: &[String]) -> Result<(), String> {
+    use live::{Choice, Safety, Session};
+    use poker_win::Window;
+    use std::path::PathBuf;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch"])?;
+    let process = flags.text("process", "ClubGG");
+    let act = flags.text("act", "off");
+    let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
+    let stop_loss: f64 = flags
+        .text("stop-loss", "200")
+        .parse()
+        .map_err(|_| "--stop-loss wants a number of big blinds")?;
+    let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
+
+    let acting = match act.as_str() {
+        "off" => false,
+        "fold" => true,
+        other => {
+            return Err(format!(
+                "--act takes `off` to only watch, or `fold` to actually fold; got {other:?}"
+            ))
+        }
+    };
+
+    let windows = Window::find_by_process(&process);
+    let table = *windows
+        .first()
+        .ok_or_else(|| format!("no visible window from a process matching {process:?}"))?;
+    let (w, h) = table.size();
+    if (w, h) != (TABLE_W, TABLE_H) {
+        let (w, h) = table.resize(TABLE_W, TABLE_H);
+        if (w, h) != (TABLE_W, TABLE_H) {
+            return Err(format!(
+                "the table must be {TABLE_W}x{TABLE_H} for the templates to fit;                  the client settled at {w}x{h}"
+            ));
+        }
+    }
+
+    let (cards, glyphs, hero) = live::templates(
+        std::path::Path::new(TEMPLATES),
+        std::path::Path::new(GLYPHS),
+        std::path::Path::new(HERO_CARDS),
+    )?;
+    let safety = Safety {
+        kill_switch: kill_switch.clone(),
+        stop_loss_bb: stop_loss,
+        max_actions: 500,
+    };
+    let mut session = Session::new(table, cards, glyphs, hero, safety);
+
+    println!("watching : {}", session.window_title());
+    println!("acting   : {}", if acting { "yes - will fold when it is our turn" } else { "no - watching only" });
+    println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears
+", kill_switch.display());
+
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
+    let mut last = String::new();
+    while std::time::Instant::now() < until {
+        let (view, held) = session.assess();
+        let line = match (&view, &held) {
+            (Some(v), None) => format!(
+                "OUR TURN  hole {}  board {}  pot {:?}  to call {:?}",
+                v.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(""),
+                v.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "),
+                v.pot,
+                v.to_call()
+            ),
+            (Some(v), Some(reason)) => format!(
+                "waiting   {} seats, pot {:?} - {}",
+                v.occupied(),
+                v.pot,
+                reason.explain()
+            ),
+            (None, Some(reason)) => format!("waiting   {}", reason.explain()),
+            (None, None) => "waiting".to_string(),
+        };
+        if line != last {
+            println!("{line}");
+            last = line;
+        }
+
+        match (&view, &held, acting) {
+            (Some(v), None, true) => match session.act(v, Choice::Fold) {
+                Ok(took) => println!("  folded, and the client took it ({} ms)", took.as_millis()),
+                Err(why) => println!("  the fold did not take: {}", why.explain()),
+            },
+            (_, Some(reason), _) if matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) => {
+                println!("
+stopping: {}", reason.explain());
+                break;
+            }
+            _ => {}
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+
+    println!("
+{} action(s) taken.", session.actions_taken());
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn live_cmd(_args: &[String]) -> Result<(), String> {
+    Err("playing a live window is only implemented on Windows".to_string())
+}
+
 /// Looks at the live client and reports what the recogniser makes of it.
 ///
 /// This is the vision layer end to end: find the window, size it, capture raw
@@ -738,7 +859,9 @@ fn cards_of(text: &str) -> Result<Vec<poker_core::card::Card>, String> {
 /// before anything is allowed to act.
 #[cfg(windows)]
 fn see(args: &[String]) -> Result<(), String> {
-    use poker_vision::{Frame, GlyphTemplates, Ink, Templates, TextThresholds, Thresholds};
+    use poker_vision::{
+        Frame, GlyphTemplates, HeroTemplates, Ink, TableView, Templates, TextThresholds, Thresholds,
+    };
     use poker_win::Window;
 
     let flags = Flags::parse(args)?;
@@ -841,6 +964,91 @@ readouts found: {}
 {read} of {} readout(s) parsed.", numbers.len());
     if numbers.is_empty() {
         println!("No readouts at all usually means a dialog is covering the table.");
+    }
+
+    let hero_cards =
+        HeroTemplates::load(HERO_CARDS).map_err(|e| format!("could not load {HERO_CARDS}: {e}"))?;
+    let table = TableView::read(
+        &frame,
+        &templates,
+        &glyphs,
+        &hero_cards,
+        Thresholds::default(),
+        TextThresholds::default(),
+    );
+
+    println!("
+--- the table ---
+");
+    if table.seats.is_empty() {
+        println!("No seats could be read. A dialog covering the table does this,");
+        println!("and so does a frame caught while the client is re-laying it out.");
+        return Ok(());
+    }
+
+    let blinds = table.blinds();
+    println!("{:>4}  {:>10}  {:>8}  {:<6}", "seat", "stack", "bet", "role");
+    println!("{}", "-".repeat(48));
+    for (i, seat) in table.seats.iter().enumerate() {
+        let stack = seat.stack.map(|v| format!("{v}")).unwrap_or_else(|| "?".into());
+        let bet = seat.bet.map(|v| format!("{v}")).unwrap_or_else(|| "-".into());
+        let role = match (table.button, blinds) {
+            (Some(b), _) if b == i => "button",
+            (_, Some((small, _))) if small == i => "small",
+            (_, Some((_, big))) if big == i => "big",
+            _ => "",
+        };
+        let who = if seat.hero { "<- hero" } else { "" };
+        println!("{i:>4}  {stack:>10}  {bet:>8}  {role:<6}  {who}");
+    }
+
+    let show = |cards: &[poker_core::card::Card]| {
+        if cards.is_empty() {
+            "-".to_string()
+        } else {
+            cards.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+        }
+    };
+    println!("
+hole   : {}", show(&table.hole));
+    println!("board  : {}", show(&table.board));
+    println!("pot    : {}", table.pot.map(|v| format!("{v} BB")).unwrap_or_else(|| "?".into()));
+    if let Some(collected) = table.collected {
+        println!("middle : {collected} BB already gathered in");
+    }
+    println!("to call: {}", table.to_call().map(|v| format!("{v} BB")).unwrap_or_else(|| "?".into()));
+    println!(
+        "money  : {}",
+        if table.is_consistent() {
+            "balances"
+        } else {
+            "does NOT balance - do not act on this frame"
+        }
+    );
+    if table.refusals > 0 {
+        println!("{} reading(s) refused.", table.refusals);
+    }
+
+    match &table.action {
+        None => println!("turn   : no buttons showing - nothing to do"),
+        Some(panel) if panel.offers_plain_fold() => {
+            println!("turn   : YOURS - {} button(s)", panel.buttons.len());
+            for (name, button) in [
+                ("fold", panel.fold()),
+                ("check/call", panel.passive()),
+                ("bet/raise", panel.aggressive()),
+            ] {
+                if let Some(b) = button {
+                    let (x, y) = b.centre();
+                    println!("           {name:<11} click ({x}, {y})");
+                }
+            }
+        }
+        Some(panel) => {
+            println!("turn   : not yours - the buttons showing are the ones that arm");
+            println!("         an action in advance ({} of them). Clicking them would", panel.buttons.len());
+            println!("         decide the hand before it has been seen, so they are ignored.");
+        }
     }
     Ok(())
 }
