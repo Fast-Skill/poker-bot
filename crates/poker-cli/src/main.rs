@@ -846,7 +846,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -856,6 +856,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         .map_err(|_| "--stop-loss wants a number of big blinds")?;
     let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
+    let ring_path = flags.text("ring", "data/ring3-100bb.bin");
     let keep_unread = flags.text("keep-unread", "");
 
     let acting = match act.as_str() {
@@ -907,6 +908,25 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
+
+    // Three-handed pots get their own solve when one is available. Without it
+    // they fall through to the heuristic, which is a real loss of strength but
+    // not a reason to refuse to play.
+    match (open(&ring_path), ThreeWayEquity::load(THREE_WAY_CACHE)) {
+        (Ok(solved), Ok(three_way)) => {
+            let equity = EquityTable::load_or_build(
+                EQUITY_CACHE,
+                EQUITY_SAMPLES,
+                EQUITY_SEED,
+                std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
+            )
+            .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
+            let ring = Ring::new(3, 100.0, Ladder::default(), equity, three_way);
+            agent = agent.with_ring(solved, ring);
+            println!("3-handed : {ring_path}");
+        }
+        _ => println!("3-handed : none loaded - multiway pots use the heuristic"),
+    }
     let mut rng = Rng::new(0x5EED_0BEE);
 
     println!("watching : {}", session.window_title());
