@@ -100,6 +100,7 @@ USAGE
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
+                                   --explain on  shows the reasoning behind each decision
   poker typetest [options]         check the bot can set a raise amount (commits nothing)
                                    --keep-unread <dir> saves hands it cannot read
 
@@ -1004,7 +1005,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -1016,6 +1017,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
     let ring_dir = flags.text("ring", "data");
     let keep_unread = flags.text("keep-unread", "");
+    let explain = flags.text("explain", "off") == "on";
 
     #[derive(PartialEq)]
     enum Acting {
@@ -1077,6 +1079,13 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
+    if explain {
+        // The full reasoning behind each decision: what was seen, how confident
+        // the reading was, which spot was consulted and how often it plays each
+        // action. Worth reading before letting it play, since a decision that
+        // looks wrong is far easier to diagnose alongside what produced it.
+        agent = agent.watch(Box::new(ConsoleMonitor::new(bridge::CHIPS_PER_BB as u64)));
+    }
 
     // Every multiway solve that has been built gets loaded, and pots of a size
     // with no solve fall through to the heuristic. That is a real loss of
