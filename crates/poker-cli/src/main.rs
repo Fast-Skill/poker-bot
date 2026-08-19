@@ -1045,13 +1045,6 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         return Err(format!("no visible window from a process matching {process:?}"));
     }
     let table = pick_table(&windows)?;
-    println!("windows from {process:?}:");
-    for window in &windows {
-        let (w, h) = window.size();
-        let shape = if w > h { "table" } else { "lobby" };
-        println!("  {w:5} x {h:<5}  {shape:<6} {}", window.title());
-    }
-
     let (w, h) = table.size();
     if (w, h) != (TABLE_W, TABLE_H) {
         let (w, h) = table.resize(TABLE_W, TABLE_H);
@@ -1176,22 +1169,25 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                 };
                 pending = choice;
                 format!(
-                    "OUR TURN  {} on {}  {} of {} in the pot  to call {:?}  ->  {decided}",
+                    "OUR TURN  {} {}  {} of {} live  to call {}  ->  {decided}",
                     v.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(""),
                     if v.board.is_empty() {
-                        "a dry board".to_string()
+                        "preflop".to_string()
                     } else {
-                        v.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+                        format!(
+                            "on {}",
+                            v.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+                        )
                     },
                     v.active(),
                     v.occupied(),
-                    v.to_call()
+                    v.to_call().map(|v| format!("{v}")).unwrap_or_else(|| "?".into())
                 )
             }
             (Some(v), Some(reason)) => format!(
-                "waiting   {} seats, pot {:?} - {}",
+                "waiting   {} seats, pot {} - {}",
                 v.occupied(),
-                v.pot,
+                v.pot.map(|p| format!("{p}")).unwrap_or_else(|| "?".into()),
                 reason.explain()
             ),
             (None, Some(reason)) => format!("waiting   {}", reason.explain()),

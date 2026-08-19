@@ -46,13 +46,14 @@ pub struct BlueprintAgent {
     blueprint: Blueprint,
     sizing: Sizing,
     /// Solved multiway preflop strategies, each with the game whose information
-    /// keys it is stored against, indexed by how many players the pot has.
+    /// keys it is stored against, indexed by how many seats the game has.
     ///
-    /// A table seats up to seven but a pot is contested by however many have
-    /// not folded, and those are different problems: five-handed with two live
-    /// is a heads-up pot with dead money in it. So the choice is made by the
-    /// pot, and a size with no blueprint falls through rather than borrowing
-    /// one solved for a different number of opponents.
+    /// Indexed by seats rather than by how many are still in the pot, because
+    /// folding is something the tree already models: five-handed with two live
+    /// is a node inside the five-handed solve, and the difference between that
+    /// and a genuine heads-up game is the dead money the folded players left
+    /// behind. Choosing by the live count would discard the solve that prices
+    /// it properly.
     rings: Vec<Option<(Blueprint, Ring)>>,
     /// Covers postflop, and any preflop spot the blueprint does not hold.
     fallback: ChartBot,
@@ -68,8 +69,9 @@ pub struct BlueprintAgent {
 }
 
 /// What a solved lookup yields: the action, how often each action was played,
-/// and the information set consulted so a watcher can replay the decision.
-type Consulted = (Action, Vec<(String, f64)>, u64);
+/// the information set consulted so a watcher can replay the decision, and how
+/// many seats the game it came from has.
+type Consulted = (Action, Vec<(String, f64)>, u64, usize);
 
 impl BlueprintAgent {
     /// Wraps a blueprint solved with `sizing`.
@@ -121,16 +123,18 @@ impl BlueprintAgent {
     /// Every field the key needs is on the table — who is live, what each has
     /// pushed out, whose turn it is — so this needs no memory of how the
     /// betting arrived here. See [`Ring::key_from_table`].
-    fn ring_action(
-        &self,
-        view: &View,
-        rng: &mut Rng,
-    ) -> Option<Consulted> {
+    fn ring_action(&self, view: &View, rng: &mut Rng) -> Option<Consulted> {
         if view.street != Street::Preflop {
             return None;
         }
-        // Chosen by how many are still in the pot, not by how many are seated.
-        let (blueprint, ring) = self.rings.get(view.active)?.as_ref()?;
+        // Chosen by the size of the game, not by how many are still in the pot.
+        //
+        // The tree models folding, so a pot that has come down to two players
+        // at a seven-handed table is a node inside the seven-handed solve —
+        // and one that prices the folded blinds correctly. Selecting by the
+        // live count instead would look for a two-handed solve, and either find
+        // nothing or find one that assumes no dead money.
+        let (blueprint, ring) = self.rings.get(view.players)?.as_ref()?;
 
         let committed: Vec<f64> = view
             .committed
@@ -165,7 +169,9 @@ impl BlueprintAgent {
         // The solved size can fall outside what this table allows — a shorter
         // stack than the solve assumed, say. Falling through beats sending an
         // action the table will reject.
-        view.legal.permits(action).then_some((action, frequencies, key))
+        view.legal
+            .permits(action)
+            .then_some((action, frequencies, key, ring.seats()))
     }
 
     /// Attaches a watcher that receives every decision.
@@ -360,7 +366,7 @@ impl Agent for BlueprintAgent {
         // Three-handed preflop has its own solve, and it is consulted before
         // the heads-up one because the heads-up blueprint has nothing to say
         // about a three-way pot — it would fall through to the heuristic.
-        if let Some((action, frequencies, key)) = self.ring_action(view, rng) {
+        if let Some((action, frequencies, key, seats)) = self.ring_action(view, rng) {
             self.preflop_decisions += 1;
             if let Some(observer) = self.observer.as_mut() {
                 observer.on_decision(&DecisionRecord {
@@ -377,7 +383,11 @@ impl Agent for BlueprintAgent {
                     },
                     source: Source::Blueprint {
                         key,
-                        spot: "three-handed preflop".to_string(),
+                        // Named for the game it came from. This said
+                        // "three-handed" whatever the table was, which made a
+                        // live watch read as though one solve was answering
+                        // every size of game.
+                        spot: format!("{seats}-handed preflop"),
                     },
                     action,
                     frequencies,
@@ -589,6 +599,69 @@ mod tests {
         assert_eq!(bot.stage_for(&view), Some(preflop::Stage::SbVsJam));
     }
 
+    /// A pot that has folded down to two still uses the table's own solve.
+    ///
+    /// This was the bug the first live dry run exposed: the blueprint was
+    /// chosen by how many were left in the pot, so a heads-up pot at a
+    /// multiway table found no solve and fell through to the heuristic —
+    /// throwing away a tree that models exactly that node, dead blinds and all.
+    #[test]
+    fn a_pot_folded_down_to_two_still_uses_the_tables_own_solve() {
+        use crate::cfr::Solver;
+        use crate::pushfold::EquityTable;
+        use crate::ring::{Ladder, Ring};
+        use crate::threeway::ThreeWayEquity;
+
+        let ring = Ring::new(
+            3,
+            100.0,
+            Ladder::default(),
+            crate::wide::Showdown::new(
+                EquityTable::sampled_parallel(8, 0x51DE, 4),
+                ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+            ),
+        );
+        let mut rng = Rng::new(9);
+        let mut solver = Solver::new(ring.clone());
+        solver.train_sampled(40_000, &mut rng);
+        let mut bot =
+            agent(100.0).with_ring(Blueprint::from_solver(&solver, "ring3/100bb"), ring);
+
+        // Three seats, the button folded: two live, and the small blind acts.
+        let hole = crate::card::parse_cards("AsAd").expect("valid");
+        let legal = crate::betting::LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(50),
+            raise_to: Some((200, 10_000)),
+        };
+        let view = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Preflop,
+            position: Position::SmallBlind,
+            seat: 1,
+            players: 3,
+            active: 2,
+            pot: 150,
+            to_call: 50,
+            stack: 9_950,
+            stacks: &[10_000, 9_950, 9_900],
+            committed: &[0, 50, 100],
+            live: &[false, true, true],
+            big_blind: 100,
+            legal: &legal,
+        };
+        let (solved_before, _) = bot.coverage();
+        bot.act(&view, &mut rng);
+        let (solved_after, _) = bot.coverage();
+        assert_eq!(
+            solved_after,
+            solved_before + 1,
+            "a heads-up pot at a three-handed table is inside the three-handed solve"
+        );
+    }
+
     #[test]
     fn a_pot_size_with_no_solve_falls_through_rather_than_borrowing_one() {
         use crate::cfr::Solver;
@@ -612,7 +685,7 @@ mod tests {
 
         assert_eq!(bot.solved_sizes(), vec![3], "only three-handed is solved");
 
-        // A four-way pot has no strategy here. Reaching for the three-handed
+        // A four-seat game has no strategy here. Reaching for the three-handed
         // one would be answering a different question with confidence.
         let mut bot = bot;
         let hole = crate::card::parse_cards("AsAd").expect("valid");
@@ -645,7 +718,7 @@ mod tests {
         assert_eq!(total, 1);
         assert_eq!(
             solved_after, solved_before,
-            "a four-way pot must not be answered from a three-handed solve"
+            "a four-seat game must not be answered from a three-handed solve"
         );
     }
 
