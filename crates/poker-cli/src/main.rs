@@ -12,6 +12,7 @@
 //! poker chart data/pushfold-10bb.bin --player sb
 //! ```
 
+mod bridge;
 #[cfg(windows)]
 mod live;
 
@@ -88,6 +89,7 @@ USAGE
   poker play  <blueprint> [options] watch it play, hand by hand
   poker demo  [blueprint]          show the whole thing works, start to finish
   poker see   [options]            look at the live table and report what it reads
+  poker live  [options]            watch a live table and decide; --act fold to play
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -749,7 +751,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -758,6 +760,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         .parse()
         .map_err(|_| "--stop-loss wants a number of big blinds")?;
     let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
+    let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
 
     let acting = match act.as_str() {
         "off" => false,
@@ -794,6 +797,9 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         max_actions: 500,
     };
     let mut session = Session::new(table, cards, glyphs, hero, safety);
+    let blueprint = open(&blueprint_path)?;
+    let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
+    let mut rng = Rng::new(0x5EED_0BEE);
 
     println!("watching : {}", session.window_title());
     println!("acting   : {}", if acting { "yes - will fold when it is our turn" } else { "no - watching only" });
@@ -805,13 +811,29 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
         let line = match (&view, &held) {
-            (Some(v), None) => format!(
-                "OUR TURN  hole {}  board {}  pot {:?}  to call {:?}",
-                v.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(""),
-                v.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "),
-                v.pot,
-                v.to_call()
-            ),
+            (Some(v), None) => {
+                // The whole chain, on one line: what the screen says, what it
+                // means to the engine, and what the engine would do about it.
+                let decided = match bridge::translate(v) {
+                    Ok(decision) => {
+                        let chosen = agent.act(&decision.view(), &mut rng);
+                        format!("{chosen:?}")
+                    }
+                    Err(why) => format!("no decision - {}", why.explain()),
+                };
+                format!(
+                    "OUR TURN  {} on {}  {} of {} in the pot  to call {:?}  ->  {decided}",
+                    v.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(""),
+                    if v.board.is_empty() {
+                        "a dry board".to_string()
+                    } else {
+                        v.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+                    },
+                    v.active(),
+                    v.occupied(),
+                    v.to_call()
+                )
+            }
             (Some(v), Some(reason)) => format!(
                 "waiting   {} seats, pot {:?} - {}",
                 v.occupied(),

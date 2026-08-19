@@ -40,6 +40,13 @@ pub struct SeatView {
     pub bet: Option<f64>,
     /// Whether this is the seat the client is playing.
     pub hero: bool,
+    /// Whether this seat still holds cards.
+    ///
+    /// A seat that has folded, or that is sitting out a hand, shows its avatar
+    /// where a live seat shows the backs of two cards. Knowing this is what
+    /// turns "seven seats" into "three players still in the pot", which is a
+    /// different strategic problem entirely.
+    pub in_hand: bool,
 }
 
 /// Everything one frame says about the table.
@@ -75,6 +82,13 @@ pub struct TableView {
 /// gap of nearly threefold. It is expressed as a fraction rather than pixels so
 /// that a table drawn at another size needs no new number.
 const MIDDLE_RADIUS: f64 = 0.18;
+
+/// How pale a seat's card area must be before it counts as holding cards.
+///
+/// Card backs are light and almost colourless; an avatar is dark, saturated
+/// artwork. Measured across the fixtures the two sit at 0.53 and 0.06, so this
+/// threshold falls in the middle of a gap of nearly ninefold.
+const CARDS_PALE: f64 = 0.25;
 
 /// Cards within this fraction of the ring of the hero's seat are the hero's.
 ///
@@ -127,7 +141,7 @@ impl TableView {
         cards: &[CardRead],
         numbers: &[NumberRead],
         button: Option<(usize, usize)>,
-        frame_action: &Frame,
+        frame: &Frame,
     ) -> TableView {
         let refusals = cards.iter().filter(|c| !c.is_confident()).count()
             + numbers.iter().filter(|n| !n.is_confident()).count();
@@ -145,19 +159,24 @@ impl TableView {
                 board: Vec::new(),
                 hole: Vec::new(),
                 button: None,
-                action: crate::read_action_panel(frame_action),
+                action: crate::read_action_panel(frame),
                 refusals,
             };
         }
 
         let mut seats: Vec<SeatView> = stacks
             .iter()
-            .map(|n| SeatView {
-                x: n.x as f64 + n.width as f64 / 2.0,
-                y: n.y as f64 + n.height as f64 / 2.0,
-                stack: n.value,
-                bet: None,
-                hero: false,
+            .map(|n| {
+                let x = n.x as f64 + n.width as f64 / 2.0;
+                let y = n.y as f64 + n.height as f64 / 2.0;
+                SeatView {
+                    x,
+                    y,
+                    stack: n.value,
+                    bet: None,
+                    hero: false,
+                    in_hand: holds_cards(frame, x, y),
+                }
             })
             .collect();
 
@@ -243,7 +262,7 @@ impl TableView {
             board,
             hole,
             button,
-            action: crate::read_action_panel(frame_action),
+            action: crate::read_action_panel(frame),
             refusals,
         }
     }
@@ -342,6 +361,15 @@ impl TableView {
         self.seats.len()
     }
 
+    /// How many players are still in the hand, the hero included.
+    ///
+    /// This is the number that decides which strategy applies. Seven seats with
+    /// five folded is a heads-up pot, and playing it as a seven-handed one
+    /// would be wrong in almost every spot.
+    pub fn active(&self) -> usize {
+        self.seats.iter().filter(|s| s.in_hand).count()
+    }
+
     /// What the hero must put in to continue, in big blinds.
     ///
     /// `None` when the hero's own bet could not be read, since guessing it
@@ -371,6 +399,41 @@ impl TableView {
         // A tenth of a blind is below anything the client displays.
         (total - pot).abs() < 0.05
     }
+}
+
+/// Whether a seat is showing the backs of two cards rather than its avatar.
+///
+/// The card area sits directly above the name plate, at a fixed offset from the
+/// stack readout that holds for every seat around the table.
+fn holds_cards(frame: &Frame, x: f64, y: f64) -> bool {
+    /// Half the width of a seat's card area, and how far above the stack
+    /// readout it runs.
+    const HALF: f64 = 80.0;
+    const TOP: f64 = 170.0;
+    const BOTTOM: f64 = 55.0;
+
+    let x0 = (x - HALF).max(0.0) as usize;
+    let x1 = ((x + HALF) as usize).min(frame.width);
+    let y0 = (y - TOP).max(0.0) as usize;
+    let y1 = ((y - BOTTOM).max(0.0) as usize).min(frame.height);
+    if x0 >= x1 || y0 >= y1 {
+        return false;
+    }
+
+    let mut pale = 0usize;
+    let mut total = 0usize;
+    for py in y0..y1 {
+        for px in x0..x1 {
+            let (r, g, b) = frame.pixel(px, py);
+            let lo = r.min(g).min(b);
+            let hi = r.max(g).max(b);
+            total += 1;
+            if lo > 120 && hi - lo < 45 {
+                pale += 1;
+            }
+        }
+    }
+    total > 0 && pale as f64 / total as f64 > CARDS_PALE
 }
 
 fn pot_of(numbers: &[NumberRead]) -> Option<f64> {
@@ -647,6 +710,28 @@ mod tests {
         let view = view_of("20260818-103911-022.rgb");
         assert!(!view.is_consistent());
         assert!(!view.is_actionable());
+    }
+
+    /// Checked against the screenshot: on this flop only two players remain.
+    #[test]
+    fn folded_seats_are_told_from_seats_still_holding_cards() {
+        let view = view_of("20260818-103636-001.rgb");
+        assert_eq!(view.occupied(), 7, "seven seats are still sitting there");
+        assert_eq!(view.active(), 2, "but only two are in the hand");
+
+        // The hero is not one of them, and holds nothing.
+        let hero = view.hero().expect("seated");
+        assert!(!hero.in_hand);
+        assert!(view.hole.is_empty());
+    }
+
+    #[test]
+    fn a_seat_that_was_dealt_in_counts_as_active() {
+        // Preflop, with the blinds posted: six of the seven were dealt cards.
+        let view = view_of("20260818-104053-025.rgb");
+        assert_eq!(view.occupied(), 7);
+        assert_eq!(view.active(), 6);
+        assert!(view.hero().expect("seated").in_hand);
     }
 
     #[test]
