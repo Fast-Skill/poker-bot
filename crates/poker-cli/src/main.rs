@@ -98,7 +98,8 @@ USAGE
   poker equity3 [options]          build the three-way equity table a 3-handed solve needs
   poker equity  [options]          build a wide equity table (--players 4..7)
   poker see   [options]            look at the live table and report what it reads
-  poker live  [options]            watch a live table and decide; --act fold to play
+  poker live  [options]            watch a live table and decide
+                                   --act off|fold|play  (play risks real chips)
   poker typetest [options]         check the bot can set a raise amount (commits nothing)
                                    --keep-unread <dir> saves hands it cannot read
 
@@ -1016,12 +1017,23 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let ring_dir = flags.text("ring", "data");
     let keep_unread = flags.text("keep-unread", "");
 
+    #[derive(PartialEq)]
+    enum Acting {
+        /// Watch only.
+        Never,
+        /// Fold when it is our turn, whatever the engine decided. The safest
+        /// thing that still proves the loop end to end.
+        FoldOnly,
+        /// Carry out what the engine decided.
+        Play,
+    }
     let acting = match act.as_str() {
-        "off" => false,
-        "fold" => true,
+        "off" => Acting::Never,
+        "fold" => Acting::FoldOnly,
+        "play" => Acting::Play,
         other => {
             return Err(format!(
-                "--act takes `off` to only watch, or `fold` to actually fold; got {other:?}"
+                "--act takes `off` to watch, `fold` to always fold, or `play` to act on                  the strategy; got {other:?}"
             ))
         }
     };
@@ -1111,7 +1123,14 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let mut rng = Rng::new(0x5EED_0BEE);
 
     println!("watching : {}", session.window_title());
-    println!("acting   : {}", if acting { "yes - will fold when it is our turn" } else { "no - watching only" });
+    println!(
+        "acting   : {}",
+        match acting {
+            Acting::Never => "no - watching only",
+            Acting::FoldOnly => "folds when it is our turn, whatever the strategy says",
+            Acting::Play => "PLAYS - folds, calls and raises for real money",
+        }
+    );
     println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears", kill_switch.display());
     if !keep_unread.is_empty() {
         println!("keeping  : frames whose hole cards would not read, into {keep_unread}");
@@ -1120,19 +1139,33 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
 
     let until = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
     let mut last = String::new();
+    // What the engine decided on this frame, carried from the report to the act.
+    let mut pending: Option<Choice> = None;
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
         let line = match (&view, &held) {
             (Some(v), None) => {
                 // The whole chain, on one line: what the screen says, what it
                 // means to the engine, and what the engine would do about it.
-                let decided = match bridge::translate(v) {
+                let (decided, choice) = match bridge::translate(v) {
                     Ok(decision) => {
                         let chosen = agent.act(&decision.view(), &mut rng);
-                        format!("{chosen:?}")
+                        // The engine speaks in chips; the client in big blinds.
+                        let choice = match chosen {
+                            poker_core::betting::Action::Fold => Some(Choice::Fold),
+                            poker_core::betting::Action::Check
+                            | poker_core::betting::Action::Call => Some(Choice::Passive),
+                            poker_core::betting::Action::RaiseTo(to) => {
+                                Some(Choice::Aggressive {
+                                    to_blinds: to as f64 / bridge::CHIPS_PER_BB,
+                                })
+                            }
+                        };
+                        (format!("{chosen:?}"), choice)
                     }
-                    Err(why) => format!("no decision - {}", why.explain()),
+                    Err(why) => (format!("no decision - {}", why.explain()), None),
                 };
+                pending = choice;
                 format!(
                     "OUR TURN  {} on {}  {} of {} in the pot  to call {:?}  ->  {decided}",
                     v.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(""),
@@ -1160,12 +1193,27 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             last = line;
         }
 
-        match (&view, &held, acting) {
-            (Some(v), None, true) => match session.act(v, Choice::Fold) {
-                Ok(took) => println!("  folded, and the client took it ({} ms)", took.as_millis()),
-                Err(why) => println!("  the fold did not take: {}", why.explain()),
-            },
-            (_, Some(reason), _) if matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) => {
+        match (&view, &held) {
+            (Some(v), None) => {
+                let choice = match acting {
+                    Acting::Never => None,
+                    Acting::FoldOnly => Some(Choice::Fold),
+                    Acting::Play => pending,
+                };
+                if let Some(choice) = choice {
+                    match session.act(v, choice) {
+                        Ok(took) => println!(
+                            "  {} - and the client took it ({} ms)",
+                            choice.name(),
+                            took.as_millis()
+                        ),
+                        Err(why) => println!("  {} did not take: {}", choice.name(), why.explain()),
+                    }
+                }
+            }
+            (_, Some(reason))
+                if matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) =>
+            {
                 println!("
 stopping: {}", reason.explain());
                 break;
