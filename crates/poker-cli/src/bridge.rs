@@ -206,10 +206,16 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         street,
         position,
         seat,
-        // A seat that folded is indistinguishable from one never dealt in, so
-        // this is the number still holding cards rather than the number dealt.
-        // The two agree preflop, which is where the count matters most.
-        players: table.active(),
+        // Two different numbers, and using one for both was a real mistake.
+        //
+        // `players` is the size of the game — how many seats are in it — and it
+        // chooses which solved tree applies. `active` is how many are still in
+        // the pot, which the tree models internally as folds. A heads-up pot at
+        // a seven-handed table is a node *inside* the seven-handed solve, with
+        // the folded players' blinds correctly dead in the middle; treating it
+        // as a two-handed game throws that solve away and reaches for a
+        // heads-up one that prices a different pot.
+        players: seated,
         active: table.active(),
         pot: chips(pot),
         to_call,

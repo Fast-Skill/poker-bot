@@ -31,6 +31,13 @@ use crate::wide::Showdown;
 /// The most seats the state machine carries. Showdowns are limited separately.
 pub const MAX_SEATS: usize = 7;
 
+/// How far apart two amounts are as a ratio, so that 5 against 9 counts as
+/// closer than 5 against 2.5 — which by simple difference it would not.
+fn ratio_gap(a: u32, b: u32) -> f64 {
+    let (a, b) = (a.max(1) as f64, b.max(1) as f64);
+    (a / b).max(b / a)
+}
+
 /// Chips are hundredths of a big blind: exact for any realistic sizing, and
 /// free of the float-equality hazards that comparing states would otherwise
 /// bring.
@@ -381,16 +388,46 @@ impl Ring {
     }
 
     /// Which rung of the ladder an amount corresponds to.
+    ///
+    /// # Real tables do not raise in the sizes a solve was built from
+    ///
+    /// This used to demand an exact match, and the consequence was severe and
+    /// invisible: a live run showed the solve being consulted only in unopened
+    /// pots. Every raise the opponents actually made — to 2, to 3, to 4, to 4.5
+    /// — matched no rung, so the lookup declined and a heuristic played the
+    /// hand. The strategy was correct, complete, and almost never used.
+    ///
+    /// So an amount is now mapped to the rung nearest it. That has a cost worth
+    /// stating: facing 4 blinds while consulting the strategy for 2.5 means
+    /// playing slightly too loosely, because the price of continuing is higher
+    /// than the strategy believes. It is a far smaller error than abandoning
+    /// the solve entirely, which is what exactness bought.
+    ///
+    /// The mapping is by ratio rather than by difference. Sizes grow
+    /// multiplicatively — 1, 2.5, 9, 22 — so 5 sits nearer 9 than 2.5 by
+    /// difference, while being much the same distance from either as a price.
     fn level_of(&self, owed: u32) -> Option<u8> {
+        if owed == 0 {
+            return None;
+        }
         if owed >= self.stack {
             return Some(Ladder::ALL_IN);
         }
-        if owed == to_chips(1.0) {
-            return Some(0);
+
+        // Every size this game can be in, with the level that describes it.
+        let mut rungs = vec![(to_chips(1.0), 0u8)];
+        for rung in 0..Ladder::DEPTH {
+            let target = to_chips(self.ladder.target(rung));
+            if target < self.stack {
+                rungs.push((target, rung + 1));
+            }
         }
-        (0..Ladder::DEPTH)
-            .find(|&rung| to_chips(self.ladder.target(rung)) == owed)
-            .map(|rung| rung + 1)
+        rungs.push((self.stack, Ladder::ALL_IN));
+
+        rungs
+            .iter()
+            .min_by(|a, b| ratio_gap(owed, a.0).total_cmp(&ratio_gap(owed, b.0)))
+            .map(|(_, level)| *level)
     }
 
     fn deal_from(&self, state: &State, classes: [u8; MAX_SEATS]) -> State {
