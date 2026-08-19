@@ -22,7 +22,10 @@
 //! substitute a plausible value, so anything unread stays unread and
 //! [`TableView::refusals`] counts what was thrown away.
 
-use crate::{CardRead, Frame, GlyphTemplates, Ink, NumberRead, Templates, TextThresholds, Thresholds};
+use crate::{
+    ActionPanel, CardRead, Frame, GlyphTemplates, HeroTemplates, HeroThresholds, Ink, NumberRead,
+    Templates, TextThresholds, Thresholds,
+};
 use poker_core::card::Card;
 
 /// One occupied seat, as a single frame shows it.
@@ -56,6 +59,10 @@ pub struct TableView {
     pub board: Vec<Card>,
     /// The hero's own two cards.
     pub hole: Vec<Card>,
+    /// Which seat holds the dealer button, as an index into `seats`.
+    pub button: Option<usize>,
+    /// The row of action buttons, when the client is showing one.
+    pub action: Option<ActionPanel>,
     /// Cards and readouts the readers would not vouch for.
     pub refusals: usize,
 }
@@ -87,19 +94,22 @@ impl TableView {
         frame: &Frame,
         cards: &Templates,
         glyphs: &GlyphTemplates,
+        hero_cards: &HeroTemplates,
         thresholds: Thresholds,
         text: TextThresholds,
     ) -> TableView {
         let found = crate::read_cards(frame, cards, thresholds);
         let numbers = crate::read_numbers(frame, glyphs, text);
-        let mut view = TableView::assemble(&found, &numbers);
+        let button = crate::detect_dealer_button(frame);
+        let mut view = TableView::assemble(&found, &numbers, button, frame);
 
         // Only when the sweep did not already turn them up, which it does when
         // the pair happens to be drawn far enough apart not to merge.
         if view.hole.is_empty() {
             if let Some(hero) = view.hero() {
                 let near = (hero.x as usize, hero.y as usize);
-                let hole = crate::read_hole_cards(frame, cards, Thresholds::hole_cards(), near);
+                let hole =
+                    crate::read_hole_cards(frame, hero_cards, HeroThresholds::default(), near);
                 // All or nothing. A hold'em hand is two cards, and one card
                 // plus a blank is not a worse hand to reason about — it is a
                 // different hand, and the solver has no way to tell that it was
@@ -113,7 +123,12 @@ impl TableView {
     }
 
     /// Builds a table from what the readers found.
-    pub fn assemble(cards: &[CardRead], numbers: &[NumberRead]) -> TableView {
+    pub fn assemble(
+        cards: &[CardRead],
+        numbers: &[NumberRead],
+        button: Option<(usize, usize)>,
+        frame_action: &Frame,
+    ) -> TableView {
         let refusals = cards.iter().filter(|c| !c.is_confident()).count()
             + numbers.iter().filter(|n| !n.is_confident()).count();
 
@@ -129,6 +144,8 @@ impl TableView {
                 collected: None,
                 board: Vec::new(),
                 hole: Vec::new(),
+                button: None,
+                action: crate::read_action_panel(frame_action),
                 refusals,
             };
         }
@@ -209,12 +226,24 @@ impl TableView {
         let first = seats.iter().position(|s| s.hero).expect("the hero is seated");
         seats.rotate_left(first);
 
+        // The button sits on the felt beside its seat, so the nearest seat owns
+        // it. Seats are far enough apart that this is never a close call.
+        let button = button.and_then(|(bx, by)| {
+            let (bx, by) = (bx as f64, by as f64);
+            (0..seats.len()).min_by(|&a, &b| {
+                distance(bx, by, seats[a].x, seats[a].y)
+                    .total_cmp(&distance(bx, by, seats[b].x, seats[b].y))
+            })
+        });
+
         TableView {
             seats,
             pot: pot_of(numbers),
             collected,
             board,
             hole,
+            button,
+            action: crate::read_action_panel(frame_action),
             refusals,
         }
     }
@@ -222,6 +251,90 @@ impl TableView {
     /// The seat the client is playing, if its stack could be read.
     pub fn hero(&self) -> Option<&SeatView> {
         self.seats.iter().find(|s| s.hero)
+    }
+
+    /// Whether the client is asking the hero to act right now.
+    ///
+    /// Gated on the panel offering a plain `Fold` rather than merely on buttons
+    /// being present, because the panel that arms an action in advance is drawn
+    /// in the very same place and would otherwise read as a turn.
+    pub fn hero_to_act(&self) -> bool {
+        self.action.as_ref().is_some_and(|p| p.offers_plain_fold())
+    }
+
+    /// Whether two readings of the table describe the same moment.
+    ///
+    /// The client animates: chips slide into the middle, the button slides to
+    /// the next seat, the table re-lays itself out when somebody joins. A
+    /// single frame caught during any of that is internally inconsistent in
+    /// ways no single-frame check can always catch — the mid-reflow capture in
+    /// the fixtures shows one seat's stack twice, in two places.
+    ///
+    /// Two captures a moment apart that agree were both taken while nothing was
+    /// moving. That is a far cheaper test than recognising each animation, and
+    /// it does not need to know which ones exist.
+    pub fn agrees_with(&self, other: &TableView) -> bool {
+        fn same(a: Option<f64>, b: Option<f64>) -> bool {
+            match (a, b) {
+                (Some(x), Some(y)) => (x - y).abs() < 0.001,
+                (None, None) => true,
+                _ => false,
+            }
+        }
+        self.seats.len() == other.seats.len()
+            && self.button == other.button
+            && self.board == other.board
+            && self.hole == other.hole
+            && same(self.pot, other.pot)
+            && same(self.collected, other.collected)
+            && self
+                .seats
+                .iter()
+                .zip(&other.seats)
+                .all(|(a, b)| a.hero == b.hero && same(a.stack, b.stack) && same(a.bet, b.bet))
+    }
+
+    /// Whether this reading is complete and trustworthy enough to act on.
+    ///
+    /// Every one of these has to hold, and each rules out a way the bot could
+    /// act confidently on something that is not true:
+    ///
+    /// - the client is asking the hero to act, on a live panel rather than the
+    ///   one that arms an action in advance;
+    /// - nothing was refused, so no figure on the table is a blank;
+    /// - the hero's own two cards were read, both of them;
+    /// - the money adds up, which a frame caught mid-animation will not do.
+    ///
+    /// Being wrong about any of these is worse than doing nothing, because
+    /// doing nothing costs at most one folded blind while acting on a misread
+    /// table can cost a stack.
+    pub fn is_actionable(&self) -> bool {
+        self.hero_to_act() && self.refusals == 0 && self.hole.len() == 2 && self.is_consistent()
+    }
+
+    /// Which seats posted the small and big blinds.
+    ///
+    /// `seats` runs clockwise on screen from the hero, and the action runs the
+    /// same way — confirmed against a frame where the button, the 0.5 and the 1
+    /// fall on three consecutive seats in exactly that order. Heads-up is the
+    /// standard exception: the button posts the small blind itself.
+    pub fn blinds(&self) -> Option<(usize, usize)> {
+        let button = self.button?;
+        let seated = self.seats.len();
+        match seated {
+            0 | 1 => None,
+            2 => Some((button, (button + 1) % seated)),
+            _ => Some(((button + 1) % seated, (button + 2) % seated)),
+        }
+    }
+
+    /// How many seats the hero is after the button, counting the button as
+    /// zero. The larger this is, the later the hero acts after the flop.
+    pub fn hero_seats_after_button(&self) -> Option<usize> {
+        let button = self.button?;
+        let seated = self.seats.len();
+        let hero = self.seats.iter().position(|s| s.hero)?;
+        Some((hero + seated - button) % seated)
     }
 
     /// How many seats are occupied.
@@ -312,10 +425,12 @@ mod tests {
 
         let cards = Templates::load(data("card_templates.bin")).expect("card templates");
         let glyphs = GlyphTemplates::load(data("digit_templates.bin")).expect("glyph templates");
+        let hero = HeroTemplates::load(data("hero_cards.bin")).expect("hero templates");
         TableView::read(
             &frame,
             &cards,
             &glyphs,
+            &hero,
             Thresholds::default(),
             TextThresholds::default(),
         )
@@ -418,32 +533,29 @@ mod tests {
         assert!(view.board.is_empty(), "preflop board: {:?}", view.board);
     }
 
-    /// A known limitation, recorded so it cannot be mistaken for working.
-    ///
-    /// The hero's cards are matched against the board-card templates, and those
-    /// are a poor fit: the hero's pair is drawn larger, so a red pip scores 37
-    /// to 43 where a sound match scores under 20, and on one frame an eight
-    /// scored nearer the six template than its own. The margin test catches
-    /// every one of those, so nothing wrong is ever returned — but the reading
-    /// comes back incomplete, and half a hand is withheld entirely rather than
-    /// passed on as if it were a hand.
-    ///
-    /// Closing this needs templates harvested at the hero's own card size, the
-    /// same way the board and digit templates were built. Until then these
-    /// frames are expected to yield nothing.
+    /// Every frame whose hero cards were checked against the screenshot by eye.
     #[test]
-    fn hole_cards_that_do_not_fully_read_are_withheld_rather_than_halved() {
-        for (name, on_screen) in [
-            ("20260818-104417-005.rgb", "9d 8h"),
-            ("20260818-104601-015.rgb", "9h 5h"),
+    fn the_hero_s_cards_are_read_on_every_verified_frame() {
+        for (name, expected) in [
+            ("20260818-104053-025.rgb", vec!["Ts", "5s"]),
+            ("20260818-104236-010.rgb", vec!["Ts", "5s"]),
+            ("20260818-104417-005.rgb", vec!["9d", "8h"]),
+            ("20260818-104601-015.rgb", vec!["9h", "5h"]),
         ] {
             let view = view_of(name);
-            assert!(
-                view.hole.is_empty(),
-                "{name}: the screen shows {on_screen}; a partial reading of                  {:?} must not be handed on as a hand",
-                view.hole
-            );
+            let hole: Vec<String> = view.hole.iter().map(|c| c.to_string()).collect();
+            assert_eq!(hole, expected, "{name}");
         }
+    }
+
+    #[test]
+    fn cards_the_hero_has_already_folded_are_not_reported_as_a_hand() {
+        // The client leaves a mucked hand on screen, greyed out. Reading it
+        // would have the bot reason about cards it no longer holds — and on
+        // this frame it would be reasoning about them four streets late.
+        let view = view_of("20260818-103911-011.rgb");
+        assert!(view.hole.is_empty(), "greyed-out cards: {:?}", view.hole);
+        assert_eq!(view.board.len(), 4, "the turn is out: {:?}", view.board);
     }
 
     #[test]
@@ -460,6 +572,81 @@ mod tests {
         let view = view_of("20260818-103636-001.rgb");
         let board: Vec<String> = view.board.iter().map(|c| c.to_string()).collect();
         assert_eq!(board, vec!["9c", "Jd", "Kd"], "the flop");
+    }
+
+    /// The blinds are what prove which way round the table the action runs.
+    ///
+    /// Seats are ordered clockwise on screen, but nothing about a screen says
+    /// whether poker runs that way or the other. The money does: the seat after
+    /// the button must hold the small blind and the one after that the big one.
+    /// Two frames, with the button in two different places, both agree.
+    #[test]
+    fn the_button_and_the_blinds_agree_with_the_money() {
+        for (name, button, small, big) in [
+            ("20260818-104053-025.rgb", 3, 4, 5),
+            ("20260818-104601-015.rgb", 6, 0, 1),
+        ] {
+            let view = view_of(name);
+            assert_eq!(view.button, Some(button), "{name}: button seat");
+            assert_eq!(view.blinds(), Some((small, big)), "{name}: blind seats");
+            assert_eq!(
+                view.seats[small].bet,
+                Some(0.5),
+                "{name}: seat {small} should hold the small blind"
+            );
+            assert_eq!(
+                view.seats[big].bet,
+                Some(1.0),
+                "{name}: seat {big} should hold the big blind"
+            );
+        }
+    }
+
+    #[test]
+    fn the_hero_s_distance_from_the_button_is_counted_the_way_position_is() {
+        // On this frame the hero is the small blind, one seat past the button.
+        let view = view_of("20260818-104601-015.rgb");
+        assert_eq!(view.hero_seats_after_button(), Some(1));
+        assert!(view.seats[0].hero);
+    }
+
+    #[test]
+    fn no_button_is_reported_when_the_table_cannot_be_read() {
+        let view = view_of("20260818-104742-014.rgb");
+        assert_eq!(view.button, None);
+        assert_eq!(view.blinds(), None);
+    }
+
+    #[test]
+    fn a_table_agrees_with_itself_and_not_with_a_different_moment() {
+        let still = view_of("20260818-104053-025.rgb");
+        assert!(still.agrees_with(&still));
+
+        // Same table, same seats, a later hand: the stacks have moved.
+        let later = view_of("20260818-104417-005.rgb");
+        assert!(!still.agrees_with(&later));
+    }
+
+    #[test]
+    fn nothing_is_actionable_unless_the_hero_is_being_asked_to_act() {
+        // Every fixture here is a readable table, and on none of them is the
+        // hero on a live panel, so none may be acted on.
+        for name in [
+            "20260818-104053-025.rgb",
+            "20260818-104236-010.rgb",
+            "20260818-104601-015.rgb",
+            "20260818-104742-014.rgb",
+        ] {
+            let view = view_of(name);
+            assert!(!view.is_actionable(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_frame_caught_mid_reflow_is_never_actionable() {
+        let view = view_of("20260818-103911-022.rgb");
+        assert!(!view.is_consistent());
+        assert!(!view.is_actionable());
     }
 
     #[test]
@@ -506,6 +693,8 @@ mod tests {
             }
             println!("   board={:?} hole={:?} pot={:?} collected={:?} consistent={}",
                      view.board, view.hole, view.pot, view.collected, view.is_consistent());
+            println!("   button={:?} blinds={:?} hero is {:?} seats after the button",
+                     view.button, view.blinds(), view.hero_seats_after_button());
             for seat in &view.seats {
                 println!("      seat ({:4.0},{:4.0}) stack={:?} bet={:?} hero={}",
                          seat.x, seat.y, seat.stack, seat.bet, seat.hero);

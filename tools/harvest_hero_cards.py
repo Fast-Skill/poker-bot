@@ -53,9 +53,16 @@ def hero_cards(path):
         ry0, ry1 = ys.start - 45, ys.start - 3
         rx0, rx1 = xs.start - 20, xs.start + 35
         zone = ink[ry0:ry1, rx0:rx1]
+        zone_face = face[ry0:ry1, rx0:rx1]
         marks, _ = ndimage.label(zone)
-        parts = [s for s in ndimage.find_objects(marks)
-                 if s[0].stop - s[0].start >= 25]
+        parts = []
+        for s in ndimage.find_objects(marks):
+            ph, pw = s[0].stop - s[0].start, s[1].stop - s[1].start
+            # A rank glyph is tall, narrow, and printed on the card. Ink that
+            # runs to the edge of the search zone left the card entirely.
+            if 25 <= ph <= 38 and 4 <= pw <= 30 and zone_face[s].size and                zone_face[max(0, s[0].start - 3):s[0].stop + 3,
+                         max(0, s[1].start - 3):s[1].stop + 3].mean() > 0.35:
+                parts.append(s)
         if not parts:
             continue
         # A ten is drawn as two glyphs; take them together as one rank.
@@ -63,6 +70,8 @@ def hero_cards(path):
         bottom = max(s[0].stop for s in parts)
         left = min(s[1].start for s in parts)
         right = max(s[1].stop for s in parts)
+        if bottom - top > 38 or right - left > 34:
+            continue
         rank = zone[top:bottom, left:right]
         found.append({
             "pip": (pip.shape, pip.copy(), bool(red)),
