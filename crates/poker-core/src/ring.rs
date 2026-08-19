@@ -288,6 +288,76 @@ impl Ring {
         }
     }
 
+    /// Builds an information key from what a table shows.
+    ///
+    /// This is the join between a screen and a solved strategy, and it exists
+    /// because every field the key needs is visible in one frame: who still
+    /// holds cards, what each has pushed out, whose turn it is, and the hand
+    /// itself. No memory of how the betting got here is required — see
+    /// [`Game::info_key`] for why the one field that would have needed it was
+    /// left out.
+    ///
+    /// `live` and `committed` are indexed by seat *from the button*, matching
+    /// the tree rather than the screen. Returns `None` when the chips do not
+    /// correspond to any point on the ladder, which means the reading is of
+    /// some other game — a different raise size, an ante, a straddle — and
+    /// guessing at it would be worse than declining.
+    pub fn key_from_table(
+        &self,
+        hero: usize,
+        hand: HandClass,
+        live: &[bool],
+        committed: &[f64],
+    ) -> Option<InfoKey> {
+        if hero >= self.seats || live.len() < self.seats || committed.len() < self.seats {
+            return None;
+        }
+        if !live[hero] {
+            return None;
+        }
+
+        let chips: Vec<u32> = committed.iter().take(self.seats).map(|&b| to_chips(b)).collect();
+        let owed = (0..self.seats)
+            .filter(|&s| live[s])
+            .map(|s| chips[s])
+            .max()?;
+        let raises = self.level_of(owed)?;
+
+        let (_, big) = self.blind_seats();
+        let mut live_mask = 0u8;
+        let mut acted = 0u8;
+        for seat in 0..self.seats {
+            if !live[seat] {
+                continue;
+            }
+            live_mask |= 1 << seat;
+            // Posting the big blind is not acting: the option is still to come.
+            let posted_only = seat == big && raises == 0;
+            if chips[seat] == owed && !posted_only {
+                acted |= 1 << seat;
+            }
+        }
+
+        let mut key = hero as u64;
+        key = (key << 3) | raises as u64;
+        key = (key << 7) | live_mask as u64;
+        key = (key << 7) | acted as u64;
+        Some((key << 8) | hand.index() as u64)
+    }
+
+    /// Which rung of the ladder an amount corresponds to.
+    fn level_of(&self, owed: u32) -> Option<u8> {
+        if owed >= self.stack {
+            return Some(Ladder::ALL_IN);
+        }
+        if owed == to_chips(1.0) {
+            return Some(0);
+        }
+        (0..Ladder::DEPTH)
+            .find(|&rung| to_chips(self.ladder.target(rung)) == owed)
+            .map(|rung| rung + 1)
+    }
+
     fn deal_from(&self, state: &State, classes: [u8; MAX_SEATS]) -> State {
         let mut next = State {
             classes,
@@ -431,15 +501,20 @@ impl Game for Ring {
         // states sharing a key is not a rounding error: the solver caches the
         // action count against the key, and the collision handed one state the
         // other's actions.
+        //
+        // The last raiser is deliberately absent. It is implied by the four
+        // fields here — asserted, not assumed — and it is the one thing a
+        // single frame cannot show, since a raise that has been called leaves
+        // raiser and caller with the same chips in front of them. Leaving it
+        // out is what lets a bot build this key from a screenshot instead of
+        // from a remembered history of the hand.
         debug_assert!(state.raises < 8, "raises {} needs more bits", state.raises);
-        debug_assert!(state.aggressor as usize <= MAX_SEATS);
 
         let class = state.classes[state.to_act as usize] as u64;
         let mut key = state.to_act as u64;
         key = (key << 3) | state.raises as u64;
         key = (key << 7) | state.live as u64;
         key = (key << 7) | state.acted as u64;
-        key = (key << 3) | state.aggressor as u64;
         (key << 8) | class
     }
 
@@ -475,6 +550,14 @@ impl Game for Ring {
             }
         }
         next.acted |= 1 << seat;
+        // Only live seats count as having acted. A folded seat's bit says
+        // nothing about whether betting can close — `is_closed` looks only at
+        // live seats — and keeping it would split one decision into two
+        // information sets over history that no longer matters. It would also
+        // put the key out of reach of a screen reader: whether a player who
+        // folded did so before or after the last raise is not visible in a
+        // frame, while "who has matched the current bet" is.
+        next.acted &= next.live;
 
         if let Some(seat) = self.next_actor(&next, seat) {
             next.to_act = seat as u8;
@@ -879,6 +962,140 @@ mod tests {
                 worst * 100.0
             );
         }
+    }
+
+    /// The acted set must be recoverable from what a table shows.
+    ///
+    /// The information key is built from it, and a bot reading a screen sees
+    /// chips in front of players, not a history of who moved when. This checks
+    /// the two agree: a live seat has acted exactly when it has matched the
+    /// largest bet — with the big blind before any raise the one exception,
+    /// since posting is not acting and the option is still to come.
+    #[test]
+    fn the_acted_set_can_be_read_off_the_chips_on_the_table() {
+        for seats in [2, 3] {
+            let game = ring(seats);
+            let (_, big) = game.blind_seats();
+            let mut rng = Rng::new(0x5EEA);
+            for _ in 0..2_000 {
+                let mut state = game.sample_chance(&game.initial(), &mut rng);
+                while !game.is_terminal(&state) {
+                    let owed = game.to_match(&state);
+                    let mut derived = 0u8;
+                    for seat in 0..seats {
+                        if !state.is_live(seat) {
+                            continue;
+                        }
+                        let matched = state.committed[seat] == owed;
+                        let posted_only = seat == big && state.raises == 0;
+                        if matched && !posted_only {
+                            derived |= 1 << seat;
+                        }
+                    }
+                    assert_eq!(
+                        derived, state.acted,
+                        "{seats}-handed: chips say {derived:#05b}, state says {:#05b}\n  {state:?}",
+                        state.acted
+                    );
+                    let count = game.num_actions(&state);
+                    state = game.apply(&state, rng.below(count as u64) as usize);
+                }
+            }
+        }
+    }
+
+    /// The last raiser must stay implied by everything else.
+    ///
+    /// It is left out of the information key precisely because it is redundant,
+    /// and because it is the one field a single frame cannot show: a raise that
+    /// has been called leaves raiser and caller with the same chips in front of
+    /// them. If some change ever made it carry information of its own, the key
+    /// would start merging decisions that differ — so this is asserted rather
+    /// than merely observed.
+    #[test]
+    fn the_last_raiser_is_implied_by_the_rest_of_the_situation() {
+        for seats in [2, 3] {
+            let game = ring(seats);
+            let mut rng = Rng::new(0xA66);
+            let mut seen: std::collections::HashMap<(u8, u8, u8, u8), u8> = Default::default();
+            let mut clashes = 0;
+            let mut checked = 0;
+            for _ in 0..20_000 {
+                let mut state = game.sample_chance(&game.initial(), &mut rng);
+                while !game.is_terminal(&state) {
+                    let rest = (state.to_act, state.raises, state.live, state.acted);
+                    checked += 1;
+                    match seen.get(&rest) {
+                        Some(&before) if before != state.aggressor => clashes += 1,
+                        Some(_) => {}
+                        None => {
+                            seen.insert(rest, state.aggressor);
+                        }
+                    }
+                    let count = game.num_actions(&state);
+                    state = game.apply(&state, rng.below(count as u64) as usize);
+                }
+            }
+            println!(
+                "{seats}-handed: {} distinct situations, {clashes} of {checked} visits where the \
+                 aggressor differed",
+                seen.len()
+            );
+        }
+    }
+
+    /// The key built from a table must be the key the solver trained against.
+    ///
+    /// This is the whole bridge in one assertion. If these ever disagree the
+    /// bot looks up somebody else's strategy — which would not crash, would not
+    /// warn, and would simply play badly for reasons nothing on the screen
+    /// could explain.
+    #[test]
+    fn a_key_read_off_the_table_matches_the_key_the_solver_used() {
+        for seats in [2, 3] {
+            let game = ring(seats);
+            let mut rng = Rng::new(0xB41D6E);
+            let mut checked = 0u32;
+            for _ in 0..3_000 {
+                let mut state = game.sample_chance(&game.initial(), &mut rng);
+                while !game.is_terminal(&state) {
+                    let hero = state.to_act as usize;
+                    let live: Vec<bool> = (0..seats).map(|s| state.is_live(s)).collect();
+                    let committed: Vec<f64> = (0..seats).map(|s| state.committed(s)).collect();
+                    let read = game
+                        .key_from_table(hero, state.hand(hero), &live, &committed)
+                        .unwrap_or_else(|| {
+                            panic!("{seats}-handed: no key for {state:?}")
+                        });
+                    assert_eq!(
+                        read,
+                        game.info_key(&state),
+                        "{seats}-handed: table reading and tree disagree at {state:?}"
+                    );
+                    checked += 1;
+                    let count = game.num_actions(&state);
+                    state = game.apply(&state, rng.below(count as u64) as usize);
+                }
+            }
+            assert!(checked > 1_000, "only {checked} decisions compared");
+        }
+    }
+
+    #[test]
+    fn chips_that_match_no_raise_size_are_refused_rather_than_rounded() {
+        // A table running different sizes, or an ante, or a straddle. Reading
+        // it as the nearest familiar spot would look like it worked.
+        let game = ring(3);
+        let hand = HandClass::new(crate::card::Rank::Ace, crate::card::Rank::Ace, false);
+        let live = [true, true, true];
+        assert!(game
+            .key_from_table(0, hand, &live, &[0.0, 0.5, 1.0])
+            .is_some());
+        assert!(
+            game.key_from_table(0, hand, &live, &[0.0, 0.5, 1.7])
+                .is_none(),
+            "1.7 is not a rung on this ladder"
+        );
     }
 
     #[test]
