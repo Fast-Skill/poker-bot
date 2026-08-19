@@ -36,6 +36,11 @@ const EQUITY_CACHE: &str = "data/preflop_equity.bin";
 const EQUITY_SAMPLES: u32 = 60_000;
 const EQUITY_SEED: u64 = 0x9E37_79B9;
 const SOLVE_SEED: u64 = 0xF01D;
+/// Card templates are pixel-exact and were measured at this window size.
+const TABLE_W: usize = 1430;
+const TABLE_H: usize = 1040;
+const TEMPLATES: &str = "data/card_templates.bin";
+const GLYPHS: &str = "data/digit_templates.bin";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +52,7 @@ fn main() -> ExitCode {
         Some("bench") => bench(&args[1..]),
         Some("play") => play(&args[1..]),
         Some("demo") => demo(&args[1..]),
+        Some("see") => see(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             Ok(())
@@ -76,6 +82,7 @@ USAGE
   poker bench <blueprint> [options] play it against baseline opponents
   poker play  <blueprint> [options] watch it play, hand by hand
   poker demo  [blueprint]          show the whole thing works, start to finish
+  poker see   [options]            look at the live table and report what it reads
 
 GAMES
   pushfold    heads-up jam-or-fold
@@ -105,6 +112,10 @@ PLAY OPTIONS
   --stack <bb>        stack depth for the table         [default 100]
   --seed <n>          fix the shuffle, to replay a run  [default 1]
   --monitor <on|off>  show what the bot sees and why    [default off]
+
+SEE OPTIONS
+  --process <name>    which app to look at                [default ClubGG]
+  --resize <on|off>   force the window to 1430x1040       [default off]
 
 STAGES
   pushfold   sb, bb
@@ -717,6 +728,126 @@ fn rule(title: &str) {
 
 fn cards_of(text: &str) -> Result<Vec<poker_core::card::Card>, String> {
     poker_core::card::parse_cards(text).map_err(|e| format!("bad cards {text:?}: {e}"))
+}
+
+/// Looks at the live client and reports what the recogniser makes of it.
+///
+/// This is the vision layer end to end: find the window, size it, capture raw
+/// pixels, read the cards. Everything it prints is what the bot itself would
+/// see, so a disagreement between this and the screen is a bug worth chasing
+/// before anything is allowed to act.
+#[cfg(windows)]
+fn see(args: &[String]) -> Result<(), String> {
+    use poker_vision::{Frame, GlyphTemplates, Ink, Templates, TextThresholds, Thresholds};
+    use poker_win::Window;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "resize"])?;
+    let process = flags.text("process", "ClubGG");
+    let resize = flags.text("resize", "off") == "on";
+
+    let windows = Window::find_by_process(&process);
+    if windows.is_empty() {
+        return Err(format!("no visible window from a process matching {process:?}"));
+    }
+    println!("windows from {process:?}, largest first:");
+    for window in &windows {
+        let (w, h) = window.size();
+        println!("  {w:5} x {h:<5}  {}", window.title());
+    }
+
+    // The table is the largest; the lobby is the small portrait one.
+    let table = windows[0];
+    println!("
+reading: {}", table.title());
+
+    if resize {
+        let (w, h) = table.resize(TABLE_W, TABLE_H);
+        println!("resized to {w} x {h}");
+        if (w, h) != (TABLE_W, TABLE_H) {
+            println!("  note: the client did not accept that size exactly");
+        }
+    }
+
+    let (w, h) = table.size();
+    if (w, h) != (TABLE_W, TABLE_H) {
+        println!(
+            "  warning: templates were measured at {TABLE_W}x{TABLE_H}; at {w}x{h} the              layout reflows and reading will fail. Re-run with --resize on."
+        );
+    }
+
+    table.focus();
+    std::thread::sleep(std::time::Duration::from_millis(400));
+
+    let capture = table.capture().ok_or("the window could not be captured")?;
+    if capture.is_blank() {
+        return Err("the capture came back a single flat colour - the window was covered,                     or the client is blocking capture"
+            .to_string());
+    }
+    println!("captured {} x {}", capture.width, capture.height);
+
+    let templates = Templates::load(TEMPLATES)
+        .map_err(|e| format!("could not load {TEMPLATES}: {e}"))?;
+    let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+    let reads = poker_vision::read_cards(&frame, &templates, Thresholds::default());
+
+    println!("
+cards found: {}
+", reads.len());
+    println!("{:>10}  {:>8}  {:>7}  {:>7}", "position", "card", "dist", "margin");
+    println!("{}", "-".repeat(38));
+    for read in &reads {
+        let shown = read.card.map(|c| c.to_string()).unwrap_or_else(|| "refused".into());
+        println!(
+            "{:>4},{:<5}  {shown:>8}  {:>7.1}  {:>7.1}",
+            read.x, read.y, read.distance, read.margin
+        );
+    }
+
+    let confident = reads.iter().filter(|r| r.is_confident()).count();
+    println!("
+{confident} of {} card(s) read confidently.", reads.len());
+    if confident < reads.len() {
+        println!("Refusals are cards something is drawn over - correct behaviour, not a failure.");
+    }
+
+    let glyphs =
+        GlyphTemplates::load(GLYPHS).map_err(|e| format!("could not load {GLYPHS}: {e}"))?;
+    let numbers = poker_vision::read_numbers(&frame, &glyphs, TextThresholds::default());
+
+    println!("
+readouts found: {}
+", numbers.len());
+    println!("{:>10}  {:>6}  {:>10}  {:>10}", "position", "kind", "text", "big blinds");
+    println!("{}", "-".repeat(44));
+    for number in &numbers {
+        let kind = match number.ink {
+            Ink::Gold => "pot",
+            Ink::Cyan => "stack",
+            Ink::White => "bet",
+        };
+        let shown = match number.value {
+            Some(value) => format!("{value}"),
+            None => "refused".to_string(),
+        };
+        println!(
+            "{:>4},{:<5}  {kind:>6}  {:>10}  {shown:>10}",
+            number.x, number.y, number.text
+        );
+    }
+
+    let read = numbers.iter().filter(|n| n.is_confident()).count();
+    println!("
+{read} of {} readout(s) parsed.", numbers.len());
+    if numbers.is_empty() {
+        println!("No readouts at all usually means a dialog is covering the table.");
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn see(_args: &[String]) -> Result<(), String> {
+    Err("looking at a live window is only implemented on Windows".to_string())
 }
 
 fn open(path: &str) -> Result<Blueprint, String> {

@@ -4,6 +4,7 @@ members = [
     "crates/poker-core",
     "crates/poker-cli",
     "crates/poker-vision",
+    "crates/poker-win",
 ]
 
 [workspace.package]
