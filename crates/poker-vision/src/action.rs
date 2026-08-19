@@ -107,6 +107,69 @@ impl ActionPanel {
     }
 }
 
+/// The dialog the client shows after sitting a player out for not acting.
+///
+/// It matters because it is silent and terminal: a bot that stalls once gets
+/// sat out, and a bot that is sat out reads a dimmed table forever after,
+/// declining every frame for perfectly good reasons while the hands go by.
+/// Left alone, the client eventually removes the player from the table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SitOut {
+    /// The button that sits back in.
+    pub resume: ActionButton,
+}
+
+/// Finds the sit-out dialog, if it is showing.
+///
+/// Recognised by its one green control. The felt is green too, but it is one
+/// enormous region rather than a button-sized rectangle, so size alone
+/// separates them — and the dialog's own dark panel means nothing else nearby
+/// is green at all.
+pub fn read_sit_out(frame: &Frame) -> Option<SitOut> {
+    /// Measured at a 1430x1040 table: 247 by 67.
+    const SIZE: ((usize, usize), (usize, usize)) = ((150, 400), (40, 110));
+    /// A button is a filled rectangle. Anything ragged is scenery.
+    const MIN_FILL: f32 = 0.80;
+
+    let (w, h) = (frame.width, frame.height);
+    let mut green = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            let (r, g, b) = (r as i16, g as i16, b as i16);
+            green[y * w + x] = g > 120 && g - r > 45 && g - b > 45;
+        }
+    }
+
+    let mut found = None;
+    for bounds in components(&green, w, h) {
+        let (bw, bh) = (bounds.width(), bounds.height());
+        if !(SIZE.0 .0..=SIZE.0 .1).contains(&bw) || !(SIZE.1 .0..=SIZE.1 .1).contains(&bh) {
+            continue;
+        }
+        let lit = (bounds.y0..=bounds.y1)
+            .map(|y| (bounds.x0..=bounds.x1).filter(|x| green[y * w + x]).count())
+            .sum::<usize>();
+        if lit as f32 / ((bw * bh) as f32) < MIN_FILL {
+            continue;
+        }
+        // Two green buttons would mean this is not the dialog being looked for.
+        if found.is_some() {
+            return None;
+        }
+        found = Some(SitOut {
+            resume: ActionButton {
+                x: bounds.x0,
+                y: bounds.y0,
+                width: bw,
+                height: bh,
+                label_width: 0,
+            },
+        });
+    }
+    found
+}
+
 /// Finds the action row.
 ///
 /// Returns `None` when the row is not showing, which is most of the time — the
@@ -317,6 +380,29 @@ mod tests {
         let panel = read_action_panel(&frame).expect("the buttons are showing");
         assert_eq!(panel.buttons.len(), 2);
         assert_eq!(panel.amount_box, None, "nothing to size");
+    }
+
+    #[test]
+    fn the_sit_out_dialog_is_found_and_offers_a_way_back() {
+        let (w, h, bytes) = frame_bytes("20260818-104742-014.rgb");
+        let frame = Frame::new(w, h, &bytes);
+        let dialog = read_sit_out(&frame).expect("this frame is the sit-out dialog");
+        assert_eq!(dialog.resume.centre(), (847, 730));
+    }
+
+    #[test]
+    fn an_ordinary_table_is_not_mistaken_for_the_dialog() {
+        // The felt is green across most of the screen. What separates it from a
+        // button is that it is one enormous region, not a button-sized one.
+        for name in [
+            "20260818-104053-025.rgb",
+            "20260818-103636-001.rgb",
+            "raise-ui.rgb",
+        ] {
+            let (w, h, bytes) = frame_bytes(name);
+            let frame = Frame::new(w, h, &bytes);
+            assert_eq!(read_sit_out(&frame), None, "{name}");
+        }
     }
 
     #[test]

@@ -71,6 +71,8 @@ pub enum Held {
     NotSettled,
     /// The client is not asking the hero to act.
     NotOurTurn,
+    /// The client has sat the hero out for not acting in time.
+    SatOut,
     /// The reading was incomplete — a refused figure, or unread cards.
     NotConfident,
     /// The button the choice needs is not on screen.
@@ -90,6 +92,9 @@ impl Held {
             Held::NoPicture => "the window could not be captured".into(),
             Held::NotSettled => "two readings disagreed, so the table was still moving".into(),
             Held::NotOurTurn => "the client is not asking us to act".into(),
+            Held::SatOut => {
+                "the client has sat us out; nothing will be dealt until we sit back in".into()
+            }
             Held::NotConfident => {
                 "the reading was incomplete - a figure was refused, or the hole cards \
                  did not both read"
@@ -265,6 +270,39 @@ impl Session {
     /// Returns the settled view whether or not it can be acted on, because a
     /// caller watching the bot work wants to see the table it is looking at
     /// even on the frames it declines.
+    /// Sits back in if the client has sat the hero out.
+    ///
+    /// Worth handling rather than reporting, because being sat out is silent
+    /// and self-sustaining: the table dims, every reading is then correctly
+    /// refused, and the bot waits politely while the client counts down to
+    /// removing it from the table. Returns whether the dialog was there.
+    pub fn recover_from_sit_out(&self) -> bool {
+        let Some(capture) = self.window.capture() else {
+            return false;
+        };
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        let Some(dialog) = poker_vision::read_sit_out(&frame) else {
+            return false;
+        };
+        let (x, y) = dialog.resume.centre();
+        self.window.focus();
+        std::thread::sleep(Duration::from_millis(150));
+        self.window.click_at(x, y);
+        std::thread::sleep(RESPOND);
+        true
+    }
+
+    /// Whether the client is showing the sit-out dialog.
+    pub fn is_sat_out(&self) -> bool {
+        self.window
+            .capture()
+            .map(|capture| {
+                let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+                poker_vision::read_sit_out(&frame).is_some()
+            })
+            .unwrap_or(false)
+    }
+
     pub fn assess(&mut self) -> (Option<TableView>, Option<Held>) {
         // One capture of the pair may be kept, so a frame the reader could not
         // name is not lost just because it was never the hero's turn.
@@ -276,7 +314,15 @@ impl Session {
 
         let view = match self.look_settled() {
             Ok(view) => view,
-            Err(held) => return (None, Some(held)),
+            // A table that will not settle may simply be covered by the sit-out
+            // dialog, which is worth naming rather than reporting as a failure
+            // to read.
+            Err(held) => {
+                if self.is_sat_out() {
+                    return (None, Some(Held::SatOut));
+                }
+                return (None, Some(held));
+            }
         };
 
         let stack = view.hero().and_then(|h| h.stack);
