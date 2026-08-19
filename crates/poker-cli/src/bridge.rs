@@ -80,6 +80,10 @@ pub struct Decision {
     pub to_call: u64,
     pub stack: u64,
     pub stacks: Vec<u64>,
+    /// Every seat's commitment this hand, indexed from the button.
+    pub committed: Vec<u64>,
+    /// Which seats still hold cards, indexed from the button.
+    pub live: Vec<bool>,
     pub legal: LegalActions,
 }
 
@@ -98,6 +102,8 @@ impl Decision {
             to_call: self.to_call,
             stack: self.stack,
             stacks: &self.stacks,
+            committed: &self.committed,
+            live: &self.live,
             big_blind: CHIPS_PER_BB as u64,
             legal: &self.legal,
         }
@@ -152,15 +158,20 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         _ => Position::Middle,
     };
 
-    // Rotated the same way, so `stacks[0]` is the button's.
+    // Rotated the same way, so index 0 is always the button's.
     let mut stacks = vec![0u64; seated];
+    let mut committed = vec![0u64; seated];
+    let mut live = vec![false; seated];
     for (i, s) in table.seats.iter().enumerate() {
-        stacks[(i + seated - button) % seated] = chips(s.stack.unwrap_or(0.0));
+        let rotated = (i + seated - button) % seated;
+        stacks[rotated] = chips(s.stack.unwrap_or(0.0));
+        committed[rotated] = chips(s.bet.unwrap_or(0.0));
+        live[rotated] = s.in_hand;
     }
 
     let stack = chips(stack);
     let to_call = chips(to_call).min(stack);
-    let committed = chips(hero.bet.unwrap_or(0.0));
+    let hero_committed = chips(hero.bet.unwrap_or(0.0));
 
     // What the client is offering, rather than what the rules would allow in
     // the abstract: the raise button being absent means there is nothing to
@@ -183,7 +194,7 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         // is the smallest that is always legal, and the maximum is everything
         // the hero has.
         raise_to: can_raise.then(|| {
-            let all_in = committed + stack;
+            let all_in = hero_committed + stack;
             let smallest = (chips(largest_bet) * 2).max(CHIPS_PER_BB as u64).min(all_in);
             (smallest, all_in)
         }),
@@ -204,6 +215,8 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         to_call,
         stack,
         stacks,
+        committed,
+        live,
         legal,
     })
 }

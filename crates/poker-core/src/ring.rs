@@ -345,6 +345,54 @@ impl Ring {
         Some((key << 8) | hand.index() as u64)
     }
 
+    /// The moves available to a seat, given what the table shows.
+    ///
+    /// The order matches the one the solver trained against, so a blueprint's
+    /// probabilities line up with these by index. Returns `None` when the chips
+    /// do not describe a spot in this game.
+    pub fn moves_at(&self, hero: usize, live: &[bool], committed: &[f64]) -> Option<Vec<Move>> {
+        let state = self.state_from_table(hero, live, committed)?;
+        Some(self.moves(&state))
+    }
+
+    /// What a raising move commits the raiser to, in big blinds.
+    pub fn raise_target(
+        &self,
+        chosen: Move,
+        hero: usize,
+        live: &[bool],
+        committed: &[f64],
+    ) -> Option<f64> {
+        let state = self.state_from_table(hero, live, committed)?;
+        match chosen {
+            Move::Jam => Some(to_blinds(self.stack)),
+            Move::Raise => Some(self.ladder.target(state.raises)),
+            _ => None,
+        }
+    }
+
+    /// Rebuilds enough of a state to ask what may be done in it.
+    ///
+    /// Only the fields the move list depends on are recovered; the hands are
+    /// not, since which moves exist does not depend on what anybody holds.
+    fn state_from_table(&self, hero: usize, live: &[bool], committed: &[f64]) -> Option<State> {
+        if hero >= self.seats || live.len() < self.seats || committed.len() < self.seats {
+            return None;
+        }
+        let mut state = self.initial();
+        state.dealt = true;
+        state.to_act = hero as u8;
+        state.live = 0;
+        for seat in 0..self.seats {
+            if live[seat] {
+                state.live |= 1 << seat;
+            }
+            state.committed[seat] = to_chips(committed[seat]);
+        }
+        state.raises = self.level_of(self.to_match(&state))?;
+        Some(state)
+    }
+
     /// Which rung of the ladder an amount corresponds to.
     fn level_of(&self, owed: u32) -> Option<u8> {
         if owed >= self.stack {

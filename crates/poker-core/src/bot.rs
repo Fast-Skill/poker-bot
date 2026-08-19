@@ -23,6 +23,7 @@ use crate::betting::{Action, Street};
 use crate::blueprint::Blueprint;
 use crate::abstraction::HandClass;
 use crate::preflop::{self, Preflop, Sizing};
+use crate::ring::{Move, Ring};
 use crate::rng::Rng;
 use crate::table::{Agent, Position, View};
 use crate::telemetry::{Confidence, DecisionRecord, Observer, Perception, Source};
@@ -44,6 +45,9 @@ pub struct BlueprintAgent {
     name: String,
     blueprint: Blueprint,
     sizing: Sizing,
+    /// A three-handed preflop blueprint, and the game whose keys it is stored
+    /// against. Absent unless one has been solved and attached.
+    ring: Option<(Blueprint, Ring)>,
     /// Covers postflop, and any preflop spot the blueprint does not hold.
     fallback: ChartBot,
     /// Preflop decisions taken so far this hand, used to tell an open from a
@@ -57,6 +61,10 @@ pub struct BlueprintAgent {
     observer: Option<Box<dyn Observer>>,
 }
 
+/// What a solved lookup yields: the action, how often each action was played,
+/// and the information set consulted so a watcher can replay the decision.
+type Consulted = (Action, Vec<(String, f64)>, u64);
+
 impl BlueprintAgent {
     /// Wraps a blueprint solved with `sizing`.
     ///
@@ -66,6 +74,7 @@ impl BlueprintAgent {
     pub fn new(name: impl Into<String>, blueprint: Blueprint, sizing: Sizing) -> BlueprintAgent {
         BlueprintAgent {
             name: name.into(),
+            ring: None,
             blueprint,
             sizing,
             fallback: ChartBot::default(),
@@ -75,6 +84,71 @@ impl BlueprintAgent {
             hand: 0,
             observer: None,
         }
+    }
+
+    /// Attaches a three-handed preflop strategy.
+    ///
+    /// Without one, pots with three players live fall through to the heuristic:
+    /// the heads-up blueprint has nothing to say about them, and playing a
+    /// two-player strategy three-handed is worse than not trying.
+    ///
+    /// The `ring` must be the game the blueprint was solved from — same seats,
+    /// same stack, same ladder — because the blueprint is keyed against that
+    /// game's information sets and a mismatch would look up the wrong ones.
+    pub fn with_ring(mut self, blueprint: Blueprint, ring: Ring) -> BlueprintAgent {
+        self.ring = Some((blueprint, ring));
+        self
+    }
+
+    /// Looks up a three-handed preflop decision, if one applies here.
+    ///
+    /// Every field the key needs is on the table — who is live, what each has
+    /// pushed out, whose turn it is — so this needs no memory of how the
+    /// betting arrived here. See [`Ring::key_from_table`].
+    fn ring_action(
+        &self,
+        view: &View,
+        rng: &mut Rng,
+    ) -> Option<Consulted> {
+        let (blueprint, ring) = self.ring.as_ref()?;
+        if view.street != Street::Preflop || view.active != ring.seats() {
+            return None;
+        }
+
+        let committed: Vec<f64> = view
+            .committed
+            .iter()
+            .map(|&chips| chips as f64 / view.big_blind as f64)
+            .collect();
+        let class = HandClass::from_cards(view.hole[0], view.hole[1]);
+        let key = ring.key_from_table(view.seat, class, view.live, &committed)?;
+        let moves = ring.moves_at(view.seat, view.live, &committed)?;
+        let strategy = blueprint.strategy(key)?;
+
+        let frequencies: Vec<(String, f64)> = moves
+            .iter()
+            .zip(strategy.iter())
+            .map(|(m, p)| (format!("{m:?}").to_lowercase(), *p as f64))
+            .collect();
+
+        // Sampled rather than taken at the mode, for the same reason as the
+        // heads-up path: a mixed strategy played greedily is a different, and
+        // more exploitable, strategy.
+        let index = blueprint.sample(key, rng)?;
+        let chosen = *moves.get(index)?;
+        let action = match chosen {
+            Move::Fold => Action::Fold,
+            Move::Passive if view.to_call == 0 => Action::Check,
+            Move::Passive => Action::Call,
+            Move::Raise | Move::Jam => {
+                let to = ring.raise_target(chosen, view.seat, view.live, &committed)?;
+                Action::RaiseTo((to * view.big_blind as f64).round() as u64)
+            }
+        };
+        // The solved size can fall outside what this table allows — a shorter
+        // stack than the solve assumed, say. Falling through beats sending an
+        // action the table will reject.
+        view.legal.permits(action).then_some((action, frequencies, key))
     }
 
     /// Attaches a watcher that receives every decision.
@@ -265,6 +339,35 @@ impl Agent for BlueprintAgent {
 
     fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
         self.decisions += 1;
+
+        // Three-handed preflop has its own solve, and it is consulted before
+        // the heads-up one because the heads-up blueprint has nothing to say
+        // about a three-way pot — it would fall through to the heuristic.
+        if let Some((action, frequencies, key)) = self.ring_action(view, rng) {
+            self.preflop_decisions += 1;
+            if let Some(observer) = self.observer.as_mut() {
+                observer.on_decision(&DecisionRecord {
+                    hand: self.hand,
+                    perception: Perception {
+                        hole: view.hole,
+                        board: view.board.to_vec(),
+                        street: view.street,
+                        position: view.position,
+                        pot: view.pot,
+                        to_call: view.to_call,
+                        stacks: view.stacks.to_vec(),
+                        confidence: Confidence::certain(),
+                    },
+                    source: Source::Blueprint {
+                        key,
+                        spot: "three-handed preflop".to_string(),
+                    },
+                    action,
+                    frequencies,
+                });
+            }
+            return action;
+        }
 
         // Resolve the spot first, so a watcher can be told which one it was
         // even when the lookup then fails.
@@ -461,10 +564,80 @@ mod tests {
             to_call: 500,
             stack: 1_000,
             stacks: &[1_000, 0],
+            committed: &[500, 1_000],
+            live: &[true, true],
             big_blind: 100,
             legal: &legal,
         };
         assert_eq!(bot.stage_for(&view), Some(preflop::Stage::SbVsJam));
+    }
+
+    /// A three-handed pot must reach the three-handed solve, not the heuristic.
+    #[test]
+    fn a_three_handed_preflop_pot_is_decided_by_the_ring_blueprint() {
+        use crate::cfr::Solver;
+        use crate::pushfold::EquityTable;
+        use crate::ring::{Ladder, Ring};
+        use crate::threeway::ThreeWayEquity;
+
+        // A small solve: this checks the routing, not the strategy.
+        let ring = Ring::new(
+            3,
+            100.0,
+            Ladder::default(),
+            EquityTable::sampled_parallel(8, 0x51DE, 4),
+            ThreeWayEquity::sampled_parallel(1, 0x3EED, 4),
+        );
+        let mut rng = Rng::new(4);
+        let mut solver = Solver::new(ring.clone());
+        solver.train_sampled(20_000, &mut rng);
+        let solved = Blueprint::from_solver(&solver, "ring3/100bb");
+
+        let mut bot = agent(100.0).with_ring(solved, ring);
+        let hole = crate::card::parse_cards("AsAd").expect("valid");
+        // The button's own spot, stated directly rather than borrowed from an
+        // unrelated round: facing the big blind, free to raise up to its stack.
+        let legal = crate::betting::LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(100),
+            raise_to: Some((200, 10_000)),
+        };
+
+        // The button, first to act three-handed, with the blinds posted.
+        let view = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Preflop,
+            position: Position::Button,
+            seat: 0,
+            players: 3,
+            active: 3,
+            pot: 150,
+            to_call: 100,
+            stack: 10_000,
+            stacks: &[10_000, 9_950, 9_900],
+            committed: &[0, 50, 100],
+            live: &[true, true, true],
+            big_blind: 100,
+            legal: &legal,
+        };
+
+        // `coverage` reports (decided by a blueprint, decided at all).
+        let (solved_before, _) = bot.coverage();
+        let action = bot.act(&view, &mut rng);
+        let (solved_after, total) = bot.coverage();
+        assert_eq!(total, 1, "one decision was asked for");
+        assert_eq!(
+            solved_after,
+            solved_before + 1,
+            "aces on the button should be decided by the three-handed solve,              not fall through to the heuristic"
+        );
+        assert!(
+            legal.permits(action),
+            "the solved action {action:?} must be legal here"
+        );
+        assert_ne!(action, Action::Fold, "aces are not a fold");
     }
 
     #[test]
@@ -491,6 +664,8 @@ mod tests {
             to_call: 0,
             stack: 1_000,
             stacks: &[1_000, 1_000],
+            committed: &[100, 100],
+            live: &[true, true],
             big_blind: 100,
             legal: &legal,
         };
