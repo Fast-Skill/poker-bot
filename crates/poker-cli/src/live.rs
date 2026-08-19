@@ -24,8 +24,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use poker_vision::{
-    Frame, GlyphTemplates, HeroTemplates, HeroThresholds, TableView, Templates, TextThresholds,
-    Thresholds,
+    ActionPanel, Frame, GlyphTemplates, HeroTemplates, HeroThresholds, TableView, Templates,
+    TextThresholds, Thresholds,
 };
 use poker_win::Window;
 
@@ -34,14 +34,18 @@ use poker_win::Window;
 /// Only `Fold` is reachable today: the loop that drives this is deliberately
 /// limited to folding until a decision engine is wired to it, since folding is
 /// the one choice that cannot lose more than what is already committed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
 pub enum Choice {
     Fold,
     /// Check when there is nothing to call, call when there is.
     Passive,
-    /// Bet when there is nothing to call, raise when there is.
-    Aggressive,
+    /// Bet or raise to a specific total, in big blinds.
+    ///
+    /// The size is part of the decision, not a detail of carrying it out. A
+    /// blueprint that chose to raise chose an amount, and putting in a
+    /// different one plays a strategy nobody solved for.
+    Aggressive { to_blinds: f64 },
 }
 
 impl Choice {
@@ -49,13 +53,13 @@ impl Choice {
         match self {
             Choice::Fold => "fold",
             Choice::Passive => "check/call",
-            Choice::Aggressive => "bet/raise",
+            Choice::Aggressive { .. } => "bet/raise",
         }
     }
 }
 
 /// Why the bot declined to act on a frame.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Held {
     /// The kill switch file exists.
     KillSwitch,
@@ -71,6 +75,11 @@ pub enum Held {
     NotConfident,
     /// The button the choice needs is not on screen.
     NoSuchButton(Choice),
+    /// The raise field would not take the amount, or did not read back as it.
+    ///
+    /// Carries what was wanted and what the field showed, because the two
+    /// together say whether the write missed or the reading did.
+    WrongAmount { wanted: f64, showing: Option<f64> },
 }
 
 impl Held {
@@ -87,6 +96,14 @@ impl Held {
                     .into()
             }
             Held::NoSuchButton(choice) => format!("there is no {} button on screen", choice.name()),
+            Held::WrongAmount { wanted, showing } => match showing {
+                Some(showing) => format!(
+                    "the raise field reads {showing} where {wanted} was wanted, so nothing                      was committed"
+                ),
+                None => format!(
+                    "the raise field could not be read after writing {wanted} to it, so                      nothing was committed"
+                ),
+            },
         }
     }
 }
@@ -292,9 +309,16 @@ impl Session {
         let button = match choice {
             Choice::Fold => panel.fold(),
             Choice::Passive => panel.passive(),
-            Choice::Aggressive => panel.aggressive(),
+            Choice::Aggressive { .. } => panel.aggressive(),
         }
         .ok_or(Held::NoSuchButton(choice))?;
+
+        // A raise has to be sized before it is made, and the size has to be
+        // checked before it is committed. Windows accepting the keystrokes says
+        // nothing about what the field holds.
+        if let Choice::Aggressive { to_blinds } = choice {
+            self.set_amount(panel, to_blinds)?;
+        }
 
         let (x, y) = button.centre();
         let began = Instant::now();
@@ -310,6 +334,39 @@ impl Session {
         match self.look() {
             Some(after) if after.hero_to_act() => Err(Held::NotSettled),
             _ => Ok(began.elapsed()),
+        }
+    }
+
+    /// Writes a raise size into the client's field and confirms it took.
+    ///
+    /// Nothing is pressed here. If the field will not hold the amount this
+    /// returns an error and the caller commits nothing — better to miss a raise
+    /// than to make one of the wrong size, which is a decision nobody took.
+    fn set_amount(&self, panel: &ActionPanel, to_blinds: f64) -> Result<(), Held> {
+        let field = panel
+            .amount_box
+            .ok_or(Held::NoSuchButton(Choice::Aggressive { to_blinds }))?;
+        // The client shows one decimal place, so asking for more is asking for
+        // a number it cannot display and will not read back.
+        let wanted = (to_blinds * 10.0).round() / 10.0;
+
+        let (x, y) = field.centre();
+        self.window.focus();
+        std::thread::sleep(Duration::from_millis(120));
+        if !self.window.click_at(x, y) {
+            return Err(Held::NoPicture);
+        }
+        std::thread::sleep(Duration::from_millis(180));
+        self.window.type_text(&format!("{wanted}"));
+        std::thread::sleep(Duration::from_millis(400));
+
+        let capture = self.window.capture().ok_or(Held::NoPicture)?;
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        let showing = poker_vision::read_action_panel(&frame)
+            .and_then(|fresh| poker_vision::read_amount(&frame, &fresh, &self.glyphs));
+        match showing {
+            Some(showing) if (showing - wanted).abs() < 0.05 => Ok(()),
+            showing => Err(Held::WrongAmount { wanted, showing }),
         }
     }
 
@@ -405,9 +462,31 @@ mod tests {
             Held::NotSettled,
             Held::NotOurTurn,
             Held::NotConfident,
-            Held::NoSuchButton(Choice::Aggressive),
+            Held::NoSuchButton(Choice::Aggressive { to_blinds: 9.0 }),
+            Held::WrongAmount {
+                wanted: 9.0,
+                showing: Some(90.0),
+            },
+            Held::WrongAmount {
+                wanted: 9.0,
+                showing: None,
+            },
         ] {
             assert!(!held.explain().is_empty(), "{held:?}");
         }
+    }
+
+    /// A size the client cannot display must not be asked for.
+    ///
+    /// The field shows one decimal place. Writing 9.25 into it leaves 9.2 or
+    /// 9.3 showing, the check then disagrees with what was wanted, and a raise
+    /// that was perfectly fine gets abandoned every time.
+    #[test]
+    fn a_raise_size_is_rounded_to_what_the_client_can_show() {
+        let round = |v: f64| (v * 10.0).round() / 10.0;
+        assert_eq!(round(9.25), 9.3);
+        assert_eq!(round(18.7), 18.7);
+        assert_eq!(round(2.0), 2.0);
+        assert_eq!(round(0.5), 0.5);
     }
 }
