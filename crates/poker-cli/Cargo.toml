@@ -11,3 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 poker-core = { path = "../poker-core" }
+poker-vision = { path = "../poker-vision" }
+
+[target.'cfg(windows)'.dependencies]
+poker-win = { path = "../poker-win" }

@@ -25,6 +25,10 @@
 
 #![forbid(unsafe_code)]
 
+mod text;
+
+pub use text::{read_numbers, GlyphTemplates, Ink, NumberRead, TextThresholds};
+
 use poker_core::card::{Card, Rank, Suit};
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -144,7 +148,7 @@ impl<'a> Frame<'a> {
     }
 
     #[inline]
-    fn pixel(&self, x: usize, y: usize) -> (u8, u8, u8) {
+    pub(crate) fn pixel(&self, x: usize, y: usize) -> (u8, u8, u8) {
         let i = (y * self.width + x) * 3;
         (self.rgb[i], self.rgb[i + 1], self.rgb[i + 2])
     }
@@ -395,23 +399,30 @@ fn best_match<'a, T: Copy>(
     best.map(|(label, score)| (label, score, runner_up - score))
 }
 
-/// Finds card-sized bright rectangles.
-///
-/// Card faces are bright and near-neutral; felt is green and chrome is dark, so
-/// one threshold separates them cleanly.
-fn detect_cards(frame: &Frame) -> Vec<(usize, usize)> {
-    use geometry::*;
-    let (w, h) = (frame.width, frame.height);
-    let mut mask = vec![false; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let (r, g, b) = frame.pixel(x, y);
-            let lo = r.min(g).min(b);
-            let hi = r.max(g).max(b);
-            mask[y * w + x] = lo > 110 && hi - lo < 60;
-        }
-    }
+/// A connected run of set pixels, as a bounding box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Bounds {
+    pub x0: usize,
+    pub y0: usize,
+    pub x1: usize,
+    pub y1: usize,
+}
 
+impl Bounds {
+    pub fn width(&self) -> usize {
+        self.x1 - self.x0 + 1
+    }
+    pub fn height(&self) -> usize {
+        self.y1 - self.y0 + 1
+    }
+}
+
+/// Bounding boxes of every 4-connected group of set pixels.
+///
+/// Scanned top-to-bottom then left-to-right, so results come out in reading
+/// order and callers can rely on it.
+pub(crate) fn components(mask: &[bool], w: usize, h: usize) -> Vec<Bounds> {
+    debug_assert_eq!(mask.len(), w * h);
     let mut seen = vec![false; w * h];
     let mut found = Vec::new();
     let mut stack: Vec<(usize, usize)> = Vec::new();
@@ -421,16 +432,20 @@ fn detect_cards(frame: &Frame) -> Vec<(usize, usize)> {
             if !mask[start_y * w + start_x] || seen[start_y * w + start_x] {
                 continue;
             }
-            let (mut min_x, mut max_x) = (start_x, start_x);
-            let (mut min_y, mut max_y) = (start_y, start_y);
+            let mut bounds = Bounds {
+                x0: start_x,
+                y0: start_y,
+                x1: start_x,
+                y1: start_y,
+            };
             seen[start_y * w + start_x] = true;
             stack.push((start_x, start_y));
 
             while let Some((x, y)) = stack.pop() {
-                min_x = min_x.min(x);
-                max_x = max_x.max(x);
-                min_y = min_y.min(y);
-                max_y = max_y.max(y);
+                bounds.x0 = bounds.x0.min(x);
+                bounds.x1 = bounds.x1.max(x);
+                bounds.y0 = bounds.y0.min(y);
+                bounds.y1 = bounds.y1.max(y);
                 let mut visit = |nx: usize, ny: usize, stack: &mut Vec<(usize, usize)>| {
                     let i = ny * w + nx;
                     if mask[i] && !seen[i] {
@@ -451,17 +466,37 @@ fn detect_cards(frame: &Frame) -> Vec<(usize, usize)> {
                     visit(x, y - 1, &mut stack);
                 }
             }
-
-            let bw = max_x - min_x + 1;
-            let bh = max_y - min_y + 1;
-            if (CARD_W_RANGE.0..=CARD_W_RANGE.1).contains(&bw)
-                && (CARD_H_RANGE.0..=CARD_H_RANGE.1).contains(&bh)
-            {
-                found.push((min_x, min_y));
-            }
+            found.push(bounds);
         }
     }
     found
+}
+
+/// Finds card-sized bright rectangles.
+///
+/// Card faces are bright and near-neutral; felt is green and chrome is dark, so
+/// one threshold separates them cleanly.
+fn detect_cards(frame: &Frame) -> Vec<(usize, usize)> {
+    use geometry::*;
+    let (w, h) = (frame.width, frame.height);
+    let mut mask = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            let lo = r.min(g).min(b);
+            let hi = r.max(g).max(b);
+            mask[y * w + x] = lo > 110 && hi - lo < 60;
+        }
+    }
+
+    components(&mask, w, h)
+        .into_iter()
+        .filter(|b| {
+            (CARD_W_RANGE.0..=CARD_W_RANGE.1).contains(&b.width())
+                && (CARD_H_RANGE.0..=CARD_H_RANGE.1).contains(&b.height())
+        })
+        .map(|b| (b.x0, b.y0))
+        .collect()
 }
 
 fn parse_rank(label: &str) -> Option<Rank> {
@@ -473,17 +508,17 @@ fn parse_rank(label: &str) -> Option<Rank> {
     label.chars().next().and_then(Rank::from_char)
 }
 
-fn invalid(message: impl Into<String>) -> io::Error {
+pub(crate) fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
 
-fn read_u32(file: &mut impl Read) -> io::Result<u32> {
+pub(crate) fn read_u32(file: &mut impl Read) -> io::Result<u32> {
     let mut word = [0u8; 4];
     file.read_exact(&mut word)?;
     Ok(u32::from_le_bytes(word))
 }
 
-fn read_label(file: &mut impl Read) -> io::Result<String> {
+pub(crate) fn read_label(file: &mut impl Read) -> io::Result<String> {
     let mut len = [0u8; 1];
     file.read_exact(&mut len)?;
     let mut bytes = vec![0u8; len[0] as usize];
@@ -491,7 +526,7 @@ fn read_label(file: &mut impl Read) -> io::Result<String> {
     String::from_utf8(bytes).map_err(|_| invalid("label is not valid UTF-8"))
 }
 
-fn read_pixels(file: &mut impl Read, count: usize) -> io::Result<Vec<u8>> {
+pub(crate) fn read_pixels(file: &mut impl Read, count: usize) -> io::Result<Vec<u8>> {
     let mut pixels = vec![0u8; count];
     file.read_exact(&mut pixels)?;
     Ok(pixels)

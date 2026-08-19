@@ -1,0 +1,10 @@
+[package]
+name = "poker-win"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Windows platform layer: find a window, size it, capture it, click it."
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]

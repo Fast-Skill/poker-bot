@@ -7,6 +7,8 @@ name = "poker-cli"
 version = "0.1.0"
 dependencies = [
  "poker-core",
+ "poker-vision",
+ "poker-win",
 ]
 
 [[package]]
@@ -19,3 +21,7 @@ version = "0.1.0"
 dependencies = [
  "poker-core",
 ]
+
+[[package]]
+name = "poker-win"
+version = "0.1.0"
