@@ -63,6 +63,7 @@ fn main() -> ExitCode {
         Some("demo") => demo(&args[1..]),
         Some("equity3") => equity3(&args[1..]),
         Some("equity") => equity_wide(&args[1..]),
+        Some("textures") => textures(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
@@ -97,6 +98,7 @@ USAGE
   poker demo  [blueprint]          show the whole thing works, start to finish
   poker equity3 [options]          build the three-way equity table a 3-handed solve needs
   poker equity  [options]          build a wide equity table (--players 4..7)
+  poker textures [options]         build the board sample a postflop solve needs
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
@@ -1249,6 +1251,55 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 }
 
 
+
+
+/// Builds the board sample a postflop solve reads hand strength from.
+///
+/// Each board carries every holding's strength at the flop, turn and river,
+/// measured from the cards visible at that street rather than from the finished
+/// board — so a hand that goes on to make a flush is not rated as though it
+/// already had. It also carries every holding's finished hand, because
+/// showdowns are settled exactly rather than by comparing strength groups.
+fn textures(args: &[String]) -> Result<(), String> {
+    use poker_core::texture::Textures;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["boards", "buckets", "runouts", "threads", "seed", "out"])?;
+    let boards: usize = flags
+        .text("boards", "10000")
+        .parse()
+        .map_err(|_| "--boards wants a number")?;
+    let buckets: usize = flags
+        .text("buckets", "24")
+        .parse()
+        .map_err(|_| "--buckets wants a number")?;
+    let runouts: u32 = flags
+        .text("runouts", "100")
+        .parse()
+        .map_err(|_| "--runouts wants a number")?;
+    let threads: usize = flags
+        .text("threads", "8")
+        .parse()
+        .map_err(|_| "--threads wants a number")?;
+    let seed: u64 = flags
+        .text("seed", "31415926")
+        .parse()
+        .map_err(|_| "--seed wants a number")?;
+    let out = flags.text("out", "data/textures.bin");
+
+    println!("{boards} boards, {buckets} strength groups, {runouts} runouts per street");
+    println!("  seed   : {seed}  (identical whatever the core count)");
+
+    let began = std::time::Instant::now();
+    let sample = Textures::sample(boards, buckets, runouts, seed, threads);
+    let took = began.elapsed();
+    sample
+        .save(&out)
+        .map_err(|e| format!("could not write {out}: {e}"))?;
+    println!("
+built in {:.0}s, written to {out}", took.as_secs_f64());
+    Ok(())
+}
 
 /// Builds a showdown equity table for pots wider than three players.
 ///

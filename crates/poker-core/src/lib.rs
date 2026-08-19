@@ -20,6 +20,7 @@ pub mod eval;
 pub mod kuhn;
 pub mod multiway;
 pub mod omaha;
+pub mod postflop;
 pub mod pot;
 pub mod preflop;
 pub mod pushfold;
