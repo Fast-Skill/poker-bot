@@ -54,7 +54,21 @@ impl ActionButton {
 pub struct ActionPanel {
     /// Left to right. Two buttons when there is nothing to raise.
     pub buttons: Vec<ActionButton>,
+    /// The editable field holding the raise amount, when one is showing.
+    ///
+    /// The client offers a few preset sizes beside it, and a solved strategy
+    /// means a specific amount rather than the nearest preset. This is where
+    /// that amount is written, and — just as importantly — read back before
+    /// anything is committed.
+    pub amount_box: Option<ActionButton>,
 }
+
+/// Where the amount field sits, measured at a 1430x1040 table.
+///
+/// Found by shape rather than position would be nicer, but it is a plain dark
+/// rectangle among other dark rectangles; what distinguishes it is being the
+/// small one, on the right, in the row above the buttons.
+const AMOUNT_BOX: (usize, usize, usize, usize) = (1184, 902, 1299, 935);
 
 /// The widest a plain `Fold` label runs, and the narrowest `Check / Fold`.
 ///
@@ -134,7 +148,47 @@ pub fn read_action_panel(frame: &Frame) -> Option<ActionPanel> {
         return None;
     }
     buttons.sort_by_key(|b| b.x);
-    Some(ActionPanel { buttons })
+
+    // Only meaningful when there is something to raise; with no raise button
+    // the client draws no amount field either.
+    let amount_box = (buttons.len() >= 3).then_some(ActionButton {
+        x: AMOUNT_BOX.0,
+        y: AMOUNT_BOX.1,
+        width: AMOUNT_BOX.2 - AMOUNT_BOX.0,
+        height: AMOUNT_BOX.3 - AMOUNT_BOX.1,
+        label_width: 0,
+    });
+    Some(ActionPanel {
+        buttons,
+        amount_box,
+    })
+}
+
+/// Reads the amount currently in the raise field.
+///
+/// This is the check that makes typing an amount safe. Windows accepting the
+/// keystrokes says nothing about what the field now holds, and committing a
+/// raise without looking is how a bot bets 23 into a pot it meant to bet 2 —
+/// so the caller writes, reads back, and only then presses the button.
+pub fn read_amount(
+    frame: &Frame,
+    panel: &ActionPanel,
+    glyphs: &crate::GlyphTemplates,
+) -> Option<f64> {
+    let box_ = panel.amount_box?;
+    crate::read_number_in(
+        frame,
+        glyphs,
+        crate::TextThresholds::default(),
+        crate::Ink::White,
+        (
+            box_.x,
+            box_.y,
+            box_.x + box_.width,
+            box_.y + box_.height,
+        ),
+    )?
+    .value
 }
 
 /// How far the white label runs across a button.
@@ -176,6 +230,62 @@ mod tests {
         let w = u32::from_le_bytes(raw[0..4].try_into().expect("header")) as usize;
         let h = u32::from_le_bytes(raw[4..8].try_into().expect("header")) as usize;
         (w, h, raw[8..].to_vec())
+    }
+
+    /// The amount field must read back what the client is showing.
+    ///
+    /// This is the check that makes writing an amount safe: the bot types,
+    /// reads, and only presses the button when the two agree.
+    #[test]
+    fn the_raise_amount_can_be_read_back_from_its_box() {
+        let (w, h, bytes) = frame_bytes("raise-ui.rgb");
+        let frame = Frame::new(w, h, &bytes);
+        let panel = read_action_panel(&frame).expect("the buttons are showing");
+        assert_eq!(panel.buttons.len(), 3, "fold, call and raise");
+        assert!(panel.amount_box.is_some());
+
+        let glyphs = crate::GlyphTemplates::load(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../data/digit_templates.bin"),
+        )
+        .expect("glyph templates");
+        // Checked against the frame: the field reads 9.5BB.
+        assert_eq!(read_amount(&frame, &panel, &glyphs), Some(9.5));
+    }
+
+    /// A known gap, recorded rather than papered over.
+    ///
+    /// The amount box is drawn in its own twelve-pixel face, and the templates
+    /// for it were harvested from amounts the client happened to display —
+    /// which never included a nought, a three or an eight. An amount using one
+    /// of those reads as nothing rather than as something plausible, so the bot
+    /// declines to commit a raise it cannot verify.
+    ///
+    /// It closes the same way the hero's cards did: by collecting frames where
+    /// the reading fails. Typing an amount and photographing the result would
+    /// do it in one pass, since the bot chooses what to type.
+    #[test]
+    fn an_amount_using_a_digit_with_no_template_is_refused() {
+        let (w, h, bytes) = frame_bytes("raise-ui-unreadable.rgb");
+        let frame = Frame::new(w, h, &bytes);
+        let panel = read_action_panel(&frame).expect("the buttons are showing");
+        let glyphs = crate::GlyphTemplates::load(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../data/digit_templates.bin"),
+        )
+        .expect("glyph templates");
+        // This frame's box reads 18.7BB, and there is no template for an eight.
+        // Reading it as 1.7 or 17 would both be plausible and both be wrong.
+        assert_eq!(read_amount(&frame, &panel, &glyphs), None);
+    }
+
+    #[test]
+    fn a_panel_with_nothing_to_raise_has_no_amount_field() {
+        let (w, h, bytes) = frame_bytes("20260818-103636-028.rgb");
+        let frame = Frame::new(w, h, &bytes);
+        let panel = read_action_panel(&frame).expect("the buttons are showing");
+        assert_eq!(panel.buttons.len(), 2);
+        assert_eq!(panel.amount_box, None, "nothing to size");
     }
 
     #[test]

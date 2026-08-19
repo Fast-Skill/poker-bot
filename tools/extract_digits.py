@@ -28,6 +28,13 @@ from scipy import ndimage
 CAPTURES = r"C:\poker\captures"
 OUT_BIN = r"C:\poker\data\digit_templates.bin"
 MAGIC, VERSION = b"PKGT", 1
+UNREAD = os.path.join(CAPTURES, "unread")
+# Where the client draws the raise amount, at a 1430x1040 table.
+AMOUNT_BOX = (1184, 902, 1299, 935)
+# The one window size the templates are exact at. A frame captured at any
+# other size reflows rather than scaling, so these coordinates mean nothing
+# there and reading them would index whatever happens to sit nearby.
+TABLE = (1430, 1040)
 
 # Readout locations, found by the cross-frame variance map: static chrome is
 # drawn identically in every frame, so anything that changes is a readout.
@@ -54,6 +61,14 @@ LABELS = {
     # Both 2x2 classes are the decimal point, one a pixel thinner than the
     # other. The w=3 classes are felt speckle.
     ("white", 2):  "..____",
+    # The raise amount box, which the client draws a pixel smaller than the
+    # labels on the felt. Same ink, its own size, its own templates: the
+    # thirteen-pixel set matched every twelve-pixel glyph about equally
+    # badly, so nothing won by a margin and every reading was refused.
+    # The second class is the text caret, not a character - which is itself
+    # worth knowing, since a caret means the field takes keyboard focus.
+    ("white", 12): "B_1274659",
+    ("white", 1):  ".",
 }
 MIN_SAMPLES = 3
 # The smallest character the client draws is the decimal point, at three to four
@@ -71,10 +86,43 @@ def on_felt(im, ys, xs, pad=4):
     return ((g > r + 15) & (g > b + 15)).mean() > 0.35
 
 
+def raw_frames():
+    """The frames the bot kept, which include raises in progress."""
+    import struct
+
+    for path in sorted(glob.glob(os.path.join(UNREAD, "*.rgb"))):
+        with open(path, "rb") as f:
+            w, h = struct.unpack("<II", f.read(8))
+            if (w, h) != TABLE:
+                continue
+            yield np.frombuffer(f.read(w * h * 3), np.uint8).reshape(h, w, 3).astype(np.int16)
+
+
+def harvest_amount_box(out):
+    """Glyphs from the raise amount field, which sits on black rather than felt."""
+    x0, y0, x1, y1 = AMOUNT_BOX
+    for im in raw_frames():
+        box = im[y0:y1, x0:x1]
+        r, g, b = box[:, :, 0], box[:, :, 1], box[:, :, 2]
+        white = (r > 180) & (g > 180) & (b > 180) & (abs(r - b) < 25) & (abs(g - b) < 25)
+        if white.sum() < 20:
+            continue
+        labels, _ = ndimage.label(white)
+        for sl in ndimage.find_objects(labels):
+            ys, xs = sl
+            h, w = ys.stop - ys.start, xs.stop - xs.start
+            patch = white[ys, xs]
+            if 1 <= h <= 16 and 1 <= w <= 16 and patch.sum() >= 2:
+                out.setdefault(("white", h), []).append((w, patch.astype(np.uint8) * 255))
+
+
 def harvest_frames():
     """Collect every glyph candidate, keyed by (ink, height)."""
     out = {}
     for path in sorted(glob.glob(os.path.join(CAPTURES, "*.png"))):
+        with Image.open(path) as probe:
+            if probe.size != TABLE:
+                continue
         im = np.asarray(Image.open(path).convert("RGB"), dtype=np.int16)
         r, g, b = im[:, :, 0], im[:, :, 1], im[:, :, 2]
         boxed = [
@@ -104,6 +152,7 @@ def harvest_frames():
             patch = white[ys, xs]
             if 2 <= h <= 20 and 1 <= w <= 20 and patch.sum() >= MIN_INK and on_felt(im, ys, xs):
                 out.setdefault(("white", h), []).append((w, patch.astype(np.uint8) * 255))
+    harvest_amount_box(out)
     return out
 
 

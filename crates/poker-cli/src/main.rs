@@ -61,6 +61,7 @@ fn main() -> ExitCode {
         Some("play") => play(&args[1..]),
         Some("demo") => demo(&args[1..]),
         Some("equity3") => equity3(&args[1..]),
+        Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
@@ -95,6 +96,7 @@ USAGE
   poker equity3 [options]          build the three-way equity table a 3-handed solve needs
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide; --act fold to play
+  poker typetest [options]         check the bot can set a raise amount (commits nothing)
                                    --keep-unread <dir> saves hands it cannot read
 
 GAMES
@@ -830,6 +832,133 @@ Windows seen:");
             Err(message)
         }
     }
+}
+
+
+/// Checks that a raise amount can be written into the client's field.
+///
+/// The bot has to be able to bet a specific size — the client's preset buttons
+/// offer only a handful, and a solved strategy means a particular number rather
+/// than the nearest one on offer. Whether the field accepts typed input is the
+/// last assumption in that path which has not been tested against the real
+/// application.
+///
+/// **This commits nothing.** It writes into the amount box, photographs the
+/// result, and puts back whatever was there before. No action button is ever
+/// pressed, so no chips can move: setting a raise size is not raising.
+///
+/// It doubles as a collection run. The amount box is drawn in its own small
+/// face and the templates for it came from amounts the client happened to
+/// display, which never included a nought, a three or an eight. Since the bot
+/// chooses what to type, typing those fills the gap in one pass.
+#[cfg(windows)]
+fn typetest(args: &[String]) -> Result<(), String> {
+    use poker_vision::{Frame, GlyphTemplates};
+    use poker_win::Window;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "seconds", "out"])?;
+    let process = flags.text("process", "ClubGG");
+    let seconds: u64 = flags
+        .text("seconds", "300")
+        .parse()
+        .map_err(|_| "--seconds wants a number")?;
+    let out = std::path::PathBuf::from(flags.text("out", "captures/typetest"));
+
+    let windows = Window::find_by_process(&process);
+    if windows.is_empty() {
+        return Err(format!("no visible window from a process matching {process:?}"));
+    }
+    let table = pick_table(&windows)?;
+    let (w, h) = table.size();
+    if (w, h) != (TABLE_W, TABLE_H) {
+        let (w, h) = table.resize(TABLE_W, TABLE_H);
+        if (w, h) != (TABLE_W, TABLE_H) {
+            return Err(format!("the table must be {TABLE_W}x{TABLE_H}; it settled at {w}x{h}"));
+        }
+    }
+    let glyphs =
+        GlyphTemplates::load(GLYPHS).map_err(|e| format!("could not load {GLYPHS}: {e}"))?;
+    std::fs::create_dir_all(&out).map_err(|e| format!("could not make {}: {e}", out.display()))?;
+
+    println!("watching {} for a turn with a raise available.", table.title());
+    println!("Nothing will be clicked. Play normally; press Ctrl+C to stop.
+");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
+    while std::time::Instant::now() < deadline {
+        let Some(capture) = table.capture() else { continue };
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        let Some(panel) = poker_vision::read_action_panel(&frame) else {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            continue;
+        };
+        let (Some(box_), true) = (panel.amount_box, panel.offers_plain_fold()) else {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            continue;
+        };
+
+        let before = poker_vision::read_amount(&frame, &panel, &glyphs);
+        println!("A raise is available. The box currently reads {before:?}.");
+
+        // Values chosen to contain every digit between them, so one pass
+        // photographs all ten.
+        let (cx, cy) = box_.centre();
+        for (round, wanted) in ["30.8", "16.4", "27.9", "5.3"].iter().enumerate() {
+            table.focus();
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            if !table.click_at(cx, cy) {
+                println!("  could not place the cursor on the box - stopping");
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let sent = table.type_text(wanted);
+            std::thread::sleep(std::time::Duration::from_millis(450));
+
+            let Some(after) = table.capture() else { continue };
+            let shot = Frame::new(after.width, after.height, &after.rgb);
+            let read = poker_vision::read_amount(&shot, &panel, &glyphs);
+
+            // Keep the box whatever it now shows, so the missing digits can be
+            // harvested from it later.
+            let name = out.join(format!("box-{round}-{}.rgb", wanted.replace('.', "_")));
+            let mut bytes = Vec::with_capacity(8 + after.rgb.len());
+            bytes.extend_from_slice(&(after.width as u32).to_le_bytes());
+            bytes.extend_from_slice(&(after.height as u32).to_le_bytes());
+            bytes.extend_from_slice(&after.rgb);
+            let _ = std::fs::write(&name, bytes);
+
+            let verdict = match read {
+                Some(value) if (value - wanted.parse::<f64>().unwrap_or(-1.0)).abs() < 0.001 => {
+                    "the field took it"
+                }
+                Some(_) => "the field changed, but not to what was typed",
+                None => "the field changed to something not yet readable",
+            };
+            println!("  typed {wanted:>6}  keystrokes accepted: {sent:<5}  read back {read:?}  - {verdict}");
+        }
+
+        // Put back what was there, so nothing is left armed.
+        if let Some(original) = before {
+            table.focus();
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            table.click_at(cx, cy);
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            table.type_text(&format!("{original}"));
+            println!("
+Put the box back to {original}.");
+        }
+        println!("Frames kept in {}.", out.display());
+        return Ok(());
+    }
+
+    println!("No turn with a raise came up in {seconds}s.");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn typetest(_args: &[String]) -> Result<(), String> {
+    Err("typing into a live window is only implemented on Windows".to_string())
 }
 
 /// Watches a live table, reporting what it sees and what it would do.
