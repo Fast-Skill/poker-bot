@@ -29,6 +29,7 @@ pub mod river;
 pub mod rng;
 pub mod table;
 pub mod telemetry;
+pub mod texture;
 pub mod threeway;
 pub mod turnriver;
 pub mod wide;
