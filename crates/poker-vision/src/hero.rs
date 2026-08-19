@@ -17,14 +17,18 @@
 //! rank directly above it. The templates are harvested at the hero's card size
 //! and, as everywhere else here, never resized.
 //!
-//! # A known gap
+//! # Coverage
 //!
-//! The captures the templates were built from cover nine of the thirteen ranks
-//! — every one except three, four, seven and king — because they span only
-//! about a dozen hands. A card the templates do not cover is refused, and
-//! [`crate::TableView`] withholds the whole hand rather than half of it, so the
-//! gap costs readings and never causes wrong ones. Closing it needs captures
-//! over more hands, not different code.
+//! The templates cover the whole deck, in the several renderings the client
+//! draws each rank at. Getting there took collecting frames the reader could
+//! not name and harvesting from those, since a rank only reaches the templates
+//! by being dealt to the hero — the first set was short of four ranks purely
+//! because a dozen hands never turned them up.
+//!
+//! A shape still not covered — a pip clipped by the overlapping card into a
+//! dome that no longer says which suit it is — is refused, and
+//! [`crate::TableView`] withholds the whole hand rather than half of it. So a
+//! gap costs readings and never causes wrong ones.
 
 use crate::{components, invalid, read_label, read_u32, Bounds, CardRead, Frame};
 use poker_core::card::{Card, Rank, Suit};
@@ -426,16 +430,20 @@ mod tests {
         assert_eq!(templates().suits().len(), 4);
     }
 
-    /// Records exactly which ranks the captures happened to contain.
+    /// The templates cover a whole deck.
     ///
-    /// This is a gap in the data, not in the code: the frames the templates
-    /// came from span about a dozen hands, so four ranks never reached the
-    /// hero's seat. It is asserted so that closing it is visible as a change
-    /// here rather than passing unnoticed.
+    /// They did not always. The first set was built from about a dozen hands
+    /// and was missing the three, four, seven and king simply because those
+    /// never reached the hero's seat, and a rank with no template means a hand
+    /// withheld rather than misread. This is asserted so that a rebuild which
+    /// quietly loses one is caught here rather than at a table.
     #[test]
-    fn the_ranks_covered_are_the_ones_the_captures_contained() {
+    fn every_rank_in_the_deck_can_be_read() {
         let covered: Vec<String> = templates().ranks().iter().map(|r| r.to_string()).collect();
-        assert_eq!(covered, vec!["2", "5", "6", "8", "9", "T", "J", "Q", "A"]);
+        assert_eq!(
+            covered,
+            vec!["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        );
     }
 
     #[test]

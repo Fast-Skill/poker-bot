@@ -32,6 +32,8 @@ use poker_core::table::{Agent, Deck, Table};
 use poker_core::telemetry::ConsoleMonitor;
 use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
+use poker_core::ring::{Ladder, Ring};
+use poker_core::threeway::ThreeWayEquity;
 use poker_core::rng::Rng;
 
 /// Where the shared preflop equity table is cached.
@@ -46,6 +48,7 @@ const TABLE_H: usize = 1040;
 const TEMPLATES: &str = "data/card_templates.bin";
 const GLYPHS: &str = "data/digit_templates.bin";
 const HERO_CARDS: &str = "data/hero_cards.bin";
+const THREE_WAY_CACHE: &str = "data/threeway.bin";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -96,6 +99,7 @@ USAGE
 
 GAMES
   pushfold    heads-up jam-or-fold
+  ring3       three-handed preflop (needs `poker equity3` first)
   preflop     heads-up open / 3-bet / 4-bet / jam
 
 SOLVE OPTIONS
@@ -139,6 +143,10 @@ STAGES
 enum Kind {
     PushFold,
     Preflop,
+    /// Three-handed preflop, solved from a state machine rather than a named
+    /// ladder of stages. Its information sets are packed bit fields, so it has
+    /// no stage names for `query` and `chart` to work from.
+    Ring3,
 }
 
 impl Kind {
@@ -146,7 +154,10 @@ impl Kind {
         match name {
             "pushfold" => Ok(Kind::PushFold),
             "preflop" => Ok(Kind::Preflop),
-            other => Err(format!("unknown game {other:?}; try pushfold or preflop")),
+            "ring3" => Ok(Kind::Ring3),
+            other => Err(format!(
+                "unknown game {other:?}; try pushfold, preflop or ring3"
+            )),
         }
     }
 
@@ -154,6 +165,7 @@ impl Kind {
         match self {
             Kind::PushFold => "pushfold",
             Kind::Preflop => "preflop",
+            Kind::Ring3 => "ring3",
         }
     }
 
@@ -169,6 +181,11 @@ impl Kind {
     fn stages(self) -> &'static [(&'static str, &'static [&'static str])] {
         match self {
             Kind::PushFold => &[("sb", &["fold", "jam"]), ("bb", &["fold", "call"])],
+            // Three-handed has no fixed ladder of stages to name: whether the
+            // big blind is facing a raise from the button or from the small
+            // blind is part of the situation, and there are far too many of
+            // those to give each a name.
+            Kind::Ring3 => &[],
             Kind::Preflop => &[
                 ("sb-open", &["fold", "raise", "jam"]),
                 ("bb-vs-open", &["fold", "call", "raise", "jam"]),
@@ -183,6 +200,13 @@ impl Kind {
     /// The information-set key for a hand at a named stage.
     fn key(self, stage: &str, class: HandClass) -> Result<u64, String> {
         match self {
+            // Its information sets are packed bit fields describing who is
+            // live, who has acted and who raised last. There is no short name
+            // for a situation like that, so there is nothing to look up by.
+            Kind::Ring3 => Err(
+                "ring3 blueprints have no named stages to query; the bot reads them                  directly. Use `poker info` to see what one contains."
+                    .to_string(),
+            ),
             Kind::PushFold => match stage {
                 "sb" => Ok(PushFold::info_key(0, class.index())),
                 "bb" => Ok(PushFold::info_key(1, class.index())),
@@ -237,7 +261,7 @@ fn solve(args: &[String]) -> Result<(), String> {
 
     let stack: f64 = flags.number("stack", match kind {
         Kind::PushFold => 10.0,
-        Kind::Preflop => 100.0,
+        Kind::Preflop | Kind::Ring3 => 100.0,
     })?;
     let iterations = flags.number("iterations", 2_000_000.0)? as usize;
     let out = flags.required("out")?;
@@ -264,6 +288,24 @@ fn solve(args: &[String]) -> Result<(), String> {
         }
         Kind::Preflop => {
             let mut solver = Solver::new(Preflop::new(stack, Sizing::default(), equity));
+            solver.train_sampled(iterations, &mut rng);
+            Blueprint::from_solver(&solver, label)
+        }
+        Kind::Ring3 => {
+            // Three-way showdowns cannot be settled from pairwise equity, so
+            // this needs its own table. It costs a minute to measure and is
+            // cached, which is why it is read here rather than rebuilt.
+            eprint!("
+  three-way equity... ");
+            let three_way = ThreeWayEquity::load(THREE_WAY_CACHE).map_err(|e| {
+                format!(
+                    "could not read {THREE_WAY_CACHE}: {e}
+                       Build it first with `poker equity3`."
+                )
+            })?;
+            eprint!("ready, solving... ");
+            let ring = Ring::new(3, stack, Ladder::default(), equity, three_way);
+            let mut solver = Solver::new(ring);
             solver.train_sampled(iterations, &mut rng);
             Blueprint::from_solver(&solver, label)
         }
@@ -349,6 +391,12 @@ fn chart(args: &[String]) -> Result<(), String> {
             (Kind::PushFold, _) => "sb".to_string(),
             (Kind::Preflop, "bb") => "bb-vs-open".to_string(),
             (Kind::Preflop, _) => "sb-open".to_string(),
+            (Kind::Ring3, _) => {
+                return Err(
+                    "ring3 blueprints have no named stages to chart; try `poker info`"
+                        .to_string(),
+                )
+            }
         },
     };
     let actions = kind.actions(&stage)?;

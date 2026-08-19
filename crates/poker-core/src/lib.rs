@@ -24,6 +24,7 @@ pub mod pot;
 pub mod preflop;
 pub mod pushfold;
 pub mod range;
+pub mod ring;
 pub mod river;
 pub mod rng;
 pub mod table;
