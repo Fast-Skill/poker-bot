@@ -80,6 +80,8 @@ pub enum Held {
     NotTaken,
     /// The client has sat the hero out for not acting in time.
     SatOut,
+    /// The money on the table did not add up to the pot.
+    NotAdding,
     /// The reading was incomplete — a refused figure, or unread cards.
     NotConfident,
     /// The button the choice needs is not on screen.
@@ -98,14 +100,14 @@ impl Held {
             Held::StopLoss => "the session loss limit has been reached".into(),
             Held::NoPicture => "the window could not be captured".into(),
             Held::NotSettled => "two readings disagreed, so the table was still moving".into(),
+            Held::NotAdding => "the chips on the table did not add up to the pot".into(),
             Held::NotTaken => "the action row was still up after the click, so nothing took".into(),
             Held::NotOurTurn => "the client is not asking us to act".into(),
             Held::SatOut => {
                 "the client has sat us out; nothing will be dealt until we sit back in".into()
             }
             Held::NotConfident => {
-                "the reading was incomplete - a figure was refused, or the hole cards \
-                 did not both read"
+                "a figure the decision needs did not read - our two cards, the pot, the amount to call, or our own stack"
                     .into()
             }
             Held::NoSuchButton(choice) => format!("there is no {} button on screen", choice.name()),
@@ -411,8 +413,15 @@ impl Session {
             return (Some(view), Some(Held::NotOurTurn));
         }
         self.keep_turn(&view);
-        if !view.is_actionable() {
+        // Named apart, because they want different work. A hole card that did
+        // not read is the reader failing at its main job; a table whose money
+        // does not add up is almost always a frame caught mid-animation and
+        // will come good on its own.
+        if !view.reads_what_a_decision_needs() {
             return (Some(view), Some(Held::NotConfident));
+        }
+        if !view.is_consistent() {
+            return (Some(view), Some(Held::NotAdding));
         }
         (Some(view), None)
     }
