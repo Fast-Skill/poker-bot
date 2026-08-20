@@ -1522,6 +1522,7 @@ fn sit(args: &[String]) -> Result<(), String> {
 
     let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
     let mut clicked = 0usize;
+    let mut seen: Vec<String> = Vec::new();
     // Where the last button was, so the same dialog is not confirmed twice
     // while the client is still taking it down.
     let mut last: Option<(usize, usize)> = None;
@@ -1536,6 +1537,15 @@ fn sit(args: &[String]) -> Result<(), String> {
         }
         let frame = Frame::new(capture.width, capture.height, &capture.rgb);
         let Some(button) = poker_vision::read_confirm(&frame) else {
+            // Say what was there. A green control the size band rejects looks
+            // exactly like an empty screen from out here, and telling the two
+            // apart from a log is otherwise impossible.
+            if seen.is_empty() {
+                seen = poker_vision::green_buttons(&frame)
+                    .iter()
+                    .map(|b| format!("{}x{}", b.width, b.height))
+                    .collect();
+            }
             last = None;
             continue;
         };
@@ -1573,6 +1583,9 @@ fn sit(args: &[String]) -> Result<(), String> {
 
     if clicked == 0 {
         println!("no dialog appeared. Choose an empty seat while this is running.");
+        if !seen.is_empty() {
+            println!("  green controls seen but not taken as buttons: {}", seen.join(", "));
+        }
     } else {
         println!("\n{clicked} dialog(s) confirmed.");
         println!("If the table was mid-hand, untick 'Wait for Blinds' to be dealt in next hand.");
