@@ -288,7 +288,21 @@ impl TableView {
     /// being present, because the panel that arms an action in advance is drawn
     /// in the very same place and would otherwise read as a turn.
     pub fn hero_to_act(&self) -> bool {
+        // Holding cards is part of being asked. The action row is drawn and
+        // taken down on the client's own schedule, and for a moment after a
+        // fold it is still there while the hero's cards have already gone. Read
+        // as a turn, that moment is a turn nobody can act on: the cards will
+        // never arrive, so the reading never comes good, and the clock ends up
+        // folding a hand that was folded a second ago.
+        //
+        // Measured over three sessions, this was most of it — sixteen of
+        // thirty-seven turns were the clock, and nearly every one landed
+        // directly after a successful fold.
+        //
+        // A hero who holds nothing is not being asked for a decision, whatever
+        // is still on the screen.
         self.action.as_ref().is_some_and(|p| p.offers_plain_fold())
+            && self.hero().is_some_and(|hero| hero.in_hand)
     }
 
     /// Whether two readings of the table describe the same moment.
