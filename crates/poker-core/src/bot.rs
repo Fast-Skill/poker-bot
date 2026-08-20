@@ -133,6 +133,14 @@ pub struct BlueprintAgent {
     preflop_decisions: u32,
     decisions: u64,
     fallbacks: u64,
+    /// Why the fallback was reached, counted by reason.
+    ///
+    /// A single coverage percentage says how much of a session the solve
+    /// decided but not what the rest was, and the two have very different
+    /// remedies: a preflop line past the ladder wants a deeper solve, a
+    /// multiway flop wants a tree that models one, and a spot the solve simply
+    /// never visited wants more iterations. Without this they are one number.
+    reasons: std::collections::BTreeMap<&'static str, u64>,
     /// Which hand of the session this is, for the record stream.
     hand: u64,
     /// Optional watcher. Costs nothing when absent.
@@ -162,6 +170,7 @@ impl BlueprintAgent {
             preflop_decisions: 0,
             decisions: 0,
             fallbacks: 0,
+            reasons: std::collections::BTreeMap::new(),
             hand: 0,
             observer: None,
         }
@@ -243,6 +252,14 @@ impl BlueprintAgent {
         if view.street == Street::Preflop || view.active != 2 {
             return None;
         }
+        // The street and the board must be the same fact stated twice. They
+        // are read separately — one from the cards on the felt, one from the
+        // engine — and if they ever disagree, the strength would be measured on
+        // one street and keyed against another. That is a misplay no log would
+        // show, so it is refused rather than guessed through.
+        if view.board.len() != view.street.board_cards() {
+            return None;
+        }
         if !(3..=5).contains(&view.board.len()) {
             return None;
         }
@@ -300,12 +317,31 @@ impl BlueprintAgent {
         })
     }
 
-    /// Consults a postflop solve, if one covers this spot.
-    fn postflop_action(&mut self, view: &View, rng: &mut Rng) -> Option<Consulted> {
-        if self.postflop.is_empty() {
-            return None;
+    /// Consults a postflop solve, or says why it could not.
+    ///
+    /// The reason matters as much as the answer. A bot that falls back on a
+    /// third of its decisions is not playing the strategy anybody measured, and
+    /// "no solve covered it" is not one problem but five, with five different
+    /// remedies — a deeper ladder, a multiway tree, more iterations, a better
+    /// board reader, or a bug in the translation. Naming the step that declined
+    /// is what separates them.
+    fn postflop_action(
+        &mut self,
+        view: &View,
+        rng: &mut Rng,
+    ) -> Result<Consulted, &'static str> {
+        if view.street == Street::Preflop {
+            return Err("preflop line beyond the solved ladder");
         }
-        let spot = self.spot_for(view)?;
+        if self.postflop.is_empty() {
+            return Err("no postflop solve loaded");
+        }
+        if view.active != 2 {
+            return Err("postflop pot with more than two players");
+        }
+        let spot = self
+            .spot_for(view)
+            .ok_or("the board and the street did not agree")?;
 
         // The depth this pot is being played at, measured as the street opened
         // rather than as it stands. Measuring it mid-street would move the bot
@@ -320,26 +356,40 @@ impl BlueprintAgent {
                 .sum::<u64>(),
         );
         let spr = (spot.behind + spot.mine) as f64 / settled.max(1) as f64;
-        let rung = self.rung_for(spr)?;
+        let rung = self.rung_for(spr).ok_or("no rung near this stack depth")?;
 
-        let key = rung.game.key_at(&spot);
-        let strategy = rung.blueprint.strategy(key)?;
         let moves = rung.game.moves_at(&spot);
-        // A blueprint offering a different number of actions than the tree
-        // offers here is a key meaning something else. Better to fall through
-        // than to play the wrong index.
-        if strategy.len() != moves.len() {
-            return None;
-        }
+        // The exact spot first, then the nearest prices and depths the solve
+        // does know. An opponent is under no obligation to bet in the sizes the
+        // tree was solved with, and refusing every price it has not met leaves
+        // most of a real session to the heuristic.
+        //
+        // A candidate offering a different number of actions than the tree
+        // offers here is a key meaning something else. Skipping it rather than
+        // playing the wrong index is the whole reason this is a search and not
+        // a single fallback.
+        let (key, strategy) = rung
+            .game
+            .keys_near(&spot)
+            .into_iter()
+            .find_map(|key| {
+                let strategy = rung.blueprint.strategy(key)?;
+                (strategy.len() == moves.len()).then_some((key, strategy))
+            })
+            .ok_or("no price the solve knows is near this one")?;
 
-        let chosen = rung.blueprint.sample(key, rng)?;
-        let action = table_action(view, &rung.game, &spot, moves[chosen])?;
+        let chosen = rung
+            .blueprint
+            .sample(key, rng)
+            .ok_or("the solve never visited this spot")?;
+        let action = table_action(view, &rung.game, &spot, moves[chosen])
+            .ok_or("the solved move is not one the table allows")?;
         let frequencies = moves
             .iter()
             .zip(strategy.iter())
             .map(|(mv, share)| (mv.name().to_string(), *share as f64))
             .collect();
-        Some((action, frequencies, key, 2))
+        Ok((action, frequencies, key, 2))
     }
 
     /// The pot sizes this agent has a solved strategy for, ascending.
@@ -448,6 +498,13 @@ impl BlueprintAgent {
     /// fallback.
     pub fn coverage(&self) -> (u64, u64) {
         (self.decisions - self.fallbacks, self.decisions)
+    }
+
+    /// Why the fallback was reached, most common first.
+    pub fn fallback_reasons(&self) -> Vec<(&'static str, u64)> {
+        let mut counted: Vec<_> = self.reasons.iter().map(|(&why, &n)| (why, n)).collect();
+        counted.sort_by(|a, b| b.1.cmp(&a.1));
+        counted
     }
 
     /// Share of decisions the blueprint actually made, in `0..=1`.
@@ -629,7 +686,9 @@ impl Agent for BlueprintAgent {
 
         // Postflop, if a solve covers the spot. Tried after the preflop ring so
         // that the two never contend: they answer disjoint streets.
-        if let Some((action, frequencies, key, _)) = self.postflop_action(view, rng) {
+        let postflop = self.postflop_action(view, rng);
+        let declined = postflop.as_ref().err().copied();
+        if let Ok((action, frequencies, key, _)) = postflop {
             if let Some(observer) = self.observer.as_mut() {
                 observer.on_decision(&DecisionRecord {
                     hand: self.hand,
@@ -657,14 +716,8 @@ impl Agent for BlueprintAgent {
         // Resolve the spot first, so a watcher can be told which one it was
         // even when the lookup then fails.
         let stage = self.stage_for(view);
-        let mut source = Source::Fallback {
-            reason: match view.street {
-                Street::Preflop => "preflop line beyond the solved ladder",
-                _ if self.postflop.is_empty() => "no postflop solve loaded",
-                _ if view.active > 2 => "postflop pot with more than two players",
-                _ => "postflop spot beyond the solved ladder",
-            },
-        };
+        let reason = declined.unwrap_or("preflop line beyond the solved ladder");
+        let mut source = Source::Fallback { reason };
         let mut frequencies = Vec::new();
 
         let action = stage.and_then(|stage| {
@@ -708,12 +761,8 @@ impl Agent for BlueprintAgent {
             Some(action) if view.legal.permits(action) => action,
             _ => {
                 self.fallbacks += 1;
-                source = Source::Fallback {
-                    reason: match view.street {
-                        Street::Preflop => "preflop line beyond the solved ladder",
-                        _ => "no postflop solve yet",
-                    },
-                };
+                *self.reasons.entry(reason).or_insert(0) += 1;
+                source = Source::Fallback { reason };
                 frequencies.clear();
                 self.fallback.act(view, rng)
             }
@@ -770,6 +819,92 @@ mod tests {
         Table::standard()
     }
 
+    /// A solved postflop ladder actually decides postflop, end to end.
+    ///
+    /// # Why this is worth a slow test
+    ///
+    /// Every piece of the postflop path is tested on its own: the abstraction
+    /// against its own training, the tree against its invariants, the
+    /// translation against what a table permits. None of that says the pieces
+    /// are joined. A routing condition that never fires, a key built one way
+    /// and looked up another, a blueprint whose action count does not match the
+    /// tree's — each leaves a bot that quietly plays the heuristic while a
+    /// solve sits loaded and unused, and every other test still passes.
+    ///
+    /// So this solves a small tree, attaches it, plays real hands, and requires
+    /// that the blueprint is what answered after the flop. The solve is
+    /// deliberately tiny: what is under test is that the strategy is reached at
+    /// all, not that it is any good.
+    #[test]
+    fn a_loaded_postflop_ladder_is_what_decides_after_the_flop() {
+        /// Counts who answered, by street.
+        #[derive(Debug, Default)]
+        struct Tally {
+            solved: u64,
+            fallback: u64,
+        }
+
+        impl Observer for Tally {
+            fn on_decision(&mut self, record: &DecisionRecord) {
+                if record.perception.street == Street::Preflop {
+                    return;
+                }
+                match record.source {
+                    Source::Blueprint { .. } => self.solved += 1,
+                    _ => self.fallback += 1,
+                }
+            }
+        }
+
+        // Shared so the tally can be read after the agent has been consumed.
+        #[derive(Debug, Clone, Default)]
+        struct Shared(std::rc::Rc<std::cell::RefCell<Tally>>);
+
+        impl Observer for Shared {
+            fn on_decision(&mut self, record: &DecisionRecord) {
+                self.0.borrow_mut().on_decision(record);
+            }
+        }
+
+        let textures = Textures::sample(24, 12, 0x51DE, 4);
+        let sizing = postflop::Sizing::default();
+        let game = Postflop::new(textures, 100, 400, sizing);
+        let mut rng = Rng::new(0xC0FFEE);
+        let mut solver = Solver::new(game);
+        solver.train_sampled(60_000, &mut rng);
+        let solved = Blueprint::from_solver(&solver, "postflop/spr4/b12");
+
+        let tally = Shared::default();
+        let mut bot = agent(100.0)
+            .with_postflop(4.0, solved, Postflop::for_play(12, 100, 400, sizing))
+            .watch(Box::new(tally.clone()));
+
+        assert_eq!(bot.solved_depths(), vec![4.0]);
+
+        let mut opponent = AlwaysCall;
+        let report = duplicate_match(&table(), &mut bot, &mut opponent, 120, &mut rng);
+        assert!(report.hands > 0, "no hands were played");
+
+        let counts = tally.0.borrow();
+        assert!(
+            counts.solved + counts.fallback > 50,
+            "only {} postflop decisions were reached, too few to say anything",
+            counts.solved + counts.fallback
+        );
+        // Every pot here is heads-up, so the ladder should answer nearly all of
+        // them. What is left is spots the solve never visited, which a sixty
+        // thousand iteration tree will have some of.
+        let share = counts.solved as f64 / (counts.solved + counts.fallback) as f64;
+        assert!(
+            share > 0.9,
+            "the ladder decided only {:.0}% of postflop spots ({} of {}); \
+             the routing is not reaching it",
+            share * 100.0,
+            counts.solved,
+            counts.solved + counts.fallback
+        );
+    }
+
     /// Every move the postflop tree offers must be one the table will accept.
     ///
     /// # The failure this exists to catch
@@ -817,6 +952,17 @@ mod tests {
                         "the spot has the actor wagering {} into a bet of {}",
                         spot.mine,
                         spot.bet
+                    );
+                    // The price is most of what decides a call, and it is the
+                    // one number the tree and the table both compute
+                    // independently. Capped at the stack, since calling for
+                    // more than everything is calling for everything.
+                    assert_eq!(
+                        spot.owed().min(spot.behind),
+                        view.to_call,
+                        "the tree prices this call at {} where the table says {}",
+                        spot.owed().min(spot.behind),
+                        view.to_call
                     );
                     for chosen in self.game.moves_at(&spot) {
                         let action = table_action(view, &self.game, &spot, chosen);
