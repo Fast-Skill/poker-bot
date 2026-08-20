@@ -13,6 +13,7 @@
 //! ```
 
 mod bridge;
+mod png;
 #[cfg(windows)]
 mod live;
 
@@ -69,6 +70,7 @@ fn main() -> ExitCode {
         Some("postflop") => postflop_chart(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
+        Some("grab") => grab(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
@@ -105,6 +107,7 @@ USAGE
   poker compare <a> <b>            how far apart two blueprints play
   poker postflop <file>            what a postflop solve does, by hand strength
   poker see   [options]            look at the live table and report what it reads
+  poker grab  [options]            save every window of the client as a PNG
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
                                    --explain on  shows the reasoning behind each decision
@@ -1374,6 +1377,81 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 
 
 
+
+/// Saves every visible window of the client, exactly as the bot sees it.
+///
+/// # Why not just take a screenshot
+///
+/// Templates are matched against exact pixels, and a screenshot that has been
+/// through a capture tool may have been scaled, colour-managed or re-encoded on
+/// the way. A template cut from such an image misses against the real window in
+/// a way that looks like the reader being flaky rather than the image being
+/// wrong. This writes the window buffer itself.
+///
+/// # Why all of them
+///
+/// Because the interesting window is often the one a reader would refuse.
+/// [`pick_table`] deliberately ignores portrait windows, the lobby being tall
+/// and narrow, so the command that reads a table cannot be used to look at a
+/// lobby. Saving everything means one run captures whatever is on screen and
+/// the choice of what to look at comes afterwards.
+#[cfg(windows)]
+fn grab(args: &[String]) -> Result<(), String> {
+    use poker_win::Window;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "out", "label"])?;
+    let process = flags.text("process", "ClubGG");
+    let out = flags.text("out", "captures");
+    let label = flags.text("label", "window");
+
+    let windows = Window::find_by_process(&process);
+    if windows.is_empty() {
+        return Err(format!(
+            "no visible window from a process matching {process:?}"
+        ));
+    }
+    std::fs::create_dir_all(&out).map_err(|e| format!("could not make {out}: {e}"))?;
+
+    println!("windows from {process:?}:");
+    let mut written = 0;
+    for (index, window) in windows.iter().enumerate() {
+        let (w, h) = window.size();
+        let shape = if w >= h { "landscape" } else { "portrait" };
+        print!("  {w:5} x {h:<5}  {shape:<9}  {}", window.title());
+
+        window.focus();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let Some(capture) = window.capture() else {
+            println!("   -- could not be captured");
+            continue;
+        };
+        if capture.is_blank() {
+            println!("   -- came back blank");
+            continue;
+        }
+        let name = format!("{label}-{index}-{}x{}.png", capture.width, capture.height);
+        let bytes = png::encode(capture.width, capture.height, &capture.rgb);
+        match std::fs::write(std::path::Path::new(&out).join(&name), &bytes) {
+            Ok(()) => {
+                println!("   -> {name}  ({} KB)", bytes.len() / 1024);
+                written += 1;
+            }
+            Err(e) => println!("   -- could not be written: {e}"),
+        }
+    }
+
+    if written == 0 {
+        return Err("nothing could be captured".into());
+    }
+    println!("\n{written} written to {out}");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn grab(_args: &[String]) -> Result<(), String> {
+    Err("capturing a live window is only implemented on Windows".to_string())
+}
 
 /// Prints what a postflop solve actually does, by hand strength.
 ///
