@@ -137,7 +137,57 @@ pub struct SitOut {
 /// be solitary is what keeps this from firing on the action row, where the
 /// buttons are red, or on anything else with a green control beside another.
 pub fn read_confirm(frame: &Frame) -> Option<ActionButton> {
-    read_sit_out(frame).map(|dialog| dialog.resume)
+    green_buttons(frame).into_iter().next()
+}
+
+/// Every solitary green button the frame holds, largest first.
+///
+/// Exposed so a caller that found nothing can say what it did see. A size band
+/// that quietly excludes the button in front of it is indistinguishable from no
+/// dialog at all, and that cost a run: `read_confirm` first borrowed the
+/// sit-out reader's limits, which were measured from its `I'm Back` button at
+/// 247 by 67, and the VPIP and CallTime dialogs draw theirs nearly twice as
+/// wide.
+pub fn green_buttons(frame: &Frame) -> Vec<ActionButton> {
+    /// Wide enough for every confirm the client draws. Measured across the
+    /// dialogs: the buy-in's is about 175 across, the sit-out's 247, and the
+    /// VPIP and CallTime notices stretch theirs to about 485.
+    const SIZE: ((usize, usize), (usize, usize)) = ((140, 620), (35, 130));
+    /// A button is a filled rectangle. Anything ragged is scenery.
+    const MIN_FILL: f32 = 0.80;
+
+    let (w, h) = (frame.width, frame.height);
+    let mut green = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            let (r, g, b) = (r as i16, g as i16, b as i16);
+            green[y * w + x] = g > 120 && g - r > 45 && g - b > 45;
+        }
+    }
+
+    let mut found: Vec<ActionButton> = Vec::new();
+    for bounds in components(&green, w, h) {
+        let (bw, bh) = (bounds.width(), bounds.height());
+        if !(SIZE.0 .0..=SIZE.0 .1).contains(&bw) || !(SIZE.1 .0..=SIZE.1 .1).contains(&bh) {
+            continue;
+        }
+        let lit = (bounds.y0..=bounds.y1)
+            .map(|y| (bounds.x0..=bounds.x1).filter(|x| green[y * w + x]).count())
+            .sum::<usize>();
+        if lit as f32 / ((bw * bh) as f32) < MIN_FILL {
+            continue;
+        }
+        found.push(ActionButton {
+            x: bounds.x0,
+            y: bounds.y0,
+            width: bw,
+            height: bh,
+            label_width: 0,
+        });
+    }
+    found.sort_by_key(|b| std::cmp::Reverse(b.width * b.height));
+    found
 }
 
 /// Finds the sit-out dialog, if it is showing.
