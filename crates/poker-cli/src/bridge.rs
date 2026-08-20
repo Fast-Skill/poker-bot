@@ -84,6 +84,17 @@ pub struct Decision {
     pub committed: Vec<u64>,
     /// Which seats still hold cards, indexed from the button.
     pub live: Vec<bool>,
+    /// Which seats have acted since the last full raise, indexed from the
+    /// button, and how many raises this street has seen.
+    ///
+    /// Neither is on the screen. A frame shows what is in front of each player,
+    /// not the order it arrived in, so these are what the live loop has been
+    /// keeping track of across frames rather than anything read off the felt.
+    /// Left at their defaults they describe a street nobody has acted on, which
+    /// is true at the moment a street opens and false afterwards — so a caller
+    /// that does not track history should not be consulting a postflop solve.
+    pub acted: Vec<bool>,
+    pub raises: u8,
     pub legal: LegalActions,
 }
 
@@ -104,6 +115,13 @@ impl Decision {
             stacks: &self.stacks,
             committed: &self.committed,
             live: &self.live,
+            // The two are the same reading here. Only this street's money sits
+            // in front of players; whatever went in earlier has been swept into
+            // the pot and is no longer attributable to a seat. Preflop that is
+            // the whole hand, which is why the preflop routing is exact.
+            street_committed: &self.committed,
+            acted: &self.acted,
+            raises: self.raises,
             big_blind: CHIPS_PER_BB as u64,
             legal: &self.legal,
         }
@@ -221,6 +239,8 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         to_call,
         stack,
         stacks,
+        acted: vec![false; seated],
+        raises: 0,
         committed,
         live,
         legal,

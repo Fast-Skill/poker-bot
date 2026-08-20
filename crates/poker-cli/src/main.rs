@@ -24,12 +24,13 @@ use poker_core::bench::{duplicate_match, AlwaysCall, AlwaysFold, AlwaysJam, Char
 use poker_core::blueprint::Blueprint;
 use poker_core::bot::BlueprintAgent;
 use poker_core::card::{Rank, NUM_RANKS};
-use poker_core::cfr::Solver;
+use poker_core::cfr::{InfoKey, Solver};
 use poker_core::betting::Action;
 use poker_core::equity::{exact, Variant};
 use poker_core::river::{Holding, River, Stage as RiverStage};
 use poker_core::table::{Agent, Deck, Table};
 use poker_core::telemetry::ConsoleMonitor;
+use poker_core::postflop::{Postflop, Sizing as PostflopSizing};
 use poker_core::preflop::{self, Preflop, Sizing};
 use poker_core::pushfold::{EquityTable, PushFold};
 use poker_core::ring::{Ladder, Ring};
@@ -64,6 +65,7 @@ fn main() -> ExitCode {
         Some("equity3") => equity3(&args[1..]),
         Some("equity") => equity_wide(&args[1..]),
         Some("textures") => textures(&args[1..]),
+        Some("compare") => compare(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
@@ -99,6 +101,7 @@ USAGE
   poker equity3 [options]          build the three-way equity table a 3-handed solve needs
   poker equity  [options]          build a wide equity table (--players 4..7)
   poker textures [options]         build the board sample a postflop solve needs
+  poker compare <a> <b>            how far apart two blueprints play
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
@@ -229,7 +232,7 @@ impl Kind {
             // live, who has acted and who raised last. There is no short name
             // for a situation like that, so there is nothing to look up by.
             Kind::Ring(_) => Err(
-                "ring3 blueprints have no named stages to query; the bot reads them                  directly. Use `poker info` to see what one contains."
+                "ring3 blueprints have no named stages to query; the bot reads them directly. Use `poker info` to see what one contains."
                     .to_string(),
             ),
             Kind::PushFold => match stage {
@@ -277,10 +280,19 @@ fn unknown_stage(kind: Kind, stage: &str) -> String {
 
 // --- commands ---------------------------------------------------------------
 
+/// Where solved postflop rungs are kept.
+const POSTFLOP_DIR: &str = "data/postflop";
+
 fn solve(args: &[String]) -> Result<(), String> {
     let game = args
         .first()
         .ok_or("solve needs a game; try `poker solve pushfold --out ...`")?;
+    // Intercepted before the preflop games, which it shares no parameters
+    // with: this one is sized by stack-to-pot ratio and reads board textures
+    // where they read equity tables.
+    if game == "postflop" {
+        return solve_postflop(&args[1..]);
+    }
     let kind = Kind::parse(game)?;
     let flags = Flags::parse(&args[1..])?;
 
@@ -352,10 +364,82 @@ fn solve(args: &[String]) -> Result<(), String> {
 
     println!("wrote {out}");
     println!("  information sets  {}", blueprint.len());
-    println!("  size              {} bytes", blueprint.size_on_disk());
+    println!("  size {} bytes", blueprint.size_on_disk());
     if let Some(exploitability) = blueprint.exploitability() {
         println!("  exploitability    {exploitability:.4} bb/hand");
     }
+    Ok(())
+}
+
+/// Solves the heads-up postflop tree at one stack-to-pot ratio.
+///
+/// # Why the ratio and not the stakes
+///
+/// What a player can do after the flop is set by how much is behind relative
+/// to what is already out there. Ten behind into a pot of ten offers exactly
+/// the decisions that a thousand behind into a pot of a thousand does. So the
+/// solve is indexed by that ratio, the pot is fixed at a round number, and one
+/// solve serves every table where the ratio matches.
+///
+/// The ratios worth having are the ones preflop actually produces: a four-bet
+/// pot leaves about 1.7, a three-bet pot about 5, a single raise about 18, and
+/// a limped pot more still.
+fn solve_postflop(args: &[String]) -> Result<(), String> {
+    use poker_core::texture::Textures;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["spr", "iterations", "textures", "out"])?;
+    let spr = flags.number("spr", 4.0)?;
+    if !(0.25..=64.0).contains(&spr) {
+        return Err(format!(
+            "--spr {spr} is outside 0.25..64; below that there is nothing to decide and above it the stack never comes into play"
+        ));
+    }
+    let iterations = flags.number("iterations", 20_000_000.0)? as usize;
+    let textures = flags.text("textures", "data/textures.bin");
+    let out = flags.required("out")?;
+
+    eprint!("board textures... ");
+    let sample = Textures::load(&textures).map_err(|e| {
+        format!(
+            "could not read {textures}: {e}
+  Build it with `poker textures --out {textures}`."
+        )
+    })?;
+    eprintln!(
+        "{} boards, {} strength groups",
+        sample.len(),
+        sample.buckets()
+    );
+
+    // A round pot keeps the printed sizes readable. Nothing depends on it: the
+    // solve sees prices and depths as fractions of the pot either way.
+    const POT: u32 = 100;
+    let stack = (POT as f64 * spr).round() as u32;
+    // The label carries everything a bot has to match, because a bot reads
+    // hand strength for itself rather than taking it from the solve. A
+    // blueprint cut into forty-eight strength groups means something different
+    // by "group 30" than one cut into twenty, and nothing else on disk says
+    // which this is.
+    let label = format!("postflop/spr{spr}/b{}", sample.buckets());
+
+    eprint!("solving {label} for {iterations} iterations... ");
+    let began = std::time::Instant::now();
+    let mut rng = Rng::new(SOLVE_SEED);
+    let game = Postflop::new(sample, POT, stack, PostflopSizing::default());
+    let mut solver = Solver::new(game);
+    solver.train_sampled(iterations, &mut rng);
+    let blueprint = Blueprint::from_solver(&solver, label);
+    eprintln!("done in {:.0}s", began.elapsed().as_secs_f64());
+
+    blueprint
+        .save(&out)
+        .map_err(|e| format!("could not write {out}: {e}"))?;
+
+    println!("wrote {out}");
+    println!("  pot / stack       {POT} / {stack}");
+    println!("  information sets  {}", blueprint.len());
+    println!("  size {} bytes", blueprint.size_on_disk());
     Ok(())
 }
 
@@ -365,9 +449,9 @@ fn info(args: &[String]) -> Result<(), String> {
     let kind = Kind::from_label(blueprint.label());
 
     println!("{path}");
-    println!("  label             {}", blueprint.label());
+    println!("  label {}", blueprint.label());
     println!("  information sets  {}", blueprint.len());
-    println!("  iterations        {}", blueprint.iterations());
+    println!("  iterations {}", blueprint.iterations());
     match blueprint.exploitability() {
         Some(value) => println!("  exploitability    {value:.4} bb/hand"),
         None => println!("  exploitability    not measured"),
@@ -375,10 +459,10 @@ fn info(args: &[String]) -> Result<(), String> {
     match kind {
         Ok(kind) => {
             let names: Vec<&str> = kind.stages().iter().map(|(name, _)| *name).collect();
-            println!("  game              {}", kind.name());
-            println!("  stages            {}", names.join(", "));
+            println!("  game {}", kind.name());
+            println!("  stages {}", names.join(", "));
         }
-        Err(message) => println!("  game              unrecognised ({message})"),
+        Err(message) => println!("  game unrecognised ({message})"),
     }
     Ok(())
 }
@@ -504,11 +588,11 @@ fn bench(args: &[String]) -> Result<(), String> {
     println!("  hands    {hands} per match (duplicate dealt)\n");
 
     for name in opponents {
-        let mut hero = BlueprintAgent::new(
-            "blueprint",
-            blueprint.clone(),
-            Sizing::default(),
+        let (hero, _) = load_postflop(
+            BlueprintAgent::new("blueprint", blueprint.clone(), Sizing::default()),
+            POSTFLOP_DIR,
         );
+        let mut hero = hero;
         let mut rng = Rng::new(SOLVE_SEED);
 
         let report = match name {
@@ -539,7 +623,7 @@ fn bench(args: &[String]) -> Result<(), String> {
         let (from_blueprint, total) = hero.coverage();
         println!("  {verdict}  {report}");
         println!(
-            "        blueprint decided {from_blueprint} of {total} spots ({:.0}%)\n",
+            " blueprint decided {from_blueprint} of {total} spots ({:.0}%)\n",
             hero.coverage_fraction() * 100.0
         );
     }
@@ -562,7 +646,12 @@ fn play(args: &[String]) -> Result<(), String> {
 
     let big_blind = 100u64;
     let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
-    let mut hero = BlueprintAgent::new("bot", blueprint.clone(), Sizing::default());
+    let (hero, depths) = load_postflop(
+        BlueprintAgent::new("bot", blueprint.clone(), Sizing::default()),
+        POSTFLOP_DIR,
+    );
+    let mut hero = hero;
+    println!("{}", postflop_summary(&depths));
     if monitor {
         // Shows what the bot believes it sees at every decision - the view an
         // overlay would render once a vision layer exists.
@@ -1037,7 +1126,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         "play" => Acting::Play,
         other => {
             return Err(format!(
-                "--act takes `off` to watch, `fold` to always fold, or `play` to act on                  the strategy; got {other:?}"
+                "--act takes `off` to watch, `fold` to always fold, or `play` to act on the strategy; got {other:?}"
             ))
         }
     };
@@ -1112,6 +1201,9 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             solved_sizes.push(seats);
         }
     }
+    let (with_postflop, depths) = load_postflop(agent, POSTFLOP_DIR);
+    agent = with_postflop;
+    println!("{}", postflop_summary(&depths));
     if solved_sizes.is_empty() {
         println!("solved   : heads-up only - multiway pots use the heuristic");
     } else {
@@ -1253,6 +1345,156 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 
 
 
+/// Every postflop rung that has been solved, attached to an agent.
+///
+/// Missing rungs are not an error. A ladder with gaps still plays the depths it
+/// has, and pots at the others fall through to the heuristic — worse, but far
+/// better than refusing to play. What is returned alongside is the list of
+/// depths actually loaded, so a caller can say plainly what is covered.
+///
+/// The board sample is not read. A solve needs it; a bot does not, because it
+/// reads strength off the board in front of it. The rungs cost kilobytes.
+fn load_postflop(mut agent: BlueprintAgent, dir: &str) -> (BlueprintAgent, Vec<f64>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (agent, Vec::new());
+    };
+    let mut paths: Vec<_> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "bin"))
+        .collect();
+    paths.sort();
+
+    let mut depths = Vec::new();
+    for path in paths {
+        let Ok(blueprint) = Blueprint::load(&path) else {
+            continue;
+        };
+        let Some((spr, buckets)) = postflop_label(blueprint.label()) else {
+            continue;
+        };
+        let stack = (100.0 * spr).round() as u32;
+        let game = Postflop::for_play(buckets, 100, stack, PostflopSizing::default());
+        agent = agent.with_postflop(spr, blueprint, game);
+        depths.push(spr);
+    }
+    depths.sort_by(f64::total_cmp);
+    (agent, depths)
+}
+
+/// Reads the depth and strength-group count out of a postflop label.
+///
+/// The label is written by `poker solve postflop` and looks like
+/// `postflop/spr4/b48`. Anything else is not a postflop blueprint, and saying
+/// so by returning nothing is what stops a preflop solve dropped into the same
+/// directory from being loaded as one.
+fn postflop_label(label: &str) -> Option<(f64, usize)> {
+    let mut parts = label.split('/');
+    if parts.next()? != "postflop" {
+        return None;
+    }
+    let spr: f64 = parts.next()?.strip_prefix("spr")?.parse().ok()?;
+    let buckets: usize = parts.next()?.strip_prefix('b')?.parse().ok()?;
+    (spr > 0.0 && buckets >= 2).then_some((spr, buckets))
+}
+
+/// A line describing what postflop coverage an agent has.
+fn postflop_summary(depths: &[f64]) -> String {
+    if depths.is_empty() {
+        return "postflop: none solved - the heuristic plays every flop".into();
+    }
+    let listed: Vec<String> = depths.iter().map(|spr| format!("{spr}")).collect();
+    format!(
+        "postflop: heads-up at {} times the pot; multiway uses the heuristic",
+        listed.join("/")
+    )
+}
+
+/// Reports how differently two blueprints play.
+///
+/// # What this is for
+///
+/// A solve converges when running it longer stops changing the answer. There
+/// is no way to read that off a single blueprint, so it is measured by solving
+/// twice at different lengths and comparing: if doubling the iterations barely
+/// moves the strategy, the extra iterations were not buying anything.
+///
+/// The distance at one information set is half the sum of the absolute
+/// differences between the two action distributions — the share of the time
+/// the two strategies would pick differently there. Zero is identical, one is
+/// no overlap at all.
+///
+/// The mean below counts every information set alike, including ones reached
+/// once in a thousand hands. It therefore reads slightly pessimistic: the rare
+/// nodes are the last to settle and the least costly to have wrong. The worst
+/// case is reported beside it because a mean can hide a single node that
+/// flipped outright.
+fn compare(args: &[String]) -> Result<(), String> {
+    let (first, second) = match args {
+        [first, second] => (first, second),
+        _ => return Err("compare needs two blueprint paths".into()),
+    };
+    let left = open(first)?;
+    let right = open(second)?;
+
+    let mut total = 0.0;
+    let mut worst: (f64, InfoKey) = (0.0, 0);
+    let mut shared = 0usize;
+    let mut only_left = 0usize;
+    let mut settled = 0usize;
+    for (key, here) in left.entries() {
+        let Some(there) = right.strategy(key) else {
+            only_left += 1;
+            continue;
+        };
+        if here.len() != there.len() {
+            return Err(format!(
+                "key {key} offers {} actions in {first} and {} in {second}; these are not the same game",
+                here.len(),
+                there.len()
+            ));
+        }
+        let distance: f64 = here
+            .iter()
+            .zip(there)
+            .map(|(a, b)| (a - b).abs() as f64)
+            .sum::<f64>()
+            / 2.0;
+        shared += 1;
+        total += distance;
+        settled += (distance < 0.01) as usize;
+        if distance > worst.0 {
+            worst = (distance, key);
+        }
+    }
+    let only_right = right.len() - shared;
+
+    println!("{first}");
+    println!("  vs {second}");
+    println!();
+    println!(
+        "  information sets  {} and {}, {shared} shared",
+        left.len(),
+        right.len()
+    );
+    if only_left + only_right > 0 {
+        println!("  reached by one only  {only_left} / {only_right}");
+    }
+    if shared == 0 {
+        println!("
+  nothing in common — different games, or different abstractions");
+        return Ok(());
+    }
+    println!();
+    println!("  mean distance     {:.4}", total / shared as f64);
+    println!("  worst {:.4} at key {}", worst.0, worst.1);
+    println!(
+        "  within 1% {settled} of {shared} ({:.0}%)",
+        100.0 * settled as f64 / shared as f64
+    );
+    Ok(())
+}
+
 /// Builds the board sample a postflop solve reads hand strength from.
 ///
 /// Each board carries every holding's strength at the flop, turn and river,
@@ -1260,11 +1502,15 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 /// board — so a hand that goes on to make a flush is not rated as though it
 /// already had. It also carries every holding's finished hand, because
 /// showdowns are settled exactly rather than by comparing strength groups.
+///
+/// Strength is exact: every card that could still come is dealt. That costs
+/// roughly a second per board and is what lets the bot read its own hand at the
+/// table the same way the solve was trained to read it.
 fn textures(args: &[String]) -> Result<(), String> {
     use poker_core::texture::Textures;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["boards", "buckets", "runouts", "threads", "seed", "out"])?;
+    flags.reject_unknown(&["boards", "buckets", "threads", "seed", "out"])?;
     let boards: usize = flags
         .text("boards", "10000")
         .parse()
@@ -1273,10 +1519,6 @@ fn textures(args: &[String]) -> Result<(), String> {
         .text("buckets", "24")
         .parse()
         .map_err(|_| "--buckets wants a number")?;
-    let runouts: u32 = flags
-        .text("runouts", "100")
-        .parse()
-        .map_err(|_| "--runouts wants a number")?;
     let threads: usize = flags
         .text("threads", "8")
         .parse()
@@ -1287,11 +1529,11 @@ fn textures(args: &[String]) -> Result<(), String> {
         .map_err(|_| "--seed wants a number")?;
     let out = flags.text("out", "data/textures.bin");
 
-    println!("{boards} boards, {buckets} strength groups, {runouts} runouts per street");
+    println!("{boards} boards, {buckets} strength groups, every runout dealt");
     println!("  seed   : {seed}  (identical whatever the core count)");
 
     let began = std::time::Instant::now();
-    let sample = Textures::sample(boards, buckets, runouts, seed, threads);
+    let sample = Textures::sample(boards, buckets, seed, threads);
     let took = began.elapsed();
     sample
         .save(&out)
@@ -1626,14 +1868,14 @@ hole   : {}", show(&table.hole));
             ] {
                 if let Some(b) = button {
                     let (x, y) = b.centre();
-                    println!("           {name:<11} click ({x}, {y})");
+                    println!(" {name:<11} click ({x}, {y})");
                 }
             }
         }
         Some(panel) => {
             println!("turn   : not yours - the buttons showing are the ones that arm");
-            println!("         an action in advance ({} of them). Clicking them would", panel.buttons.len());
-            println!("         decide the hand before it has been seen, so they are ignored.");
+            println!(" an action in advance ({} of them). Clicking them would", panel.buttons.len());
+            println!(" decide the hand before it has been seen, so they are ignored.");
         }
     }
     Ok(())
@@ -1720,3 +1962,40 @@ impl Flags {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A postflop label says what a bot has to match, and nothing else parses.
+    ///
+    /// The directory is scanned rather than listed, so whatever is dropped in
+    /// it gets opened. A preflop blueprint that parsed as a postflop one would
+    /// be attached as a rung and consulted with keys built for another game,
+    /// which is a silent misplay rather than an error.
+    #[test]
+    fn only_a_postflop_label_reads_as_a_postflop_rung() {
+        assert_eq!(postflop_label("postflop/spr4/b48"), Some((4.0, 48)));
+        assert_eq!(postflop_label("postflop/spr1.5/b20"), Some((1.5, 20)));
+
+        for wrong in [
+            "preflop/100bb",
+            "ring3/100bb",
+            "pushfold/10bb",
+            "postflop/spr4",
+            "postflop/b48/spr4",
+            "postflop/spr0/b48",
+            "postflop/sprx/b48",
+            "postflop/spr4/b1",
+            "postflop/spr4/48",
+            "",
+        ] {
+            assert_eq!(postflop_label(wrong), None, "{wrong:?} should not parse");
+        }
+    }
+
+    #[test]
+    fn a_ladder_with_no_rungs_says_so() {
+        assert!(postflop_summary(&[]).contains("none solved"));
+        assert!(postflop_summary(&[1.5, 6.0]).contains("1.5/6"));
+    }
+}

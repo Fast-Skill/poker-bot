@@ -75,6 +75,69 @@ impl Move {
     }
 }
 
+/// A postflop situation, described the way a table describes one.
+///
+/// # Why this exists
+///
+/// The solve is a tree, and a tree node knows things a table never says: whose
+/// holding is which index into which sampled board, how much of the stack the
+/// hand has spent, which node it descended from. A real table offers a
+/// different set of facts — a pot, a bet to call, what is behind, whose turn it
+/// is. Both have to arrive at the same information key, or the bot looks up a
+/// strategy solved for a spot it is not in — the failure that looks most like
+/// working.
+///
+/// So the key is built from this and only this, and both sides fill it in: the
+/// tree from its state, the table from what it can see. The test
+/// `a_spot_taken_from_the_tree_keys_the_same_as_the_tree` holds them together.
+///
+/// Amounts may be in whatever unit the caller counts in — chips, blinds,
+/// anything — because every use of them here is a ratio. What must not happen
+/// is two different units inside one spot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Spot {
+    pub street: Street,
+    /// Which side is acting: 0 acts last on every street, 1 acts first.
+    pub player: usize,
+    /// The acting player's strength group, from the same abstraction the solve
+    /// was trained on.
+    pub strength: u8,
+    /// Everything in the middle, this street's wagers included.
+    pub pot: u64,
+    /// The largest wager anyone has made this street.
+    pub bet: u64,
+    /// The acting player's own wager this street.
+    pub mine: u64,
+    /// What the acting player has left behind.
+    pub behind: u64,
+    /// What the other player has left behind.
+    ///
+    /// Only ever asked one question: whether there is anyone left to respond to
+    /// a raise. Betting into a player who is already all in cannot win a chip —
+    /// the excess comes straight back — and a real table will not accept the
+    /// action at all.
+    ///
+    /// It takes unequal stacks to reach, which is why the solve itself never
+    /// does: every seat there starts with the same amount, so a player who is
+    /// all in has by then put in at least as much as the other, and no raise is
+    /// offered anyway. A real table is not like that. An opponent sitting with
+    /// thirty blinds against the hero's hundred can be all in for a third of
+    /// what the hero still has behind, and without this the tree would offer a
+    /// raise the client refuses.
+    pub opponent_behind: u64,
+    /// Raises made this street. A first bet counts as the first raise.
+    pub raises: u8,
+    /// Bit per player, set when they have acted since the last raise.
+    pub acted: u8,
+}
+
+impl Spot {
+    /// What calling costs.
+    fn owed(&self) -> u64 {
+        self.bet.saturating_sub(self.mine)
+    }
+}
+
 /// How many raises a street allows before the only move left is all-in.
 const RAISE_CAP: u8 = 3;
 
@@ -130,7 +193,15 @@ impl State {
 /// anything.
 #[derive(Debug, Clone)]
 pub struct Postflop {
-    textures: Textures,
+    /// The sampled boards strength was measured on.
+    ///
+    /// Only the solver reads this. Every question the bot asks — which moves
+    /// exist, what they cost, which information set this is — is answered from
+    /// a [`Spot`], whose strength has already been read off the real board. So
+    /// a tree built for play carries none, and five rungs cost kilobytes rather
+    /// than three-quarters of a gigabyte.
+    textures: Option<Textures>,
+    buckets: usize,
     /// Chips in the pot when the flop is dealt.
     pot: u32,
     /// Chips each player has behind at that moment.
@@ -143,15 +214,56 @@ impl Postflop {
         assert!(pot > 0, "a hand that reaches a flop has something in the pot");
         assert!(stack > 0, "a player with nothing behind has no decisions left");
         Postflop {
-            textures,
+            buckets: textures.buckets(),
+            textures: Some(textures),
             pot,
             stack,
             sizing,
         }
     }
 
-    pub fn textures(&self) -> &Textures {
-        &self.textures
+    /// The same tree, for a bot rather than a solver.
+    ///
+    /// Carries no board sample. A bot reads strength off the board in front of
+    /// it — see [`crate::texture::Reader`] — and hands it over in a [`Spot`],
+    /// so the sample the solve was trained on is of no further use once the
+    /// solve exists.
+    ///
+    /// `buckets` must be the number the solve was trained with, and `pot` and
+    /// `stack` the ones it was solved at. None of the three changes an answer
+    /// here, but a tree that misreports what it is would route a bot to the
+    /// wrong rung.
+    pub fn for_play(buckets: usize, pot: u32, stack: u32, sizing: Sizing) -> Postflop {
+        Postflop {
+            textures: None,
+            buckets,
+            pot,
+            stack,
+            sizing,
+        }
+    }
+
+    /// How many groups hand strength is cut into.
+    pub fn buckets(&self) -> usize {
+        self.buckets
+    }
+
+    /// The board sample this tree solves from.
+    ///
+    /// # Panics
+    /// Panics if this tree was built for play. Every caller is inside the
+    /// solver, which cannot run without one, so the alternative is threading a
+    /// `Result` through the training loop to describe a state no solve can be
+    /// in.
+    fn sample(&self) -> &Textures {
+        self.textures
+            .as_ref()
+            .expect("this tree was built for play and has no board sample to solve from")
+    }
+
+    /// The board sample, if this tree carries one. Trees built for play do not.
+    pub fn textures(&self) -> Option<&Textures> {
+        self.textures.as_ref()
     }
 
     /// What a player still has behind.
@@ -190,38 +302,148 @@ impl Postflop {
         owed + (after_call as f64 * fraction).round() as u32
     }
 
+    /// What a move commits the acting player to this street.
+    ///
+    /// In the spot's own units, so a caller working in table chips gets chips
+    /// back. Kept here rather than in the bot because the solve's idea of a
+    /// size and the bot's have to be the same idea: a blueprint that said "bet
+    /// small" meant this amount, and betting a different one plays a strategy
+    /// nobody solved for.
+    ///
+    /// Folding and checking commit nothing beyond what is already in, so both
+    /// answer with what is already in.
+    pub fn target_of(&self, spot: &Spot, chosen: Move) -> u64 {
+        let after_call = spot.pot + spot.owed();
+        match chosen {
+            Move::Fold => spot.mine,
+            Move::Passive => spot.bet.min(spot.mine + spot.behind),
+            Move::Small | Move::Large => {
+                let fraction = if chosen == Move::Small {
+                    self.sizing.small
+                } else {
+                    self.sizing.large
+                };
+                let target = spot.bet + (after_call as f64 * fraction).round() as u64;
+                target.min(spot.mine + spot.behind)
+            }
+            Move::Jam => spot.mine + spot.behind,
+        }
+    }
+
+    /// The sizes this tree bets in.
+    pub fn sizing(&self) -> Sizing {
+        self.sizing
+    }
+
     /// The moves available here, in a fixed order so action indices are stable.
     fn moves(&self, state: &State) -> Vec<Move> {
-        let player = state.to_act as usize;
-        let owed = self.owed(state);
-        let mine = state.wagered[player];
-        let behind = self.behind(state, player);
+        self.moves_at(&self.spot_of(state, 0))
+    }
+
+    /// The moves available in a situation, however it came to be described.
+    ///
+    /// Public because the bot needs it: knowing which action a blueprint
+    /// probability belongs to means knowing this list, and the bot has a table
+    /// in front of it rather than a tree node.
+    pub fn moves_at(&self, spot: &Spot) -> Vec<Move> {
+        let owed = spot.owed();
         let mut moves = Vec::with_capacity(5);
 
         // Folding with nothing owed is legal and never right; offering it would
         // split regret across an action no strategy would take.
-        if mine < owed {
+        if owed > 0 {
             moves.push(Move::Fold);
         }
         moves.push(Move::Passive);
 
-        if state.raises < RAISE_CAP {
+        // Raising is only a move if somebody can answer it.
+        let contested = spot.opponent_behind > 0;
+
+        if contested && spot.raises < RAISE_CAP {
+            // The pot as it would stand after calling, which is what a bet
+            // sized "in the pot" is conventionally measured against.
+            let after_call = spot.pot + owed;
             for (fraction, sized) in [
                 (self.sizing.small, Move::Small),
                 (self.sizing.large, Move::Large),
             ] {
-                let target = self.raise_to(state, fraction);
+                let target = spot.bet + (after_call as f64 * fraction).round() as u64;
                 // A size at or beyond the stack is a jam under another name.
-                if target > owed && target < mine + behind {
+                if target > spot.bet && target < spot.mine + spot.behind {
                     moves.push(sized);
                 }
             }
         }
         // Jamming is only a distinct action if it puts in more than calling.
-        if mine + behind > owed {
+        if contested && spot.mine + spot.behind > spot.bet {
             moves.push(Move::Jam);
         }
         moves
+    }
+
+    /// How a tree node describes itself as a situation.
+    pub fn spot_of(&self, state: &State, strength: u8) -> Spot {
+        let player = state.to_act as usize;
+        Spot {
+            street: state.street,
+            player,
+            strength,
+            pot: state.pot() as u64,
+            bet: self.owed(state) as u64,
+            mine: state.wagered[player] as u64,
+            behind: self.behind(state, player) as u64,
+            opponent_behind: self.behind(state, 1 - player) as u64,
+            raises: state.raises,
+            acted: state.acted,
+        }
+    }
+
+    /// The information key for a situation, however it came to be described.
+    ///
+    /// This is the whole of the mapping between a solved strategy and a table.
+    /// What a player can see: their own strength, the street, whose turn it is,
+    /// how much betting has happened, what calling costs against the pot, how
+    /// deep the pot is against what is behind, and which moves are on offer.
+    pub fn key_at(&self, spot: &Spot) -> InfoKey {
+        let behind = spot.behind.max(1);
+        let pot = spot.pot.max(1);
+
+        // The price of continuing, which is most of what decides a call.
+        let price = ((spot.owed() as f64 / pot as f64) * 6.0).round().min(7.0) as u64;
+        // How much is behind relative to the pot, which decides how much room
+        // there is to play for. The same hand plays differently for a tenth of
+        // a stack than for all of it.
+        let depth = ((pot as f64 / behind as f64).log2().max(0.0) as u64).min(7);
+
+        // Which kinds of move exist here, stated rather than inferred.
+        //
+        // Two situations that offer different actions must never share a key:
+        // the solver stores its regrets against the key and trusts the count to
+        // match, so a collision indexes past the end of another node's actions.
+        // Facing an all-in and facing a small bet collided on everything else,
+        // being alike in street, price band and depth while offering two moves
+        // and five.
+        //
+        // One bit per optional move. Checking in the round — "are there any
+        // sizes" — was not enough: having only the small size looked identical
+        // to having both, and the two offer different numbers of actions.
+        // Checking in the flat is exact, since checking is always available and
+        // everything else is named here.
+        let moves = self.moves_at(spot);
+        let shape = [Move::Fold, Move::Small, Move::Large, Move::Jam]
+            .iter()
+            .enumerate()
+            .map(|(bit, wanted)| (moves.contains(wanted) as u64) << bit)
+            .fold(0, |mask, bit| mask | bit);
+
+        let mut key = street_index(spot.street) as u64;
+        key = (key << 1) | spot.player as u64;
+        key = (key << 3) | spot.raises.min(7) as u64;
+        key = (key << 2) | spot.acted as u64;
+        key = (key << 3) | price;
+        key = (key << 3) | depth;
+        key = (key << 4) | shape;
+        (key << 8) | spot.strength as u64
     }
 
     /// Moves the hand to the next street, or to showdown after the river.
@@ -292,7 +514,9 @@ impl Game for Postflop {
                 // Matched by definition — betting closed with both live — so
                 // the winner takes what the loser put in.
                 let at_risk = staked(0).min(staked(1));
-                match self.textures.showdown(
+                match self
+                    .sample()
+                    .showdown(
                     state.board as usize,
                     state.holdings[0] as usize,
                     state.holdings[1] as usize,
@@ -309,6 +533,10 @@ impl Game for Postflop {
         !state.dealt
     }
 
+    fn enumerable(&self) -> bool {
+        false
+    }
+
     /// Every board and holding pair, which is far too many to enumerate.
     ///
     /// A thousand boards times a million holding pairs is not a distribution
@@ -318,8 +546,9 @@ impl Game for Postflop {
     }
 
     fn sample_chance(&self, state: &State, rng: &mut Rng) -> State {
-        let board = rng.below(self.textures.len() as u64) as usize;
-        let holdings = self.textures.holdings(board);
+        let sample = self.sample();
+        let board = rng.below(sample.len() as u64) as usize;
+        let holdings = sample.holdings(board);
 
         // Two holdings that do not share a card, since both cannot hold it.
         let first = rng.below(HOLDINGS as u64) as usize;
@@ -350,53 +579,14 @@ impl Game for Postflop {
     fn info_key(&self, state: &State) -> InfoKey {
         let player = state.to_act as usize;
         let strength = self
-            .textures
-            .strength(state.board as usize, state.street, state.holdings[player] as usize)
-            .expect("postflop streets are bucketed") as u64;
-
-        // What the player can see: their own strength, the street, whose turn
-        // it is, how much betting has happened, what calling costs against the
-        // pot, how deep the pot is against what is behind, and which moves are
-        // on offer.
-        let behind = self.behind(state, player).max(1);
-        let owed = self.owed(state).saturating_sub(state.wagered[player]);
-        let pot = state.pot().max(1);
-
-        // The price of continuing, which is most of what decides a call.
-        let price = ((owed as f64 / pot as f64) * 6.0).round().min(7.0) as u64;
-        // How much is behind relative to the pot, which decides how much room
-        // there is to play for. The same hand plays differently for a tenth of
-        // a stack than for all of it.
-        let depth = ((pot as f64 / behind as f64).log2().max(0.0) as u64).min(7);
-
-        // Which kinds of move exist here, stated rather than inferred.
-        //
-        // Two situations that offer different actions must never share a key:
-        // the solver stores its regrets against the key and trusts the count to
-        // match, so a collision indexes past the end of another node's actions.
-        // Facing an all-in and facing a small bet collided on everything else,
-        // being alike in street, price band and depth while offering two moves
-        // and five.
-        // One bit per optional move. Checking in the round — "are there any
-        // sizes" — was not enough: having only the small size looked identical
-        // to having both, and the two offer different numbers of actions.
-        // Checking in the flat is exact, since checking is always available and
-        // everything else is named here.
-        let moves = self.moves(state);
-        let shape = [Move::Fold, Move::Small, Move::Large, Move::Jam]
-            .iter()
-            .enumerate()
-            .map(|(bit, wanted)| (moves.contains(wanted) as u64) << bit)
-            .fold(0, |mask, bit| mask | bit);
-
-        let mut key = street_index(state.street) as u64;
-        key = (key << 1) | player as u64;
-        key = (key << 3) | state.raises.min(7) as u64;
-        key = (key << 2) | state.acted as u64;
-        key = (key << 3) | price;
-        key = (key << 3) | depth;
-        key = (key << 4) | shape;
-        (key << 8) | strength
+            .sample()
+            .strength(
+                state.board as usize,
+                state.street,
+                state.holdings[player] as usize,
+            )
+            .expect("postflop streets are bucketed");
+        self.key_at(&self.spot_of(state, strength))
     }
 
     fn num_actions(&self, state: &State) -> usize {
@@ -465,7 +655,7 @@ mod tests {
     fn game() -> Postflop {
         // Ten big blinds in, a hundred behind, on a small sample of boards.
         Postflop::new(
-            Textures::sample(8, 10, 16, 0x7E47, 4),
+            Textures::sample(8, 10, 0x7E47, 4),
             1_000,
             10_000,
             Sizing::default(),
@@ -487,6 +677,48 @@ mod tests {
             state = game.apply(&state, index);
         }
         state
+    }
+
+    /// A raise is not offered when there is nobody left to answer it.
+    ///
+    /// Constructed rather than played, because a table where everyone starts
+    /// with the same stack cannot produce it: by the time one player is all in
+    /// they have put in at least as much as the other, and the sizes fall
+    /// outside what is left anyway. Unequal stacks are ordinary at a real
+    /// table, and that is where this matters.
+    #[test]
+    fn nobody_raises_into_a_player_who_is_already_all_in() {
+        let game = game();
+        // The hero has plenty behind; the opponent has shoved and has nothing.
+        let facing_a_shove = Spot {
+            street: Street::Flop,
+            player: 0,
+            strength: 5,
+            pot: 260,
+            bet: 200,
+            mine: 20,
+            behind: 400,
+            opponent_behind: 0,
+            raises: 1,
+            acted: 0b10,
+        };
+        assert_eq!(
+            game.moves_at(&facing_a_shove),
+            vec![Move::Fold, Move::Passive],
+            "there is nothing to do against a shove but pay it or not"
+        );
+
+        // The same spot with the opponent still holding chips is a real
+        // decision, which is what makes the difference above meaningful.
+        let contested = Spot {
+            opponent_behind: 300,
+            ..facing_a_shove
+        };
+        let moves = game.moves_at(&contested);
+        assert!(
+            moves.contains(&Move::Jam),
+            "with chips behind on both sides a raise is a move; got {moves:?}"
+        );
     }
 
     #[test]

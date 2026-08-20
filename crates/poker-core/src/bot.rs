@@ -23,10 +23,47 @@ use crate::betting::{Action, Street};
 use crate::blueprint::Blueprint;
 use crate::abstraction::HandClass;
 use crate::preflop::{self, Preflop, Sizing};
+use crate::postflop::{self, Postflop, Spot};
 use crate::ring::{Move, Ring};
 use crate::rng::Rng;
 use crate::table::{Agent, Position, View};
+use crate::texture::Reader;
 use crate::telemetry::{Confidence, DecisionRecord, Observer, Perception, Source};
+
+/// Turns a solved move into something the table will accept.
+///
+/// The size comes from the tree rather than being recomputed here, so that a
+/// blueprint which said "bet small" bets the amount it was solved for. What is
+/// added is the table's own rules: a raise has a legal minimum and maximum, and
+/// a size the tree named may fall outside them when the pot is small next to
+/// the blind. Clamping keeps the action — a small bet stays the smallest bet on
+/// offer — where refusing would hand an ordinary spot to the fallback.
+///
+/// `None` when even the clamped action is not legal, which should not happen
+/// and is not worth guessing through if it does.
+fn table_action(
+    view: &View,
+    game: &Postflop,
+    spot: &Spot,
+    chosen: postflop::Move,
+) -> Option<Action> {
+    let action = match chosen {
+        postflop::Move::Fold => Action::Fold,
+        postflop::Move::Passive => {
+            if view.to_call == 0 {
+                Action::Check
+            } else {
+                Action::Call
+            }
+        }
+        postflop::Move::Small | postflop::Move::Large | postflop::Move::Jam => {
+            let (least, most) = view.legal.raise_to?;
+            Action::RaiseTo(game.target_of(spot, chosen).clamp(least, most))
+        }
+    };
+    view.legal.permits(action).then_some(action)
+}
+
 
 /// Which abstract action a blueprint index means, per stage.
 ///
@@ -37,6 +74,27 @@ enum Abstract {
     Passive,
     Raise,
     Jam,
+}
+
+/// A postflop solve and the depth it was solved at.
+///
+/// # Why there is a ladder rather than one solve
+///
+/// What can happen after the flop is set by how much is behind relative to what
+/// is already in the middle. A pot of ten with ten behind offers exactly the
+/// decisions a pot of a thousand with a thousand behind does, and neither
+/// resembles a pot of ten with four hundred behind. So the solves are indexed
+/// by that ratio and a real pot is routed to the nearest.
+///
+/// Preflop decides which rungs matter. A four-bet pot leaves roughly 1.7 behind
+/// per unit of pot, a three-bet pot about 5, a single raise about 18, a limped
+/// pot more still.
+#[derive(Debug)]
+struct Rung {
+    /// Stack-to-pot ratio this was solved at.
+    spr: f64,
+    blueprint: Blueprint,
+    game: Postflop,
 }
 
 /// A bot that plays a stored strategy.
@@ -55,6 +113,19 @@ pub struct BlueprintAgent {
     /// behind. Choosing by the live count would discard the solve that prices
     /// it properly.
     rings: Vec<Option<(Blueprint, Ring)>>,
+    /// Solved postflop strategies, ascending by the depth they were solved at.
+    ///
+    /// Heads-up only. A pot with three players still in it after the flop is a
+    /// game this tree does not model, and consulting it anyway would price a
+    /// bet against one opponent's range when there are two — so those fall to
+    /// the fallback and are counted.
+    postflop: Vec<Rung>,
+    /// Ranks the hero's hand on the board actually showing.
+    ///
+    /// The sampled boards a solve trained on are twenty thousand of two and a
+    /// half million, so the board in play is almost never among them. What
+    /// carries across is the procedure, not the table: this repeats it.
+    reader: Option<Reader>,
     /// Covers postflop, and any preflop spot the blueprint does not hold.
     fallback: ChartBot,
     /// Preflop decisions taken so far this hand, used to tell an open from a
@@ -83,6 +154,8 @@ impl BlueprintAgent {
         BlueprintAgent {
             name: name.into(),
             rings: vec![None; crate::wide::MAX_PLAYERS + 1],
+            postflop: Vec::new(),
+            reader: None,
             blueprint,
             sizing,
             fallback: ChartBot::default(),
@@ -109,6 +182,164 @@ impl BlueprintAgent {
         let seats = ring.seats();
         self.rings[seats] = Some((blueprint, ring));
         self
+    }
+
+    /// Attaches a solved postflop strategy for one stack-to-pot ratio.
+    ///
+    /// The `game` must be the one the blueprint was solved from — same sizes,
+    /// same strength abstraction — because the blueprint is keyed against that
+    /// game's information sets and a mismatch looks up the wrong ones while
+    /// appearing to work.
+    ///
+    /// Call it once per rung, in any order.
+    ///
+    /// # Panics
+    /// Panics if the rungs disagree about how many strength groups there are.
+    /// They index the same abstraction, and two solves that cut hand strength
+    /// differently cannot be routed between: the same hand would be a different
+    /// number depending on which rung answered.
+    pub fn with_postflop(mut self, spr: f64, blueprint: Blueprint, game: Postflop) -> BlueprintAgent {
+        let buckets = game.buckets();
+        match &self.reader {
+            Some(reader) => assert_eq!(
+                reader.buckets(),
+                buckets,
+                "postflop rungs disagree on how many strength groups there are"
+            ),
+            None => self.reader = Some(Reader::new(buckets)),
+        }
+        self.postflop.push(Rung {
+            spr,
+            blueprint,
+            game,
+        });
+        self.postflop
+            .sort_by(|a, b| a.spr.total_cmp(&b.spr));
+        self
+    }
+
+    /// The stack-to-pot ratios this agent has a postflop solve for, ascending.
+    pub fn solved_depths(&self) -> Vec<f64> {
+        self.postflop.iter().map(|rung| rung.spr).collect()
+    }
+
+    /// Which rung is nearest the depth a pot is actually being played at.
+    ///
+    /// Nearest by ratio rather than by difference, because depths grow
+    /// multiplicatively. Between rungs at 3 and 12, a pot at 6 sits nearer 12
+    /// by difference while being the same distance from either as a price.
+    fn rung_for(&self, spr: f64) -> Option<&Rung> {
+        self.postflop.iter().min_by(|a, b| {
+            let gap = |rung: &Rung| (rung.spr / spr).max(spr / rung.spr);
+            gap(a).total_cmp(&gap(b))
+        })
+    }
+
+    /// The situation a view describes, as the postflop tree would describe it.
+    ///
+    /// `None` when the view is not one this tree models: not postflop, not
+    /// heads-up, or a board that did not read.
+    fn spot_for(&mut self, view: &View) -> Option<Spot> {
+        if view.street == Street::Preflop || view.active != 2 {
+            return None;
+        }
+        if !(3..=5).contains(&view.board.len()) {
+            return None;
+        }
+        let strength = self.reader.as_mut()?.strength(view.board, view.hole)?;
+
+        // Who acts last. Postflop the order runs from the seat after the button
+        // round to the button itself, so the last live seat in that order has
+        // position — and position, not the blind that was posted, is what the
+        // tree means by player 0.
+        let last = (1..view.players)
+            .chain(std::iter::once(0))
+            .rfind(|seat| view.live[*seat])?;
+
+        let bet = view
+            .street_committed
+            .iter()
+            .enumerate()
+            .filter(|(seat, _)| view.live[*seat])
+            .map(|(_, amount)| *amount)
+            .max()
+            .unwrap_or(0);
+        let mine = *view.street_committed.get(view.seat)?;
+
+        // The tree numbers the two sides by position; the table numbers them by
+        // seat. `acted` is a bit per tree player, so it has to be translated,
+        // not copied.
+        let hero = usize::from(view.seat != last);
+        let mut acted = 0u8;
+        for (seat, done) in view.acted.iter().enumerate() {
+            if !view.live[seat] || !done {
+                continue;
+            }
+            acted |= 1 << usize::from(seat != last);
+        }
+
+        Some(Spot {
+            street: view.street,
+            player: hero,
+            strength,
+            pot: view.pot,
+            bet,
+            mine,
+            behind: view.stack,
+            // The one opponent left, since this only runs on heads-up pots.
+            opponent_behind: view
+                .stacks
+                .iter()
+                .enumerate()
+                .filter(|(seat, _)| view.live[*seat] && *seat != view.seat)
+                .map(|(_, stack)| *stack)
+                .max()
+                .unwrap_or(0),
+            raises: view.raises,
+            acted,
+        })
+    }
+
+    /// Consults a postflop solve, if one covers this spot.
+    fn postflop_action(&mut self, view: &View, rng: &mut Rng) -> Option<Consulted> {
+        if self.postflop.is_empty() {
+            return None;
+        }
+        let spot = self.spot_for(view)?;
+
+        // The depth this pot is being played at, measured as the street opened
+        // rather than as it stands. Measuring it mid-street would move the bot
+        // between solves as bets went in, and a hand that consulted one strategy
+        // to check and another to face the raise is playing neither.
+        let settled = view.pot.saturating_sub(
+            view.street_committed
+                .iter()
+                .enumerate()
+                .filter(|(seat, _)| view.live[*seat])
+                .map(|(_, amount)| *amount)
+                .sum::<u64>(),
+        );
+        let spr = (spot.behind + spot.mine) as f64 / settled.max(1) as f64;
+        let rung = self.rung_for(spr)?;
+
+        let key = rung.game.key_at(&spot);
+        let strategy = rung.blueprint.strategy(key)?;
+        let moves = rung.game.moves_at(&spot);
+        // A blueprint offering a different number of actions than the tree
+        // offers here is a key meaning something else. Better to fall through
+        // than to play the wrong index.
+        if strategy.len() != moves.len() {
+            return None;
+        }
+
+        let chosen = rung.blueprint.sample(key, rng)?;
+        let action = table_action(view, &rung.game, &spot, moves[chosen])?;
+        let frequencies = moves
+            .iter()
+            .zip(strategy.iter())
+            .map(|(mv, share)| (mv.name().to_string(), *share as f64))
+            .collect();
+        Some((action, frequencies, key, 2))
     }
 
     /// The pot sizes this agent has a solved strategy for, ascending.
@@ -396,13 +627,42 @@ impl Agent for BlueprintAgent {
             return action;
         }
 
+        // Postflop, if a solve covers the spot. Tried after the preflop ring so
+        // that the two never contend: they answer disjoint streets.
+        if let Some((action, frequencies, key, _)) = self.postflop_action(view, rng) {
+            if let Some(observer) = self.observer.as_mut() {
+                observer.on_decision(&DecisionRecord {
+                    hand: self.hand,
+                    perception: Perception {
+                        hole: view.hole,
+                        board: view.board.to_vec(),
+                        street: view.street,
+                        position: view.position,
+                        pot: view.pot,
+                        to_call: view.to_call,
+                        stacks: view.stacks.to_vec(),
+                        confidence: Confidence::certain(),
+                    },
+                    source: Source::Blueprint {
+                        key,
+                        spot: format!("heads-up {:?}", view.street).to_lowercase(),
+                    },
+                    action,
+                    frequencies,
+                });
+            }
+            return action;
+        }
+
         // Resolve the spot first, so a watcher can be told which one it was
         // even when the lookup then fails.
         let stage = self.stage_for(view);
         let mut source = Source::Fallback {
             reason: match view.street {
                 Street::Preflop => "preflop line beyond the solved ladder",
-                _ => "no postflop solve yet",
+                _ if self.postflop.is_empty() => "no postflop solve loaded",
+                _ if view.active > 2 => "postflop pot with more than two players",
+                _ => "postflop spot beyond the solved ladder",
             },
         };
         let mut frequencies = Vec::new();
@@ -492,6 +752,7 @@ mod tests {
     use crate::cfr::Solver;
     use crate::pushfold::EquityTable;
     use crate::table::Table;
+    use crate::texture::Textures;
 
     /// A small solve is enough to exercise the plumbing; the benchmarks use a
     /// properly trained blueprint.
@@ -507,6 +768,127 @@ mod tests {
 
     fn table() -> Table {
         Table::standard()
+    }
+
+    /// Every move the postflop tree offers must be one the table will accept.
+    ///
+    /// # The failure this exists to catch
+    ///
+    /// The tree and the table describe the same game in different languages,
+    /// and a solved strategy is only worth anything if the translation between
+    /// them holds. When it does not, the bot does not crash — it names an
+    /// action the client refuses, falls through to the heuristic, and plays
+    /// badly while appearing to consult a solve. Nothing in a session log looks
+    /// wrong.
+    ///
+    /// So this plays real hands and, at every postflop spot the tree claims to
+    /// cover, asks it for its whole action list and checks each one against
+    /// what the table says is legal.
+    ///
+    /// The probe raises as well as calling, which is the point: a version that
+    /// only checked and called reached a hundred spots and tested nothing, all
+    /// of them being the same undisturbed check-through. Betting is what
+    /// produces prices, re-raises, and short stacks.
+    ///
+    /// No blueprint is needed. What is under test is the mapping, not the
+    /// strategy, and a solve would only slow the test down.
+    #[test]
+    fn every_postflop_move_the_tree_offers_is_one_the_table_allows() {
+        struct Probe {
+            bot: BlueprintAgent,
+            game: Postflop,
+            checked: usize,
+        }
+
+        impl Agent for Probe {
+            fn name(&self) -> &str {
+                "probe"
+            }
+
+            fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
+                if let Some(spot) = self.bot.spot_for(view) {
+                    assert_eq!(
+                        spot.pot,
+                        view.pot,
+                        "the spot and the table disagree about the pot"
+                    );
+                    assert!(
+                        spot.bet >= spot.mine,
+                        "the spot has the actor wagering {} into a bet of {}",
+                        spot.mine,
+                        spot.bet
+                    );
+                    for chosen in self.game.moves_at(&spot) {
+                        let action = table_action(view, &self.game, &spot, chosen);
+                        assert!(
+                            action.is_some(),
+                            "the tree offers {} on the {:?} at {spot:?}, which the table refuses: {:?}",
+                            chosen.name(),
+                            view.street,
+                            view.legal
+                        );
+                    }
+                    self.checked += 1;
+                }
+                // Play on, and play widely: the offer is what is under test,
+                // and it only varies if the betting does.
+                let raise = view.legal.raise_to.map(|(least, most)| {
+                    let span = most - least;
+                    Action::RaiseTo(least + if span == 0 { 0 } else { rng.below(span + 1) })
+                });
+                match rng.below(6) {
+                    0 if view.legal.can_fold => Action::Fold,
+                    1 | 2 => raise.unwrap_or(if view.to_call == 0 {
+                        Action::Check
+                    } else {
+                        Action::Call
+                    }),
+                    _ if view.to_call == 0 => Action::Check,
+                    _ => Action::Call,
+                }
+            }
+        }
+
+        // A tiny sample: the boards only have to be real, since the strength
+        // read off them is not what is being checked.
+        let game = Postflop::new(
+            Textures::sample(4, 12, 0x51DE, 4),
+            100,
+            400,
+            postflop::Sizing::default(),
+        );
+        let mut probe = Probe {
+            bot: agent(100.0).with_postflop(
+                4.0,
+                Blueprint::from_profile(&Default::default(), "empty"),
+                Postflop::new(
+                    Textures::sample(4, 12, 0x51DE, 4),
+                    100,
+                    400,
+                    postflop::Sizing::default(),
+                ),
+            ),
+            game,
+            checked: 0,
+        };
+
+        let table = table();
+        let mut rng = Rng::new(0xB0A7);
+        let mut deck = crate::table::Deck::fresh();
+        for seats in 2..=6 {
+            for _ in 0..120 {
+                deck.shuffle(&mut rng);
+                let mut others: Vec<AlwaysCall> = (0..seats - 1).map(|_| AlwaysCall).collect();
+                let mut agents: Vec<&mut dyn Agent> = vec![&mut probe];
+                agents.extend(others.iter_mut().map(|a| a as &mut dyn Agent));
+                table.play_hand(&mut agents, deck.hand_cards(seats), &mut rng);
+            }
+        }
+        assert!(
+            probe.checked > 100,
+            "only {} postflop spots were reached, too few to have tested anything",
+            probe.checked
+        );
     }
 
     #[test]
@@ -593,6 +975,9 @@ mod tests {
             stacks: &[1_000, 0],
             committed: &[500, 1_000],
             live: &[true, true],
+            street_committed: &[500, 1_000],
+            acted: &[false, false],
+            raises: 0,
             big_blind: 100,
             legal: &legal,
         };
@@ -649,6 +1034,9 @@ mod tests {
             stacks: &[10_000, 9_950, 9_900],
             committed: &[0, 50, 100],
             live: &[false, true, true],
+            street_committed: &[0, 50, 100],
+            acted: &[false, false, false],
+            raises: 0,
             big_blind: 100,
             legal: &legal,
         };
@@ -709,6 +1097,9 @@ mod tests {
             stacks: &[10_000; 4],
             committed: &[0, 50, 100, 100],
             live: &[true, true, true, true],
+            street_committed: &[0, 50, 100, 100],
+            acted: &[false, false, false, false],
+            raises: 0,
             big_blind: 100,
             legal: &legal,
         };
@@ -771,6 +1162,9 @@ mod tests {
             stacks: &[10_000, 9_950, 9_900],
             committed: &[0, 50, 100],
             live: &[true, true, true],
+            street_committed: &[0, 50, 100],
+            acted: &[false, false, false],
+            raises: 0,
             big_blind: 100,
             legal: &legal,
         };
@@ -783,7 +1177,7 @@ mod tests {
         assert_eq!(
             solved_after,
             solved_before + 1,
-            "aces on the button should be decided by the three-handed solve,              not fall through to the heuristic"
+            "aces on the button should be decided by the three-handed solve, not fall through to the heuristic"
         );
         assert!(
             legal.permits(action),
@@ -818,6 +1212,9 @@ mod tests {
             stacks: &[1_000, 1_000],
             committed: &[100, 100],
             live: &[true, true],
+            street_committed: &[100, 100],
+            acted: &[false, false],
+            raises: 0,
             big_blind: 100,
             legal: &legal,
         };

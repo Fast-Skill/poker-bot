@@ -64,6 +64,18 @@ pub trait Game {
         }
     }
 
+    /// Whether the tree can be walked exhaustively.
+    ///
+    /// Exact methods — vanilla CFR, and the best-response walk behind
+    /// exploitability — enumerate chance at every deal. A game whose deals
+    /// number in the millions cannot be walked at all, only sampled, and says
+    /// so here. The point is that callers ask for a number that exists:
+    /// without this they reach [`Game::chance_outcomes`], which such a game
+    /// can only answer by panicking.
+    fn enumerable(&self) -> bool {
+        true
+    }
+
     /// Whether chance acts here rather than a player.
     fn is_chance(&self, state: &Self::State) -> bool;
 

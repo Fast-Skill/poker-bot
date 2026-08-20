@@ -113,6 +113,17 @@ impl Seat {
     pub fn is_live(&self) -> bool {
         !self.folded && !self.is_all_in()
     }
+
+    /// Whether this seat has acted since the last full raise.
+    ///
+    /// Not the same as having acted this street: a raise puts the decision back
+    /// to everyone behind it, and this follows that. A solved strategy needs
+    /// the distinction, since checking behind and checking to a player still to
+    /// act are different spots.
+    #[inline]
+    pub fn has_acted(&self) -> bool {
+        self.has_acted
+    }
 }
 
 /// What the player to act may legally do.
@@ -178,6 +189,8 @@ pub struct BettingRound {
     /// Fixed reference size, normally the big blind, used as the opening bet
     /// minimum after the flop.
     big_blind: u64,
+    /// Raises made on this street, blind posts excluded.
+    raises: u8,
 }
 
 impl BettingRound {
@@ -198,6 +211,7 @@ impl BettingRound {
             current_bet,
             min_raise_increment: big_blind.max(1),
             big_blind: big_blind.max(1),
+            raises: 0,
         };
         round.seek_actor_from(first_to_act);
         round
@@ -228,6 +242,15 @@ impl BettingRound {
 
     pub fn seats(&self) -> &[Seat] {
         &self.seats
+    }
+
+    /// Raises made on this street, blind posts excluded.
+    ///
+    /// Reset when the street turns over. Postflop this counts a first bet as
+    /// the first raise, matching how a solved tree counts them: with nothing
+    /// wagered, betting is raising a current bet of zero.
+    pub fn raises(&self) -> u8 {
+        self.raises
     }
 
     /// The highest commitment on this street.
@@ -350,6 +373,7 @@ impl BettingRound {
                     self.seats[actor].has_acted = true;
                 }
                 self.current_bet = to;
+                self.raises = self.raises.saturating_add(1);
             }
         }
 
@@ -401,6 +425,7 @@ impl BettingRound {
             seat.committed = 0;
             seat.has_acted = false;
         }
+        self.raises = 0;
         self.current_bet = 0;
         self.min_raise_increment = self.big_blind;
         self.to_act = first_to_act;

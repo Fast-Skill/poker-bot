@@ -103,8 +103,11 @@ impl Blueprint {
     /// a larger game simply carries none.
     pub fn from_solver<G: Game>(solver: &Solver<G>, label: impl Into<String>) -> Blueprint {
         let profile = solver.profile();
-        let exploitability = (solver.game().players() == 2)
-            .then(|| solver.exploitability(&profile));
+        // Exploitability is a two-player idea, and measuring it means walking
+        // the whole tree — so a game that can only be sampled has no number
+        // here rather than a guess at one.
+        let measurable = solver.game().players() == 2 && solver.game().enumerable();
+        let exploitability = measurable.then(|| solver.exploitability(&profile));
         Blueprint {
             iterations: solver.iterations(),
             exploitability,

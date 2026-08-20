@@ -69,6 +69,21 @@ pub struct View<'a> {
     pub committed: &'a [u64],
     /// Which seats still hold cards, indexed by seat.
     pub live: &'a [bool],
+    /// Every seat's commitment on this street alone, indexed by seat.
+    ///
+    /// Separate from `committed`, which is the whole hand. A postflop solve
+    /// prices a bet against the pot it faces now, and needs to know which part
+    /// of the pot is already settled and which is still live in front of
+    /// players.
+    pub street_committed: &'a [u64],
+    /// Which seats have acted since the last full raise, indexed by seat.
+    ///
+    /// Not simply "has acted this street": a raise puts the decision back to
+    /// everyone behind it. Checking behind and checking to a player still to
+    /// act are different spots, and this is what separates them.
+    pub acted: &'a [bool],
+    /// Raises made on this street, blind posts excluded.
+    pub raises: u8,
     /// The big blind, so sizes can be reasoned about in blinds.
     pub big_blind: u64,
     /// What is legal here. An agent returning anything else is a bug.
@@ -301,6 +316,9 @@ impl Table {
                 let stacks: Vec<u64> = round.seats().iter().map(|s| s.stack).collect();
                 let committed = round.contributions();
                 let live: Vec<bool> = round.seats().iter().map(|s| !s.folded).collect();
+                let street_committed: Vec<u64> =
+                    round.seats().iter().map(|s| s.committed).collect();
+                let acted: Vec<bool> = round.seats().iter().map(|s| s.has_acted()).collect();
                 let view = View {
                     hole: hole[seat],
                     board,
@@ -315,6 +333,9 @@ impl Table {
                     stacks: &stacks,
                     committed: &committed,
                     live: &live,
+                    street_committed: &street_committed,
+                    acted: &acted,
+                    raises: round.raises(),
                     big_blind: self.big_blind,
                     legal: &legal,
                 };

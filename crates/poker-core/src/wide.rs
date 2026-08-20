@@ -532,7 +532,7 @@ impl Showdown {
         let players = table.players();
         assert!(
             (4..=MAX_PLAYERS).contains(&players),
-            "two- and three-way pots are settled exactly; a {players}-way table              would be consulted for neither"
+            "two- and three-way pots are settled exactly; a {players}-way table would be consulted for neither"
         );
         self.wide[players] = Some(table);
         self
