@@ -174,6 +174,22 @@ pub struct Session {
     glyphs: GlyphTemplates,
     hero: HeroTemplates,
     pub safety: Safety,
+    /// Where to record the whole session, frame by frame.
+    ///
+    /// # Why a transcript and not just failures
+    ///
+    /// Everything else kept here is kept because something already went wrong:
+    /// a frame that would not read, a turn the hero was asked to take. That
+    /// finds the faults already suspected and no others. A table the reader
+    /// misunderstands *confidently* leaves no trace at all — the seat count
+    /// drifting, a folded player still counted in, a situation nobody thought
+    /// to check — and those are the ones that quietly change what the bot does.
+    ///
+    /// So this writes a line for every reading, whether or not anything is
+    /// wrong with it, and pictures alongside up to a bound. Read back in order
+    /// the lines show what could not be seen in any single frame: a figure that
+    /// jumps, a seat that vanishes and returns, a hand whose pot goes backwards.
+    pub record: Option<PathBuf>,
     /// Where to keep a picture of every frame where the hero is asked to act.
     ///
     /// Different from `keep_unread`, which keeps the frames the reader gave up
@@ -201,6 +217,8 @@ pub struct Session {
     retreats: usize,
     last_retreat: Option<Held>,
     turns: usize,
+    frames: usize,
+    pictured: usize,
 }
 
 /// How long the hero may be to act before the bot stops holding out for a
@@ -265,6 +283,7 @@ impl Session {
             glyphs,
             hero,
             safety,
+            record: None,
             keep_turns: None,
             keep_unread: None,
             started_with: None,
@@ -273,6 +292,8 @@ impl Session {
             retreats: 0,
             last_retreat: None,
             turns: 0,
+            frames: 0,
+            pictured: 0,
         }
     }
 
@@ -424,6 +445,94 @@ impl Session {
             return (Some(view), Some(Held::NotAdding));
         }
         (Some(view), None)
+    }
+
+    /// Writes one line describing a reading, and a picture beside it.
+    ///
+    /// The line is written for every frame; pictures stop at [`Session::FRAMES`]
+    /// because they are megabytes each and the lines are bytes. Between them the
+    /// lines say *when* something went wrong and the pictures say *what* was on
+    /// screen, which is the pair needed to fix a reader.
+    pub fn record(&mut self, view: Option<&TableView>, held: Option<&Held>) {
+        let Some(dir) = self.record.clone() else {
+            return;
+        };
+        let _ = std::fs::create_dir_all(&dir);
+        self.frames += 1;
+
+        let line = match view {
+            None => format!(
+                "{:05} -- no reading -- {}\n",
+                self.frames,
+                held.map(|h| h.explain()).unwrap_or_default()
+            ),
+            Some(view) => {
+                let seats: Vec<String> = view
+                    .seats
+                    .iter()
+                    .map(|seat| {
+                        format!(
+                            "{}{}{}/{}",
+                            if seat.hero { "*" } else { "" },
+                            if seat.in_hand { "c" } else { "-" },
+                            seat.stack.map(|s| format!("{s}")).unwrap_or_else(|| "?".into()),
+                            seat.bet.map(|b| format!("{b}")).unwrap_or_else(|| "-".into()),
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{:05} pot {} coll {} board [{}] hole [{}] button {} act {} refused {} live {}/{} | {} | {}\n",
+                    self.frames,
+                    view.pot.map(|p| format!("{p}")).unwrap_or_else(|| "?".into()),
+                    view.collected.map(|c| format!("{c}")).unwrap_or_else(|| "-".into()),
+                    view.board.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "),
+                    view.hole.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "),
+                    view.button.map(|b| format!("{b}")).unwrap_or_else(|| "?".into()),
+                    if view.action.is_some() { "yes" } else { "no" },
+                    view.refusals,
+                    view.active(),
+                    view.occupied(),
+                    seats.join(" "),
+                    held.map(|h| h.explain()).unwrap_or_else(|| "ACTIONABLE".into()),
+                )
+            }
+        };
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("reading.log"))
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+
+        if self.pictured >= Session::FRAMES {
+            return;
+        }
+        let Some(capture) = self.window.capture() else {
+            return;
+        };
+        if capture.is_blank() {
+            return;
+        }
+        let name = format!("frame-{:05}.png", self.frames);
+        let bytes = crate::png::encode(capture.width, capture.height, &capture.rgb);
+        if std::fs::write(dir.join(name), bytes).is_ok() {
+            self.pictured += 1;
+        }
+    }
+
+    /// How many pictures a recorded session keeps.
+    ///
+    /// A window is several megabytes uncompressed, so this is a few gigabytes
+    /// at the top end — enough for a couple of minutes of continuous play,
+    /// which is what it takes to see a hand through from deal to showdown
+    /// several times over.
+    const FRAMES: usize = 400;
+
+    /// How much of the session was recorded.
+    pub fn recorded(&self) -> (usize, usize) {
+        (self.frames, self.pictured)
     }
 
     /// Saves a picture of the table on the hero's turn, if asked to.

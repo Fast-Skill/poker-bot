@@ -1120,7 +1120,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns", "record"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -1133,6 +1133,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let ring_dir = flags.text("ring", "data");
     let keep_unread = flags.text("keep-unread", "");
     let keep_turns = flags.text("keep-turns", "");
+    let record = flags.text("record", "");
     let explain = flags.text("explain", "off") == "on";
 
     #[derive(PartialEq)]
@@ -1188,6 +1189,9 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     }
     if !keep_turns.is_empty() {
         session.keep_turns = Some(PathBuf::from(&keep_turns));
+    }
+    if !record.is_empty() {
+        session.record = Some(PathBuf::from(&record));
     }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
@@ -1289,6 +1293,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let mut forced = 0usize;
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
+        session.record(view.as_ref(), held.as_ref());
         let line = match (&view, &held) {
             (Some(v), None) => {
                 // The whole chain, on one line: what the screen says, what it
@@ -1455,6 +1460,10 @@ stopping: {}", reason.explain());
     }
     if !keep_unread.is_empty() {
         println!("{} unreadable frame(s) kept in {keep_unread}.", session.frames_kept());
+    }
+    if !record.is_empty() {
+        let (lines, shots) = session.recorded();
+        println!("{lines} reading(s) and {shots} picture(s) recorded in {record}.");
     }
     if !keep_turns.is_empty() {
         println!(
