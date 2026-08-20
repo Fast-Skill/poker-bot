@@ -956,14 +956,23 @@ mod tests {
         assert!(moves.contains(&Move::Passive));
     }
 
+    /// Folding gives up the pot, which is what makes it a decision.
+    ///
+    /// This test used to assert the opposite — that folding to a bet before
+    /// putting anything in was worth exactly zero — and it passed, because the
+    /// pot the hand arrived with was not being awarded to anybody. That is the
+    /// bug written down as an assertion. With nothing to forfeit, folding is
+    /// free, bluffing wins nothing, and the solve learned to check every hand
+    /// down. See [`Postflop::terminal_utility`].
     #[test]
-    fn a_bet_can_be_folded_to_and_the_bettor_takes_the_pot() {
+    fn folding_gives_up_the_pot() {
         let game = game();
         let state = play(&game, dealt(&game), &[Move::Large, Move::Fold]);
         assert!(game.is_terminal(&state));
-        // Player 1 bet and player 0 folded, so player 1 wins what 0 put in,
-        // which on a fold before calling is nothing.
-        assert_eq!(game.terminal_utility(&state), 0.0);
+        // Player 0 folds without having put a chip in, so loses none of their
+        // own — and gives up their claim on the thousand already in the middle.
+        // Measured against the two splitting it, that is half.
+        assert_eq!(game.terminal_utility(&state), -500.0);
     }
 
     #[test]

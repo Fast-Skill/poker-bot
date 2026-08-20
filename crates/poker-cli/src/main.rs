@@ -1388,7 +1388,7 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 /// hands go by.
 fn postflop_chart(args: &[String]) -> Result<(), String> {
     use poker_core::betting::Street;
-    use poker_core::postflop::{Move, Spot};
+    use poker_core::postflop::Spot;
 
     let path = args.first().ok_or("postflop needs a blueprint path")?;
     let flags = Flags::parse(&args[1..])?;
