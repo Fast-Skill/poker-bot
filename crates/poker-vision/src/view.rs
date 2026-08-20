@@ -147,9 +147,19 @@ impl TableView {
             + numbers.iter().filter(|n| !n.is_confident()).count();
 
         // A stack readout is the one thing every occupied seat has.
+        // Every cyan readout, whether or not its digits resolved.
+        //
+        // A seat is marked by the presence of its stack display, not by that
+        // display being legible this frame. Requiring it to parse meant a stack
+        // caught mid-count deleted the whole seat: the table went from seven
+        // players to six and back within a second, which made two consecutive
+        // readings disagree about how many people were even sitting there, and
+        // so almost nothing was ever settled enough to act on. Whether the
+        // figure was read is already carried by `stack` being `None`, and the
+        // refusal is already counted.
         let stacks: Vec<&NumberRead> = numbers
             .iter()
-            .filter(|n| n.ink == Ink::Cyan && n.is_confident())
+            .filter(|n| n.ink == Ink::Cyan)
             .collect();
         if stacks.is_empty() {
             return TableView {
@@ -300,17 +310,35 @@ impl TableView {
                 _ => false,
             }
         }
-        self.seats.len() == other.seats.len()
-            && self.button == other.button
-            && self.board == other.board
+        // Only what a decision rests on.
+        //
+        // This used to demand that the whole table match, every seat's stack
+        // and bet included. At a busy table that almost never happens: chips
+        // are always sliding somewhere, a stack is always mid-count, and a seat
+        // whose figure fails to read for one frame disappears from the list
+        // entirely and changes its length. The result was a session where most
+        // readings were discarded as unsettled and the hero's own turns were
+        // repeatedly decided by the clock rather than by the bot.
+        //
+        // None of that motion bears on the decision. Another player's stack
+        // ticking down while the pot is collected does not change what the hero
+        // holds, what is owed, or what is in the middle. So the comparison is
+        // of the facts that are actually used, each of which would be dangerous
+        // to act on mid-change:
+        self.board == other.board
             && self.hole == other.hole
+            && self.button == other.button
             && same(self.pot, other.pot)
             && same(self.collected, other.collected)
-            && self
-                .seats
-                .iter()
-                .zip(&other.seats)
-                .all(|(a, b)| a.hero == b.hero && same(a.stack, b.stack) && same(a.bet, b.bet))
+            && same(self.to_call(), other.to_call())
+            && same(
+                self.hero().and_then(|h| h.stack),
+                other.hero().and_then(|h| h.stack),
+            )
+            // How many are still in the hand picks the strategy, so it has to
+            // hold still even though it is not a figure.
+            && self.active() == other.active()
+            && self.action.is_some() == other.action.is_some()
     }
 
     /// Whether this reading is complete and trustworthy enough to act on.
