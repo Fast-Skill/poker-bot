@@ -76,6 +76,20 @@ enum Abstract {
     Jam,
 }
 
+/// How far from a solved depth a pot may be and still use that solve.
+///
+/// The rungs are spaced by a factor of two, so a pot falling between two of
+/// them is at most about 1.4 times either. The ends are looser: a limped pot
+/// fifty times the pot deep has nothing above it and sits two times from the
+/// top rung, which is still worth playing. Three leaves room for that and
+/// little more — enough to catch a ladder with a hole in it, which is not a
+/// hypothetical: a solve still running, a file never written, or a rung never
+/// built all leave one, and without a bound the nearest survivor gets used
+/// however distant it is. With only the shallowest rung loaded, a pot with
+/// twenty-five times the pot behind would be played by a strategy solved for
+/// stacks nearly all in — not so much a worse answer as a confident one.
+const FURTHEST_RUNG: f64 = 3.0;
+
 /// A postflop solve and the depth it was solved at.
 ///
 /// # Why there is a ladder rather than one solve
@@ -237,11 +251,16 @@ impl BlueprintAgent {
     /// Nearest by ratio rather than by difference, because depths grow
     /// multiplicatively. Between rungs at 3 and 12, a pot at 6 sits nearer 12
     /// by difference while being the same distance from either as a price.
+    ///
+    /// Nearest is not the same as near: past [`FURTHEST_RUNG`] this gives up
+    /// rather than answer.
     fn rung_for(&self, spr: f64) -> Option<&Rung> {
-        self.postflop.iter().min_by(|a, b| {
-            let gap = |rung: &Rung| (rung.spr / spr).max(spr / rung.spr);
-            gap(a).total_cmp(&gap(b))
-        })
+        let gap = |rung: &Rung| (rung.spr / spr).max(spr / rung.spr);
+        let nearest = self
+            .postflop
+            .iter()
+            .min_by(|a, b| gap(a).total_cmp(&gap(b)))?;
+        (gap(nearest) <= FURTHEST_RUNG).then_some(nearest)
     }
 
     /// The situation a view describes, as the postflop tree would describe it.
@@ -819,6 +838,34 @@ mod tests {
         Table::standard()
     }
 
+    /// A pot far from every solved depth gets no answer rather than a bad one.
+    ///
+    /// Ladders have holes. A solve may still be running, a file may not have
+    /// been written, a rung may never have been built — and picking the nearest
+    /// rung with no bound means the last one standing gets used however distant
+    /// it is. With only the shallowest loaded, a pot with twenty-five times the
+    /// pot behind would be played by a strategy solved for stacks nearly all
+    /// in: not a worse answer than the heuristic so much as a confident one.
+    #[test]
+    fn a_depth_no_rung_is_near_gets_no_rung() {
+        let sizing = postflop::Sizing::default();
+        let only_shallow = agent(100.0).with_postflop(
+            1.5,
+            Blueprint::from_profile(&Default::default(), "postflop/spr1.5/b12"),
+            Postflop::for_play(12, 100, 150, sizing),
+        );
+        assert!(only_shallow.rung_for(1.5).is_some(), "its own depth");
+        assert!(only_shallow.rung_for(4.0).is_some(), "within reach");
+        assert!(
+            only_shallow.rung_for(25.0).is_none(),
+            "a pot twenty-five times the pot deep is not a shallow pot"
+        );
+        assert!(
+            only_shallow.rung_for(0.1).is_none(),
+            "nor is one with almost nothing behind"
+        );
+    }
+
     /// A solved postflop ladder actually decides postflop, end to end.
     ///
     /// # Why this is worth a slow test
@@ -866,20 +913,29 @@ mod tests {
             }
         }
 
+        // Solved at the depth this table actually plays at. A hundred-blind
+        // table where the bot opens to two and a half leaves a pot of five and
+        // ninety-seven behind, so flops arrive around eighteen times the pot.
+        // A rung at four is a rung for a three-bet pot, and attaching one here
+        // tested nothing until `FURTHEST_RUNG` started refusing it — at which
+        // point this failed, correctly, having only ever passed because the
+        // wrong rung was being used anyway.
+        const DEPTH: f64 = 18.0;
+        let stack = (100.0 * DEPTH) as u32;
         let textures = Textures::sample(24, 12, 0x51DE, 4);
         let sizing = postflop::Sizing::default();
-        let game = Postflop::new(textures, 100, 400, sizing);
+        let game = Postflop::new(textures, 100, stack, sizing);
         let mut rng = Rng::new(0xC0FFEE);
         let mut solver = Solver::new(game);
         solver.train_sampled(60_000, &mut rng);
-        let solved = Blueprint::from_solver(&solver, "postflop/spr4/b12");
+        let solved = Blueprint::from_solver(&solver, "postflop/spr18/b12");
 
         let tally = Shared::default();
         let mut bot = agent(100.0)
-            .with_postflop(4.0, solved, Postflop::for_play(12, 100, 400, sizing))
+            .with_postflop(DEPTH, solved, Postflop::for_play(12, 100, stack, sizing))
             .watch(Box::new(tally.clone()));
 
-        assert_eq!(bot.solved_depths(), vec![4.0]);
+        assert_eq!(bot.solved_depths(), vec![DEPTH]);
 
         let mut opponent = AlwaysCall;
         let report = duplicate_match(&table(), &mut bot, &mut opponent, 120, &mut rng);
