@@ -66,6 +66,7 @@ fn main() -> ExitCode {
         Some("equity") => equity_wide(&args[1..]),
         Some("textures") => textures(&args[1..]),
         Some("compare") => compare(&args[1..]),
+        Some("postflop") => postflop_chart(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
@@ -102,6 +103,7 @@ USAGE
   poker equity  [options]          build a wide equity table (--players 4..7)
   poker textures [options]         build the board sample a postflop solve needs
   poker compare <a> <b>            how far apart two blueprints play
+  poker postflop <file>            what a postflop solve does, by hand strength
   poker see   [options]            look at the live table and report what it reads
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
@@ -636,6 +638,13 @@ fn bench(args: &[String]) -> Result<(), String> {
             " blueprint decided {from_blueprint} of {total} spots ({:.0}%)\n",
             hero.coverage_fraction() * 100.0
         );
+        // What the rest was. One coverage number cannot tell a ladder that is
+        // too shallow from a tree that models the wrong game, and the two want
+        // different work done.
+        for (why, count) in hero.fallback_reasons() {
+            println!("   {count:>6}  {why}");
+        }
+        println!();
     }
 
     println!("WIN means the lower bound of the 95% interval is above zero.");
@@ -1365,6 +1374,111 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 
 
 
+
+/// Prints what a postflop solve actually does, by hand strength.
+///
+/// # What this is for
+///
+/// A blueprint is a few hundred thousand numbers and says nothing legible about
+/// itself. The one question worth asking of a postflop solve is whether it bets
+/// its good hands, and a coverage percentage cannot answer it — a solve that
+/// checks everything has perfect coverage. This lays the strategy out against
+/// the only axis it keys on, so that "it checks ninety-nine per cent of the
+/// time with the second nuts" is visible rather than inferred from watching
+/// hands go by.
+fn postflop_chart(args: &[String]) -> Result<(), String> {
+    use poker_core::betting::Street;
+    use poker_core::postflop::{Move, Spot};
+
+    let path = args.first().ok_or("postflop needs a blueprint path")?;
+    let flags = Flags::parse(&args[1..])?;
+    flags.reject_unknown(&["rows"])?;
+    let rows: usize = flags
+        .text("rows", "8")
+        .parse()
+        .map_err(|_| "--rows wants a number")?;
+
+    let blueprint = open(path)?;
+    let (spr, buckets) = postflop_label(blueprint.label()).ok_or_else(|| {
+        format!(
+            "{path} is labelled {:?}, which is not a postflop solve",
+            blueprint.label()
+        )
+    })?;
+    let stack = (100.0 * spr).round() as u32;
+    let game = Postflop::for_play(buckets, 100, stack, PostflopSizing::default());
+
+    println!("{path}");
+    println!("  {}  ({} information sets)", blueprint.label(), blueprint.len());
+    println!("  pot 100, {stack} behind\n");
+    println!("  Strength runs from 0, the weakest hands on the board, to {}.",
+             buckets - 1);
+    println!("  Each row is a band of strengths; the numbers are how often the");
+    println!("  solve plays each move there.\n");
+
+    for (title, player, acted) in [
+        ("first to act, nothing bet", 1usize, 0u8),
+        ("checked to, nothing bet", 0usize, 0b10u8),
+    ] {
+        for street in [Street::Flop, Street::Turn, Street::River] {
+            let spot = |strength: u8| Spot {
+                street,
+                player,
+                strength,
+                pot: 100,
+                bet: 0,
+                mine: 0,
+                behind: stack as u64,
+                opponent_behind: stack as u64,
+                raises: 0,
+                acted,
+            };
+            let moves = game.moves_at(&spot(0));
+            println!("  {street:?}, {title}");
+            print!("    {:<12}", "strength");
+            for mv in &moves {
+                print!("{:>12}", mv.name());
+            }
+            println!("   found");
+
+            let width = buckets.div_ceil(rows);
+            for band in 0..rows {
+                let first = band * width;
+                let last = ((band + 1) * width).min(buckets);
+                if first >= last {
+                    continue;
+                }
+                let mut totals = vec![0.0f64; moves.len()];
+                let mut found = 0usize;
+                for strength in first..last {
+                    let here = spot(strength as u8);
+                    let Some(strategy) = game
+                        .keys_near(&here)
+                        .into_iter()
+                        .find_map(|key| blueprint.strategy(key))
+                    else {
+                        continue;
+                    };
+                    if strategy.len() != moves.len() {
+                        continue;
+                    }
+                    found += 1;
+                    for (total, share) in totals.iter_mut().zip(strategy) {
+                        *total += *share as f64;
+                    }
+                }
+                print!("    {:<12}", format!("{first}-{}", last - 1));
+                for total in &totals {
+                    let share = if found == 0 { 0.0 } else { total / found as f64 };
+                    print!("{:>11.0}%", share * 100.0);
+                }
+                println!("   {found:>4}");
+            }
+            println!();
+        }
+    }
+    Ok(())
+}
 
 /// Every postflop rung that has been solved, attached to an agent.
 ///

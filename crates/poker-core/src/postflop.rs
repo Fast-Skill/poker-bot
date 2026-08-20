@@ -133,10 +133,24 @@ pub struct Spot {
 
 impl Spot {
     /// What calling costs.
-    fn owed(&self) -> u64 {
+    pub fn owed(&self) -> u64 {
         self.bet.saturating_sub(self.mine)
     }
 }
+
+/// How an information key is packed, least significant field first.
+///
+/// Named rather than written inline because two things read the key: the
+/// packing below, and the search for a nearby one when a solve has never met
+/// the exact spot. If those two ever disagreed about where a field sits, the
+/// search would substitute a strategy from somewhere else entirely.
+const STRENGTH_BITS: u32 = 8;
+const SHAPE_BITS: u32 = 4;
+const DEPTH_BITS: u32 = 3;
+const PRICE_BITS: u32 = 3;
+
+const DEPTH_SHIFT: u32 = STRENGTH_BITS + SHAPE_BITS;
+const PRICE_SHIFT: u32 = DEPTH_SHIFT + DEPTH_BITS;
 
 /// How many raises a street allows before the only move left is all-in.
 const RAISE_CAP: u8 = 3;
@@ -440,11 +454,89 @@ impl Postflop {
         key = (key << 1) | spot.player as u64;
         key = (key << 3) | spot.raises.min(7) as u64;
         key = (key << 2) | spot.acted as u64;
-        key = (key << 3) | price;
-        key = (key << 3) | depth;
-        key = (key << 4) | shape;
-        (key << 8) | spot.strength as u64
+        key = (key << PRICE_BITS) | price;
+        key = (key << DEPTH_BITS) | depth;
+        key = (key << SHAPE_BITS) | shape;
+        (key << STRENGTH_BITS) | spot.strength as u64
     }
+
+    /// Keys worth trying for a spot, nearest first.
+    ///
+    /// # Why the exact key is often missing
+    ///
+    /// A solve only ever faces its own two bet sizes, so the only prices it
+    /// ever has to answer are the ones a third-pot and a three-quarter-pot bet
+    /// produce. A real opponent bets whatever they like. Their half-pot bet
+    /// lands in a price band the solve was never trained on, and an exact
+    /// lookup finds nothing — not because the spot is unusual, but because
+    /// nobody at the table was obliged to bet in the solver's sizes. Measured
+    /// against a live opponent this accounted for every miss: thirty-one per
+    /// cent of postflop decisions fell through to the heuristic, all of them
+    /// for want of a price the solve had no reason to have met.
+    ///
+    /// This is the postflop half of action translation, and the same idea as
+    /// the preflop ladder's: a price the solve does not know is played as the
+    /// nearest one it does.
+    ///
+    /// # What is never substituted
+    ///
+    /// Only price and depth, which are bands over continuous quantities and so
+    /// have a meaningful notion of nearby. Street, position, strength and the
+    /// shape of the move list are exact facts, and a neighbouring value of any
+    /// of them is a different spot rather than a nearby one. Holding the shape
+    /// fixed also keeps the action count right, which is what makes the
+    /// substituted strategy safe to index.
+    pub fn keys_near(&self, spot: &Spot) -> Vec<InfoKey> {
+        let exact = self.key_at(spot);
+        let price = (exact >> PRICE_SHIFT) & ((1 << PRICE_BITS) - 1);
+        let depth = (exact >> DEPTH_SHIFT) & ((1 << DEPTH_BITS) - 1);
+        let stripped = exact
+            & !(((1 << PRICE_BITS) - 1) << PRICE_SHIFT)
+            & !(((1 << DEPTH_BITS) - 1) << DEPTH_SHIFT);
+
+        // Nearest first; then depth in preference to price, since price is
+        // what a call costs and decides more of a decision than how much is
+        // left behind it; then, between two prices equally far away, the
+        // dearer one.
+        //
+        // That last tie-break is not arbitrary. Being wrong about a price in
+        // the cheap direction means calling bets that are pricier than the
+        // strategy being played assumes, which is precisely the leak that makes
+        // a bot a calling station. Being wrong in the dear direction means
+        // folding a little too often, which costs a fraction of the same.
+        let mut offsets: Vec<(i64, i64)> = Vec::new();
+        for reach in 0..=2i64 {
+            for dp in -reach..=reach {
+                for dd in -reach..=reach {
+                    if dp.abs().max(dd.abs()) == reach {
+                        offsets.push((dp, dd));
+                    }
+                }
+            }
+        }
+        offsets.sort_by_key(|(dp, dd)| {
+            (
+                dp.abs().max(dd.abs()),
+                dp.abs(),
+                dd.abs(),
+                // Negated, so a positive offset — the dearer price — sorts first.
+                -dp,
+                -dd,
+            )
+        });
+
+        let mut keys = Vec::with_capacity(offsets.len());
+        for (dp, dd) in offsets {
+            let p = price as i64 + dp;
+            let d = depth as i64 + dd;
+            if !(0..(1 << PRICE_BITS)).contains(&p) || !(0..(1 << DEPTH_BITS)).contains(&d) {
+                continue;
+            }
+            keys.push(stripped | ((p as u64) << PRICE_SHIFT) | ((d as u64) << DEPTH_SHIFT));
+        }
+        keys
+    }
+
 
     /// Moves the hand to the next street, or to showdown after the river.
     fn advance(&self, state: &State) -> State {
@@ -504,25 +596,55 @@ impl Game for Postflop {
         self.street_closed(state) && (state.street == Street::River || self.all_in(state))
     }
 
+    /// What the hand was worth to player 0.
+    ///
+    /// # The pot that is already there
+    ///
+    /// A hand arrives at the flop with money in the middle that neither player
+    /// puts in during this tree — it went in preflop — and whoever wins takes
+    /// it. That dead money is most of what makes postflop poker a game.
+    ///
+    /// Leaving it out was a real bug, and an instructive one: every invariant
+    /// held. Payoffs summed to zero, nobody wagered more than their stack, the
+    /// tree was well formed, and the solve converged. What it converged to was
+    /// nonsense. With nothing in the middle, betting can only win back what the
+    /// opponent chooses to put in, folding immediately costs exactly nothing,
+    /// and a bluff wins nothing at all. The equilibrium of that game is to
+    /// check everything down, and that is what came out — checking 97% of the
+    /// time holding the strongest hands on the board.
+    ///
+    /// No test caught it because no test asked whether the strategy was poker.
+    /// `the_best_hands_bet` now does.
+    ///
+    /// # Why half each
+    ///
+    /// The solver is zero-sum: it takes one signed number and reads the
+    /// opponent's payoff as its negation. Awarding the whole pot to the winner
+    /// would make the game constant-sum instead, and break that. So payoffs are
+    /// measured against the two splitting it: the winner is up half the pot
+    /// plus what the loser staked, the loser down half the pot plus their own.
+    /// That is a fixed offset per player, and an offset changes no decision —
+    /// what a strategy responds to is the difference between its actions.
     fn terminal_utility(&self, state: &State) -> f64 {
         let staked = |player: usize| (state.spent[player] + state.wagered[player]) as f64;
+        let dead = self.pot as f64 / 2.0;
         match state.folded {
-            Some(0) => -staked(0),
-            Some(1) => staked(1),
+            Some(0) => -staked(0) - dead,
+            Some(1) => staked(1) + dead,
             Some(_) => unreachable!("only two players can fold"),
             None => {
                 // Matched by definition — betting closed with both live — so
-                // the winner takes what the loser put in.
+                // the winner takes what the loser put in, and the pot besides.
                 let at_risk = staked(0).min(staked(1));
-                match self
-                    .sample()
-                    .showdown(
+                match self.sample().showdown(
                     state.board as usize,
                     state.holdings[0] as usize,
                     state.holdings[1] as usize,
                 ) {
-                    std::cmp::Ordering::Greater => at_risk,
-                    std::cmp::Ordering::Less => -at_risk,
+                    std::cmp::Ordering::Greater => at_risk + dead,
+                    std::cmp::Ordering::Less => -at_risk - dead,
+                    // Split: each takes back their own and half the pot, which
+                    // is the baseline everything here is measured against.
                     std::cmp::Ordering::Equal => 0.0,
                 }
             }
@@ -651,6 +773,7 @@ fn street_index(street: Street) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cfr::Solver;
 
     fn game() -> Postflop {
         // Ten big blinds in, a hundred behind, on a small sample of boards.
@@ -686,6 +809,82 @@ mod tests {
     /// they have put in at least as much as the other, and the sizes fall
     /// outside what is left anyway. Unequal stacks are ordinary at a real
     /// table, and that is where this matters.
+    /// The solve plays a polarised strategy: it value bets and it bluffs.
+    ///
+    /// # Why a behavioural test
+    ///
+    /// Every other test here checks that the tree is well formed: payoffs sum
+    /// to zero, stacks are respected, keys do not collide, players never share
+    /// a card. All of them passed against a version of this game in which the
+    /// pot the hand arrives with was never awarded to anybody — so there was
+    /// nothing to win, and the solve learned to check its very best hands 97%
+    /// of the time. The tree was impeccable and the poker was gone.
+    ///
+    /// So this asks the only question those cannot: having solved, does the
+    /// strategy do what poker requires?
+    ///
+    /// The sharp end of that is bluffing. A bluff wins the pot or it wins
+    /// nothing at all, so a solve that bluffs has necessarily learned there is
+    /// a pot to be won — exactly the fact the bug removed. Asking only whether
+    /// good hands bet does not work, and was tried first: they still did, 61%
+    /// of the time, because a value bet can at least collect a call. It was the
+    /// weakest hands that gave it away, betting 10% where a correct game bets
+    /// 73%.
+    ///
+    /// The thresholds sit well below what a correct game produces — 76% and
+    /// 73% against 40% and 25% — because the failure guarded against is total
+    /// rather than marginal.
+    #[test]
+    fn the_best_hands_bet() {
+        const BUCKETS: usize = 8;
+        let textures = Textures::sample(40, BUCKETS, 0x51DE, 4);
+        let game = Postflop::new(textures, 100, 400, Sizing::default());
+        let mut rng = Rng::new(0xBE77);
+        let mut solver = Solver::new(game);
+        solver.train_sampled(400_000, &mut rng);
+
+        let game = Postflop::for_play(BUCKETS, 100, 400, Sizing::default());
+        let spot = |strength: u8| Spot {
+            street: Street::River,
+            // Out of position, first to act, nothing bet yet.
+            player: 1,
+            strength,
+            pot: 100,
+            bet: 0,
+            mine: 0,
+            behind: 400,
+            opponent_behind: 400,
+            raises: 0,
+            acted: 0,
+        };
+
+        let moves = game.moves_at(&spot(0));
+        let betting = |strength: u8| -> Option<f64> {
+            let strategy = solver.average_strategy(game.key_at(&spot(strength)))?;
+            Some(
+                moves
+                    .iter()
+                    .zip(strategy)
+                    .filter(|(mv, _)| **mv != Move::Passive && **mv != Move::Fold)
+                    .map(|(_, share)| share)
+                    .sum(),
+            )
+        };
+
+        let best = betting(BUCKETS as u8 - 1).expect("the strongest group was solved");
+        let worst = betting(0).expect("the weakest group was solved");
+        assert!(
+            best > 0.4,
+            "with the strongest hands on the board the solve bets only {:.0}% of the time",
+            best * 100.0
+        );
+        assert!(
+            worst > 0.25,
+            "the solve bluffs its weakest hands only {:.0}% of the time; with nothing in the middle to win a bluff wins nothing, and this is what that looks like",
+            worst * 100.0
+        );
+    }
+
     #[test]
     fn nobody_raises_into_a_player_who_is_already_all_in() {
         let game = game();
