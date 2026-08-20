@@ -210,11 +210,21 @@ pub struct ConsoleMonitor {
     pub confidence_floor: f64,
     /// Whether to print each decision, or only accumulate.
     pub verbose: bool,
+    /// The last decision printed, so an unchanged one is not printed again.
+    ///
+    /// Watching a table means deciding the same spot over and over until it
+    /// changes — the bot re-reads several times a second, and while it is the
+    /// hero's turn nothing moves. Printing each one buried a ten-minute session
+    /// under the same hand repeated eight times, which is the opposite of what
+    /// a watch mode is for. The counts below still take every decision; only
+    /// the printing is skipped.
+    last: Option<(Perception, Action)>,
 }
 
 impl ConsoleMonitor {
     pub fn new(big_blind: u64) -> ConsoleMonitor {
         ConsoleMonitor {
+            last: None,
             stats: SessionStats::new(big_blind),
             confidence_floor: 0.90,
             verbose: true,
@@ -307,7 +317,14 @@ impl Observer for ConsoleMonitor {
         {
             self.stats.low_confidence += 1;
         }
-        if self.verbose {
+        // Only when something has actually changed. The bot re-reads the table
+        // several times a second and, while it is the hero's turn, keeps
+        // arriving at the same answer; printing each one buries a session under
+        // the same hand repeated.
+        let now = (record.perception.clone(), record.action);
+        let repeat = self.last.as_ref() == Some(&now);
+        self.last = Some(now);
+        if self.verbose && !repeat {
             print!("{}", self.render(record));
         }
     }
