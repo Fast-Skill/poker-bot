@@ -23,6 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use poker_core::card::Card;
 use poker_vision::{
     ActionPanel, Frame, GlyphTemplates, HeroTemplates, HeroThresholds, TableView, Templates,
     TextThresholds, Thresholds,
@@ -221,6 +222,90 @@ pub struct Session {
     pictured: usize,
     /// The picture the last settled reading was made from.
     seen: Option<Capture>,
+}
+
+/// What a session has won or lost, counted a hand at a time.
+///
+/// # Why the stack and not the showdown
+///
+/// The obvious way to learn who won is to read the client saying so — the
+/// `WIN` badge, the winner's cards turned face up, the amount floating over
+/// their seat. All of it is drawn briefly, animated while it is drawn, and
+/// absent whenever a hand ends without a showdown, which is most of them.
+/// Reading it would mean a new set of templates for the least reliable moment
+/// on the table.
+///
+/// The hero's own stack says the same thing and is already read at every
+/// frame. Compared between one deal and the next it gives the net result of
+/// everything in between — blinds posted, bets made, pots won — without
+/// needing to understand any of it. A hand nobody showed down counts the same
+/// as one that did.
+///
+/// # What it cannot see
+///
+/// Buying more chips looks exactly like winning them. So does a rebuy after
+/// busting. Nothing here distinguishes those, and a session where the hero
+/// tops up will read as a large win; the count of hands stays honest either
+/// way. It is a scoreboard for an unattended session, not an accounting record.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Ledger {
+    /// The hero's cards this hand, to notice a new deal.
+    hole: Vec<Card>,
+    /// The hero's stack when this hand was dealt.
+    opened: Option<f64>,
+    hands: u64,
+    net: f64,
+    best: f64,
+    worst: f64,
+}
+
+impl Ledger {
+    pub fn new() -> Ledger {
+        Ledger::default()
+    }
+
+    /// Notes a reading, and reports the finished hand if this one ended it.
+    ///
+    /// Called with every settled view. Returns `Some(net)` on the frame where a
+    /// new deal is first seen, that being the moment the previous hand's result
+    /// is final and readable.
+    pub fn observe(&mut self, view: &TableView) -> Option<f64> {
+        // Only once the hero holds cards, since a stack read between hands may
+        // be mid-animation while a pot is pushed.
+        if view.hole.len() != 2 {
+            return None;
+        }
+        let stack = view.hero().and_then(|hero| hero.stack)?;
+        if view.hole == self.hole {
+            return None;
+        }
+
+        let finished = self.opened.map(|opened| stack - opened);
+        self.hole = view.hole.clone();
+        self.opened = Some(stack);
+        if let Some(net) = finished {
+            self.hands += 1;
+            self.net += net;
+            self.best = self.best.max(net);
+            self.worst = self.worst.min(net);
+        }
+        finished
+    }
+
+    /// Hands counted, and what they came to.
+    pub fn tally(&self) -> (u64, f64) {
+        (self.hands, self.net)
+    }
+
+    /// The best and worst single hand.
+    pub fn extremes(&self) -> (f64, f64) {
+        (self.best, self.worst)
+    }
+
+    /// Big blinds per hundred hands, once there are any hands.
+    pub fn per_hundred(&self) -> Option<f64> {
+        (self.hands > 0).then(|| self.net * 100.0 / self.hands as f64)
+    }
 }
 
 /// How long the hero may be to act before the bot stops holding out for a
@@ -758,6 +843,67 @@ mod tests {
             stop_loss_bb: 100.0,
             max_actions: 10,
         }
+    }
+
+    /// A hand's result is the stack between one deal and the next.
+    #[test]
+    fn the_ledger_counts_a_hand_from_deal_to_deal() {
+        use poker_core::card::parse_cards;
+        use poker_vision::SeatView;
+
+        let table = |cards: &str, stack: f64| {
+            let hole = parse_cards(cards).expect("two cards");
+            TableView {
+                seats: vec![SeatView {
+                    x: 0.0,
+                    y: 0.0,
+                    stack: Some(stack),
+                    bet: None,
+                    hero: true,
+                    in_hand: true,
+                }],
+                pot: Some(1.5),
+                collected: None,
+                board: Vec::new(),
+                hole,
+                button: Some(0),
+                action: None,
+                refusals: 0,
+            }
+        };
+
+        let mut ledger = Ledger::new();
+        // The first deal has nothing before it to settle.
+        assert_eq!(ledger.observe(&table("As Kd", 100.0)), None);
+        // Seeing the same hand again is not a new one.
+        assert_eq!(ledger.observe(&table("As Kd", 97.0)), None);
+        // The next deal settles the last: opened at 100, opens now at 96.
+        assert_eq!(ledger.observe(&table("7c 2h", 96.0)), Some(-4.0));
+        // And a winning one.
+        assert_eq!(ledger.observe(&table("Qs Qh", 110.0)), Some(14.0));
+
+        assert_eq!(ledger.tally(), (2, 10.0));
+        assert_eq!(ledger.extremes(), (14.0, -4.0));
+        assert_eq!(ledger.per_hundred(), Some(500.0));
+    }
+
+    /// A reading without the hero's cards or stack settles nothing.
+    #[test]
+    fn a_reading_that_cannot_be_trusted_is_not_counted() {
+        let mut ledger = Ledger::new();
+        let blank = TableView {
+            seats: Vec::new(),
+            pot: None,
+            collected: None,
+            board: Vec::new(),
+            hole: Vec::new(),
+            button: None,
+            action: None,
+            refusals: 3,
+        };
+        assert_eq!(ledger.observe(&blank), None);
+        assert_eq!(ledger.tally(), (0, 0.0));
+        assert_eq!(ledger.per_hundred(), None);
     }
 
     #[test]

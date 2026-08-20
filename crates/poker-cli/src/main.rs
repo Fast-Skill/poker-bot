@@ -1286,6 +1286,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     // What the engine decided on this frame, carried from the report to the act.
     let mut pending: Option<Choice> = None;
     let mut history = bridge::History::new();
+    let mut ledger = live::Ledger::new();
     // When the client first asked the hero to act on the turn now in progress.
     //
     // Declining a frame is free right up until this is set. After that the
@@ -1296,6 +1297,10 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
         session.record(view.as_ref(), held.as_ref());
+        if let Some(net) = view.as_ref().and_then(|v| ledger.observe(v)) {
+            let (hands, running) = ledger.tally();
+            println!("  hand {hands} finished {net:+.2} bb  (session {running:+.2} bb)");
+        }
         let line = match (&view, &held) {
             (Some(v), None) => {
                 // The whole chain, on one line: what the screen says, what it
@@ -1454,6 +1459,16 @@ stopping: {}", reason.explain());
 
     println!("
 {} action(s) taken.", session.actions_taken());
+    let (hands, net) = ledger.tally();
+    if hands > 0 {
+        let (best, worst) = ledger.extremes();
+        println!("{hands} hand(s) played, {net:+.2} bb net (best {best:+.2}, worst {worst:+.2}).");
+        if let Some(rate) = ledger.per_hundred() {
+            println!(
+                "  {rate:+.0} bb/100 - meaningless below a few hundred hands, and a top-up reads as a win."
+            );
+        }
+    }
     // Both of these are the reading letting the bot down rather than the
     // strategy, and both are invisible in a long scroll. A session with many
     // of either is not the bot that was benchmarked.
