@@ -537,26 +537,22 @@ pub fn detect_dealer_button(frame: &Frame) -> Option<(usize, usize)> {
         }
     }
 
-    // A button is a disc, so its bounding box is close to square. Requiring
-    // that is what separates it from the other gold on the table.
+    // A squareness test was tried here and made things worse, which is worth
+    // recording so it is not tried again on the same reasoning.
     //
-    // Without it the reader gave up almost every frame, and reported no button
-    // at all — which loses position, and position is most of what a preflop
-    // strategy is keyed on. The cause was not the button being hidden but the
-    // jackpot: `BAD BEAT 238,482.93` is drawn in gold across the top, and at
-    // that size each digit is a blob within the same bounds as the disc. Two
-    // candidates meant refusal, and there were always several.
+    // The argument was sound: a button is a disc, the jackpot digits drawn in
+    // gold across the top are tall and narrow, and demanding a square bounding
+    // box should separate them. Measured against a recorded session it took the
+    // button from being found in 69% of frames to 58%. The disc's shaded lower
+    // edge falls outside the colour mask, so a real button is measurably oval,
+    // and the test threw away more buttons than digits.
     //
-    // Digits are tall and narrow, the straddle marker is wide and flat, and
-    // neither survives being asked to be square.
-    const ROUND: f64 = 0.25;
-
+    // Whatever replaces this has to beat 69% on `poker replay`, not merely
+    // sound right.
     let mut found = None;
     for bounds in components(&gold, w, h) {
-        let (bw, bh) = (bounds.width() as f64, bounds.height() as f64);
         if !(SIZE.0..=SIZE.1).contains(&bounds.width())
             || !(SIZE.0..=SIZE.1).contains(&bounds.height())
-            || (bw / bh - 1.0).abs() > ROUND
             || solidity(&gold, w, bounds) < MIN_FILL
         {
             continue;
