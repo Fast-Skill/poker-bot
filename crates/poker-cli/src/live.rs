@@ -406,6 +406,33 @@ impl Session {
         true
     }
 
+    /// Declines a dialog that offers a choice, by closing it.
+    ///
+    /// The straddle offer arrives on the hero's turn and covers the action row.
+    /// Neither of its buttons is safe to press — one straddles, one shoves —
+    /// and it does not go away on its own, so the turn runs out and the hand is
+    /// folded by the clock. Closing it is the only way to decline, and it hands
+    /// the turn back.
+    ///
+    /// Returns whether a dialog was there to close.
+    pub fn decline_dialog(&self) -> bool {
+        let Some(capture) = self.window.capture() else {
+            return false;
+        };
+        if capture.is_blank() {
+            return false;
+        }
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        let Some((x, y)) = poker_vision::read_dismiss(&frame) else {
+            return false;
+        };
+        self.window.focus();
+        std::thread::sleep(Duration::from_millis(150));
+        self.window.click_at(x, y);
+        std::thread::sleep(RESPOND);
+        true
+    }
+
     /// Whether the client is showing the sit-out dialog.
     pub fn is_sat_out(&self) -> bool {
         self.window

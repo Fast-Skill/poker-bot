@@ -119,6 +119,95 @@ pub struct SitOut {
     pub resume: ActionButton,
 }
 
+/// Finds the close button of a dialog offering a choice, if one is showing.
+///
+/// # What this recognises
+///
+/// A dialog with a red button beside a green one — at this client, the straddle
+/// offer: `All-In to 38 BB` in red against `Straddle to 4 BB` in green. Unlike
+/// the notices [`read_sit_out`] handles, this is not something to confirm. Both
+/// buttons are actions, and the way to decline is the small cross at the
+/// dialog's top corner.
+///
+/// It matters because the offer arrives on the hero's turn and covers the
+/// action row. Left alone it does not go away, so the turn runs down and the
+/// hand is folded by the clock — and the bot has no strategy for a straddled
+/// pot anyway, every solve here assuming two forced bets rather than three.
+/// Declining is both the safe answer and the only one available.
+///
+/// # Where the cross is
+///
+/// Derived from the green button rather than from the window, because the
+/// client is resizable and a fraction of the window is not a fixed place on the
+/// dialog. Measured against a 1425-wide capture: the cross sits level with the
+/// green button's right edge and about two and a half button-heights above it.
+///
+/// That is one measurement, and a rough one. It is expressed in button-heights
+/// so it scales, but it has not been checked at another size, and a click that
+/// misses lands on the dialog's own body — harmless, but it will not dismiss.
+pub fn read_dismiss(frame: &Frame) -> Option<(usize, usize)> {
+    /// A dialog button at a 1425-wide table, as a share of the window.
+    const WIDE: (f64, f64) = (0.08, 0.42);
+    const TALL: (f64, f64) = (0.025, 0.11);
+    const MIN_FILL: f32 = 0.80;
+    /// How far above the button the cross sits, in button heights.
+    const ABOVE: f64 = 2.5;
+
+    let (w, h) = (frame.width, frame.height);
+    let span = |(lo, hi): (f64, f64), of: usize| {
+        ((lo * of as f64) as usize, (hi * of as f64).ceil() as usize)
+    };
+    let wide = span(WIDE, w);
+    let tall = span(TALL, h);
+
+    let lit = |want_red: bool| -> Vec<Bounds> {
+        let mut mask = vec![false; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let (r, g, b) = frame.pixel(x, y);
+                let (r, g, b) = (r as i16, g as i16, b as i16);
+                mask[y * w + x] = if want_red {
+                    r > 120 && r - g > 45 && r - b > 45
+                } else {
+                    g > 120 && g - r > 45 && g - b > 45
+                };
+            }
+        }
+        components(&mask, w, h)
+            .into_iter()
+            .filter(|bounds| {
+                let (bw, bh) = (bounds.width(), bounds.height());
+                if !(wide.0..=wide.1).contains(&bw) || !(tall.0..=tall.1).contains(&bh) {
+                    return false;
+                }
+                let on = (bounds.y0..=bounds.y1)
+                    .map(|y| (bounds.x0..=bounds.x1).filter(|x| mask[y * w + x]).count())
+                    .sum::<usize>();
+                on as f32 / ((bw * bh) as f32) >= MIN_FILL
+            })
+            .collect()
+    };
+
+    let greens = lit(false);
+    let reds = lit(true);
+    // Exactly one of each. The action row carries three red buttons and no
+    // green, and a notice carries one green and no red; only the offer pairs
+    // them.
+    if greens.len() != 1 || reds.len() != 1 {
+        return None;
+    }
+    let green = greens[0];
+    let red = reds[0];
+    // Side by side, near enough in height to be the same row of the same
+    // dialog.
+    if green.y0.abs_diff(red.y0) > green.height() {
+        return None;
+    }
+
+    let above = (ABOVE * green.height() as f64) as usize;
+    Some((green.x1, green.y0.checked_sub(above)?))
+}
+
 /// Finds a dialog's single green confirm button, if one is showing.
 ///
 /// # Why one function serves every dialog

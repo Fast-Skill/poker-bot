@@ -1431,6 +1431,15 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                     println!("  sat out - clicked back in");
                 }
             }
+            // A dialog offering a choice covers the action row and waits. Both
+            // of the straddle offer's buttons are actions the bot has no
+            // business taking, so it is closed rather than answered — which
+            // hands the turn back with the clock still running.
+            (_, Some(_)) if acting != Acting::Never => {
+                if session.decline_dialog() {
+                    println!("  declined a dialog - closed it to get the turn back");
+                }
+            }
             (_, Some(reason))
                 if matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) =>
             {
