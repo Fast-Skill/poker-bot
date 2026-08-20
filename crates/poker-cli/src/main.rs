@@ -576,7 +576,7 @@ fn bench(args: &[String]) -> Result<(), String> {
     let pairs = hands / 2;
 
     let opponents: Vec<&str> = match flags.text("vs", "all").as_str() {
-        "all" => vec!["fold", "call", "jam", "chart"],
+        "all" => vec!["fold", "call", "jam", "chart", "heuristic"],
         one => vec![Box::leak(one.to_string().into_boxed_str()) as &str],
     };
 
@@ -606,9 +606,19 @@ fn bench(args: &[String]) -> Result<(), String> {
                 pairs,
                 &mut rng,
             ),
+            // The same bot with its postflop solve taken away. This is the one
+            // measurement that says whether the postflop work was worth doing:
+            // both sides play the identical preflop strategy, the deals are
+            // duplicated so neither gets the better cards, and the only
+            // difference left is what happens after the flop.
+            "heuristic" => {
+                let mut stripped =
+                    BlueprintAgent::new("heuristic", blueprint.clone(), Sizing::default());
+                duplicate_match(&table, &mut hero, &mut stripped, pairs, &mut rng)
+            }
             other => {
                 return Err(format!(
-                    "unknown opponent {other:?}; try fold, call, jam, chart, or all"
+                    "unknown opponent {other:?}; try fold, call, jam, chart, heuristic, or all"
                 ))
             }
         };
@@ -1237,6 +1247,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let mut last = String::new();
     // What the engine decided on this frame, carried from the report to the act.
     let mut pending: Option<Choice> = None;
+    let mut history = bridge::History::new();
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
         let line = match (&view, &held) {
@@ -1244,8 +1255,18 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                 // The whole chain, on one line: what the screen says, what it
                 // means to the engine, and what the engine would do about it.
                 let (decided, choice) = match bridge::translate(v) {
-                    Ok(decision) => {
+                    Ok(mut decision) => {
+                        // Fills in what a single frame cannot show: how many
+                        // raises this street has seen and who has acted. A
+                        // postflop solve keys on both, and without them it
+                        // would be answering about a different spot.
+                        history.observe(&mut decision);
                         let chosen = agent.act(&decision.view(), &mut rng);
+                        // The bot knows its own raises without looking, which
+                        // is what keeps the count exact through a raising war.
+                        if let poker_core::betting::Action::RaiseTo(to) = chosen {
+                            history.hero_raised_to(to);
+                        }
                         // The engine speaks in chips; the client in big blinds.
                         let choice = match chosen {
                             poker_core::betting::Action::Fold => Some(Choice::Fold),

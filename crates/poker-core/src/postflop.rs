@@ -826,7 +826,10 @@ mod tests {
         let mut rng = Rng::new(41);
         for _ in 0..500 {
             let state = game.sample_chance(&game.initial(), &mut rng);
-            let holdings = game.textures().holdings(state.board());
+            let holdings = game
+                .textures()
+                .expect("a tree solved from a sample carries it")
+                .holdings(state.board());
             let (mine, theirs) = (holdings[state.holding(0)], holdings[state.holding(1)]);
             assert!(
                 !mine.iter().any(|card| theirs.contains(card)),
