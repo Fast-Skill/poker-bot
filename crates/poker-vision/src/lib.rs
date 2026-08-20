@@ -31,7 +31,8 @@ mod text;
 mod view;
 
 pub use action::{
-    read_action_panel, read_amount, read_sit_out, ActionButton, ActionPanel, SitOut,
+    read_action_panel, read_amount, read_confirm, read_sit_out, ActionButton, ActionPanel,
+    SitOut,
 };
 pub use hero::{read_hole_cards, HeroTemplates, HeroThresholds};
 pub use text::{

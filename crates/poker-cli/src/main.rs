@@ -71,6 +71,7 @@ fn main() -> ExitCode {
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
         Some("grab") => grab(&args[1..]),
+        Some("sit") => sit(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
@@ -108,6 +109,7 @@ USAGE
   poker postflop <file>            what a postflop solve does, by hand strength
   poker see   [options]            look at the live table and report what it reads
   poker grab  [options]            save every window of the client as a PNG
+  poker sit   [options]            confirm the dialogs between an empty seat and a seat
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
                                    --explain on  shows the reasoning behind each decision
@@ -1471,6 +1473,118 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 
 
 
+/// Clicks through the dialogs between choosing a seat and sitting in it.
+///
+/// # What this does not do
+///
+/// It does not choose the seat. Which seat to take is a decision with real
+/// consequences — position relative to the players already there, and which
+/// table to be at — and it needs one click that a person is better placed to
+/// make. What follows that click is not a decision at all.
+///
+/// # What it does
+///
+/// Between the seat and the cards there are up to three dialogs: a VPIP
+/// warning, a CallTime notice, and the buy-in. Which appear varies by table and
+/// by what happened last time; their wording and size vary too. So none of them
+/// are recognised by name. Each has exactly one green button, and that is what
+/// is looked for and pressed, over and over, until they stop coming.
+///
+/// This is worth automating for one reason above the others: the buy-in dialog
+/// runs a timer of about sixteen seconds, and letting it lapse puts the seat
+/// back. That is the step where a person is most likely to be caught out and a
+/// program least likely.
+///
+/// The buy-in amount is left wherever the client has it. Choosing it is a
+/// decision like the seat — and the strategy is solved for a hundred blinds, so
+/// a short buy-in is played by a blueprint that assumes otherwise.
+#[cfg(windows)]
+fn sit(args: &[String]) -> Result<(), String> {
+    use poker_vision::Frame;
+    use poker_win::Window;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "seconds", "clicks"])?;
+    let process = flags.text("process", "ClubGG");
+    let seconds = flags.number("seconds", 45.0)?;
+    let most = flags.number("clicks", 5.0)? as usize;
+
+    let windows = Window::find_by_process(&process);
+    if windows.is_empty() {
+        return Err(format!(
+            "no visible window from a process matching {process:?}"
+        ));
+    }
+    let table = pick_table(&windows)?;
+    println!("watching : {}", table.title());
+    println!("waiting  : up to {seconds:.0}s for a dialog, confirming up to {most}");
+    println!("           choose the empty seat yourself; this presses what follows.\n");
+
+    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
+    let mut clicked = 0usize;
+    // Where the last button was, so the same dialog is not confirmed twice
+    // while the client is still taking it down.
+    let mut last: Option<(usize, usize)> = None;
+
+    while std::time::Instant::now() < until && clicked < most {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let Some(capture) = table.capture() else {
+            continue;
+        };
+        if capture.is_blank() {
+            continue;
+        }
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        let Some(button) = poker_vision::read_confirm(&frame) else {
+            last = None;
+            continue;
+        };
+        let (x, y) = button.centre();
+        if last == Some((x, y)) {
+            continue;
+        }
+
+        // Two readings that agree, so a dialog caught mid-fade is not pressed
+        // at a button that is on its way out.
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let Some(second) = table.capture() else {
+            continue;
+        };
+        let Some(again) = poker_vision::read_confirm(&Frame::new(
+            second.width,
+            second.height,
+            &second.rgb,
+        )) else {
+            continue;
+        };
+        if again.centre() != (x, y) {
+            continue;
+        }
+
+        table.focus();
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        if table.click_at(x, y) {
+            clicked += 1;
+            last = Some((x, y));
+            println!("  confirmed a dialog at {x},{y}  ({clicked} of {most})");
+            std::thread::sleep(std::time::Duration::from_millis(900));
+        }
+    }
+
+    if clicked == 0 {
+        println!("no dialog appeared. Choose an empty seat while this is running.");
+    } else {
+        println!("\n{clicked} dialog(s) confirmed.");
+        println!("If the table was mid-hand, untick 'Wait for Blinds' to be dealt in next hand.");
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn sit(_args: &[String]) -> Result<(), String> {
+    Err("sitting down is only implemented on Windows".to_string())
+}
+
 /// Saves every visible window of the client, exactly as the bot sees it.
 ///
 /// # Why not just take a screenshot
@@ -1493,10 +1607,18 @@ fn grab(args: &[String]) -> Result<(), String> {
     use poker_win::Window;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "out", "label"])?;
+    flags.reject_unknown(&["process", "out", "label", "after"])?;
     let process = flags.text("process", "ClubGG");
     let out = flags.text("out", "captures");
     let label = flags.text("label", "window");
+    // Seconds to wait before capturing, and whether to grab focus at all.
+    //
+    // Focusing is right for a table, which may be behind something. It is
+    // exactly wrong for a dialog: bringing the window forward dismisses the
+    // thing worth photographing, and the capture comes back showing the table
+    // underneath it. So asking to wait also means keeping hands off — the point
+    // of waiting is that somebody is arranging the screen meanwhile.
+    let after = flags.number("after", 0.0)?.max(0.0);
 
     let windows = Window::find_by_process(&process);
     if windows.is_empty() {
@@ -1506,6 +1628,10 @@ fn grab(args: &[String]) -> Result<(), String> {
     }
     std::fs::create_dir_all(&out).map_err(|e| format!("could not make {out}: {e}"))?;
 
+    if after > 0.0 {
+        println!("waiting {after:.0}s - put the client on screen how you want it captured");
+        std::thread::sleep(std::time::Duration::from_secs_f64(after));
+    }
     println!("windows from {process:?}:");
     let mut written = 0;
     for (index, window) in windows.iter().enumerate() {
@@ -1513,8 +1639,10 @@ fn grab(args: &[String]) -> Result<(), String> {
         let shape = if w >= h { "landscape" } else { "portrait" };
         print!("  {w:5} x {h:<5}  {shape:<9}  {}", window.title());
 
-        window.focus();
-        std::thread::sleep(std::time::Duration::from_millis(400));
+        if after == 0.0 {
+            window.focus();
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
         let Some(capture) = window.capture() else {
             println!("   -- could not be captured");
             continue;
