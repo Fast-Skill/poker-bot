@@ -503,7 +503,7 @@ impl BlueprintAgent {
     /// Why the fallback was reached, most common first.
     pub fn fallback_reasons(&self) -> Vec<(&'static str, u64)> {
         let mut counted: Vec<_> = self.reasons.iter().map(|(&why, &n)| (why, n)).collect();
-        counted.sort_by(|a, b| b.1.cmp(&a.1));
+        counted.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         counted
     }
 
