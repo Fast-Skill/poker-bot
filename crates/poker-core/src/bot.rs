@@ -30,6 +30,43 @@ use crate::table::{Agent, Position, View};
 use crate::texture::Reader;
 use crate::telemetry::{Confidence, DecisionRecord, Observer, Perception, Source};
 
+/// Whether a stored strategy says anything, or merely fills the space.
+///
+/// # The failure this exists to catch
+///
+/// A blueprint holds an average strategy for every information set the solver
+/// reached. Reaching one is not the same as learning it: a node visited a
+/// handful of times out of a million has regrets near zero on every action, and
+/// the average strategy that comes out is flat. Flat is not a decision. It is
+/// the absence of one, stored in the same shape as a decision and indexed by
+/// the same key.
+///
+/// Played, it is a die roll. That is how a hundred-blind stack raised to
+/// twenty-two with ten-six offsuit and then called a re-raise: the node was
+/// four ways uniform, the sampler picked `raise`, and nothing anywhere was
+/// wrong except that the strategy had never been solved. It cost forty blinds
+/// in two hands.
+///
+/// A genuine mixed strategy is rarely flat. Equilibria mix, but they mix in
+/// proportions the game forced on them — sixty-forty, ninety-ten — not in exact
+/// quarters across four actions. So near-uniform is read as unlearned, and the
+/// spot goes to the fallback, which at least knows what it is.
+fn informative(strategy: &[f32]) -> bool {
+    if strategy.len() < 2 {
+        return true;
+    }
+    let flat = 1.0 / strategy.len() as f32;
+    strategy.iter().any(|share| (share - flat).abs() > FLAT)
+}
+
+/// How far from uniform a strategy must sit to count as having been learned.
+///
+/// Two points of probability. Wide enough that a node touched a few times and
+/// left essentially flat is refused; narrow enough that a real mixed strategy —
+/// which lands on proportions the game dictated, not on exact fractions —
+/// passes.
+const FLAT: f32 = 0.02;
+
 /// Turns a solved move into something the table will accept.
 ///
 /// The size comes from the tree rather than being recomputed here, so that a
@@ -395,7 +432,7 @@ impl BlueprintAgent {
             .into_iter()
             .find_map(|key| {
                 let strategy = rung.blueprint.strategy(key)?;
-                (strategy.len() == moves.len()).then_some((key, strategy))
+                (strategy.len() == moves.len() && informative(strategy)).then_some((key, strategy))
             })
             .ok_or("no price the solve knows is near this one")?;
 
@@ -447,6 +484,11 @@ impl BlueprintAgent {
         let key = ring.key_from_table(view.seat, class, view.live, &committed)?;
         let moves = ring.moves_at(view.seat, view.live, &committed)?;
         let strategy = blueprint.strategy(key)?;
+        // A node the solve never learned is not a strategy to play. See
+        // `informative`.
+        if !informative(strategy) {
+            return None;
+        }
 
         let frequencies: Vec<(String, f64)> = moves
             .iter()
@@ -745,6 +787,9 @@ impl Agent for BlueprintAgent {
             let class = HandClass::from_cards(view.hole[0], view.hole[1]);
             let key = Preflop::info_key(stage, class.index());
             let strategy = self.blueprint.strategy(key)?;
+            if !informative(strategy) {
+                return None;
+            }
             let actions = self.actions_at(stage);
 
             frequencies = actions
