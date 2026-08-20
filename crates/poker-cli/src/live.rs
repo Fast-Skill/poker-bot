@@ -173,6 +173,46 @@ pub struct Session {
     started_with: Option<f64>,
     actions: usize,
     kept: usize,
+    /// Raises abandoned because the size would not go into the field.
+    ///
+    /// Counted because it is the difference between the bot playing the
+    /// strategy that was measured and playing something meeker, and a session
+    /// where it happens often is not the bot anybody benchmarked.
+    retreats: usize,
+    last_retreat: Option<Held>,
+}
+
+/// How long the hero may be to act before the bot stops holding out for a
+/// reading it trusts.
+///
+/// # Why there has to be one
+///
+/// Every other refusal in this program is free: decline the frame, look again,
+/// nothing is lost. Once the client is asking the hero to act that stops being
+/// true. The clock is running, and running out of it is not a neutral outcome —
+/// the client folds the hand and sits the hero out, which then makes every
+/// subsequent reading fail correctly while the seat is lost.
+///
+/// So this is the point where declining becomes more expensive than acting on
+/// an imperfect reading. It is set well inside the client's own timer, which
+/// runs around fifteen seconds, leaving room for the fallback to be taken and
+/// confirmed.
+pub const DEADLINE: Duration = Duration::from_secs(6);
+
+/// The safest thing that can be done with a reading not good enough to trust.
+///
+/// Checking when nothing is owed is free and cannot be a mistake whatever the
+/// table holds. Otherwise folding gives up the hand, which is a bounded loss,
+/// where letting the clock run out gives up the seat.
+///
+/// Deliberately not "call because it is cheap": the reason for being here is
+/// that the reading cannot be trusted, and a price read off an untrusted
+/// reading is no basis for putting money in.
+pub fn last_resort(view: &TableView) -> Choice {
+    match view.to_call() {
+        Some(owed) if owed <= 0.0 => Choice::Passive,
+        _ => Choice::Fold,
+    }
 }
 
 /// How long to leave between the two captures that must agree.
@@ -202,6 +242,8 @@ impl Session {
             started_with: None,
             actions: 0,
             kept: 0,
+            retreats: 0,
+            last_retreat: None,
         }
     }
 
@@ -211,6 +253,12 @@ impl Session {
 
     pub fn actions_taken(&self) -> usize {
         self.actions
+    }
+
+    /// How many raises were given up on because the size would not take, and
+    /// what stopped the last one.
+    pub fn retreats(&self) -> (usize, Option<Held>) {
+        (self.retreats, self.last_retreat.clone())
     }
 
     /// Reads the table once.
@@ -347,24 +395,42 @@ impl Session {
     /// stale or unchecked one is a programming error rather than a table
     /// condition, so it is asserted rather than reported.
     pub fn act(&mut self, view: &TableView, choice: Choice) -> Result<Duration, Held> {
+        // Only that the client is asking. Whether the reading is good enough to
+        // act on is the caller's judgement, because it is not always a free
+        // choice: past [`DEADLINE`] the caller deliberately acts on a reading
+        // that failed its checks, rather than lose the seat to the clock.
         debug_assert!(
-            view.is_actionable(),
-            "act was called on a view that was never cleared to act on"
+            view.hero_to_act(),
+            "act was called when the client was not asking the hero to act"
         );
         let panel = view.action.as_ref().ok_or(Held::NotOurTurn)?;
+
+        // A raise has to be sized before it is made, and the size has to be
+        // checked before it is committed. Windows accepting the keystrokes says
+        // nothing about what the field holds.
+        //
+        // If the field will not take it, the raise is abandoned — but the turn
+        // is not. Doing nothing here was what cost a seat: the size failed to
+        // read back, `act` returned an error, and the bot went back to watching
+        // while the client counted down. Calling is the right retreat, and
+        // safely so: a strategy that chose to raise to some amount had already
+        // accepted putting in at least a call, which is strictly less. Checking
+        // costs nothing at all when nothing is owed.
+        let mut choice = choice;
+        if let Choice::Aggressive { to_blinds } = choice {
+            if let Err(why) = self.set_amount(panel, to_blinds) {
+                self.retreats += 1;
+                self.last_retreat = Some(why);
+                choice = Choice::Passive;
+            }
+        }
+
         let button = match choice {
             Choice::Fold => panel.fold(),
             Choice::Passive => panel.passive(),
             Choice::Aggressive { .. } => panel.aggressive(),
         }
         .ok_or(Held::NoSuchButton(choice))?;
-
-        // A raise has to be sized before it is made, and the size has to be
-        // checked before it is committed. Windows accepting the keystrokes says
-        // nothing about what the field holds.
-        if let Choice::Aggressive { to_blinds } = choice {
-            self.set_amount(panel, to_blinds)?;
-        }
 
         let (x, y) = button.centre();
         let began = Instant::now();

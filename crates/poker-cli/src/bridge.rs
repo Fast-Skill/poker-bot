@@ -95,6 +95,12 @@ pub struct Decision {
     /// that does not track history should not be consulting a postflop solve.
     pub acted: Vec<bool>,
     pub raises: u8,
+    /// What was in the middle when this street opened, if the client says.
+    ///
+    /// The client's own `collected` figure — the chips already swept in from
+    /// earlier streets — which is exactly this. `None` when it is not on
+    /// screen, and then nobody knows it and nobody pretends to.
+    pub settled: Option<u64>,
     pub legal: LegalActions,
 }
 
@@ -122,6 +128,7 @@ impl Decision {
             street_committed: &self.committed,
             acted: &self.acted,
             raises: self.raises,
+            settled: self.settled,
             big_blind: CHIPS_PER_BB as u64,
             legal: &self.legal,
         }
@@ -360,6 +367,7 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
         stacks,
         acted: vec![false; seated],
         raises: 0,
+        settled: table.collected.map(chips),
         committed,
         live,
         legal,
@@ -391,6 +399,7 @@ mod tests {
             live: vec![true, true],
             acted: Vec::new(),
             raises: 0,
+            settled: None,
             legal: LegalActions {
                 can_fold: true,
                 can_check: false,
@@ -489,6 +498,7 @@ mod tests {
             live: vec![true, true],
             acted: Vec::new(),
             raises: 0,
+            settled: None,
             legal: LegalActions {
                 can_fold: true,
                 can_check: true,
