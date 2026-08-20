@@ -229,6 +229,35 @@ pub fn read_sit_out(frame: &Frame) -> Option<SitOut> {
         }
     }
 
+    // A red button beside the green one means this is a dialog offering a
+    // choice, not the sit-out notice.
+    //
+    // Recognising "one green button" was never enough, and the gap was
+    // expensive. The straddle dialog offers `Straddle to 4 BB` in green beside
+    // `All-In` in red; it matched, the recovery pressed it, and the bot posted
+    // a four-blind straddle believing it had sat itself back in. It did that
+    // five times in three minutes, bleeding a blind a time, while the log
+    // cheerfully reported "sat out - clicked back in".
+    //
+    // The sit-out notice offers only `I'm Back` in green and `Leave Table` in
+    // grey. So the absence of red is what separates a notice to dismiss from an
+    // offer to decline — and when in doubt this reports nothing, which costs a
+    // seat at worst rather than chips at every dialog.
+    let mut red = vec![false; w * h];
+    for y in 0..h {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            let (r, g, b) = (r as i16, g as i16, b as i16);
+            red[y * w + x] = r > 120 && r - g > 45 && r - b > 45;
+        }
+    }
+    for bounds in components(&red, w, h) {
+        let (bw, bh) = (bounds.width(), bounds.height());
+        if (SIZE.0 .0..=SIZE.0 .1).contains(&bw) && (SIZE.1 .0..=SIZE.1 .1).contains(&bh) {
+            return None;
+        }
+    }
+
     let mut found = None;
     for bounds in components(&green, w, h) {
         let (bw, bh) = (bounds.width(), bounds.height());
