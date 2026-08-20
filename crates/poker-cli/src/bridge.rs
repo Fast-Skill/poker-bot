@@ -128,6 +128,125 @@ impl Decision {
     }
 }
 
+/// What a frame cannot show: how a street has been bet.
+///
+/// # The gap this closes
+///
+/// A postflop solve keys on two facts a single frame does not carry: how many
+/// raises this street has seen, and who has acted since the last one. The
+/// screen shows what is in front of each player, not the order it arrived in.
+/// Bet fifty into fifty and raise to fifty both leave fifty on the felt.
+///
+/// Almost all of it turns out not to need remembering.
+///
+/// # Who has acted, from position alone
+///
+/// After the flop the out-of-position player acts first, every street. So when
+/// it is the hero's turn in a heads-up pot:
+///
+/// - in position, the opponent has necessarily already acted, whatever they did;
+/// - out of position with nothing bet, the street has only just opened and
+///   nobody has acted;
+/// - out of position facing a bet, the opponent put it there.
+///
+/// That is the whole of it. Turn order is not a thing worth watching for,
+/// because it cannot be otherwise.
+///
+/// # How many raises, from what the bot itself did
+///
+/// This one does need memory, but far less than watching every frame. Heads-up,
+/// the opponent acts exactly once between the hero's turns, so comparing the
+/// bet now against the bet at the hero's last turn says whether they raised —
+/// no matter how slowly the loop polls or what it missed in between. The hero's
+/// own raises need no observation at all: the bot made them.
+///
+/// Counting this way is exact where watching frames would be a race.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct History {
+    /// Which street the counts below belong to, by how many board cards showed.
+    board: usize,
+    /// The hero's cards, to notice a new hand dealt on the same street count.
+    hole: Option<[Card; 2]>,
+    raises: u8,
+    /// The largest wager on the felt at the hero's last turn this street.
+    bet: u64,
+}
+
+impl History {
+    pub fn new() -> History {
+        History::default()
+    }
+
+    /// Fills in what the frame could not say, and remembers this turn.
+    ///
+    /// Call once per decision, before the view is handed to an agent.
+    ///
+    /// Preflop is left alone. The blinds are wagers nobody chose to make, so
+    /// none of the reasoning above holds there — and nothing consults these
+    /// fields preflop, where a solved ladder answers instead.
+    pub fn observe(&mut self, decision: &mut Decision) {
+        let bet = decision.committed.iter().copied().max().unwrap_or(0);
+
+        // A new street, or a new hand that happens to show the same count.
+        if decision.board.len() != self.board || self.hole != Some(decision.hole) {
+            self.board = decision.board.len();
+            self.hole = Some(decision.hole);
+            self.raises = 0;
+            self.bet = 0;
+        }
+
+        if decision.street == Street::Preflop {
+            return;
+        }
+
+        // The opponent has had at most one turn since the hero's last, so any
+        // increase is exactly one raise.
+        if bet > self.bet {
+            self.raises = self.raises.saturating_add(1);
+        }
+        self.bet = bet;
+
+        decision.raises = self.raises;
+        decision.acted = vec![false; decision.live.len()];
+        if decision.active != 2 {
+            // Three live players make position ambiguous — there is more than
+            // one player before or after the hero — and no postflop solve
+            // covers that pot anyway.
+            return;
+        }
+        let Some(opponent) = (0..decision.live.len())
+            .find(|seat| decision.live[*seat] && *seat != decision.seat)
+        else {
+            return;
+        };
+        // The hero's own bit is never set at the hero's own turn: acting sets
+        // it, and the only thing that can bring the turn back round is a raise,
+        // which clears it again.
+        decision.acted[opponent] = self.hero_is_in_position(decision) || bet > 0;
+    }
+
+    /// Whether the hero acts last on this street.
+    ///
+    /// Postflop the order runs from the seat after the button round to the
+    /// button itself, so the last live seat in that order has position.
+    fn hero_is_in_position(&self, decision: &Decision) -> bool {
+        let last = (1..decision.live.len())
+            .chain(std::iter::once(0))
+            .rfind(|seat| decision.live[*seat]);
+        last == Some(decision.seat)
+    }
+
+    /// Tells the tracker the hero has raised to a total this street.
+    ///
+    /// The bot knows its own action without looking, and saying so here keeps
+    /// the count exact through a raising war that a frame comparison alone
+    /// would read as a single raise.
+    pub fn hero_raised_to(&mut self, total: u64) {
+        self.raises = self.raises.saturating_add(1);
+        self.bet = self.bet.max(total);
+    }
+}
+
 /// Rounds a reading in big blinds to whole chips.
 fn chips(blinds: f64) -> u64 {
     (blinds * CHIPS_PER_BB).round().max(0.0) as u64
@@ -249,7 +368,135 @@ pub fn translate(table: &TableView) -> Result<Decision, Untranslatable> {
 
 #[cfg(test)]
 mod tests {
+    use poker_core::card::parse_cards;
     use super::*;
+
+    /// A heads-up street, bet and raised, is counted exactly.
+    #[test]
+    fn a_street_is_counted_through_a_raising_war() {
+        // Seat 0 is the button and acts last; seat 1 is out of position.
+        let flop = |seat: usize, committed: Vec<u64>| Decision {
+            hole: parse_two("As Kd"),
+            board: parse_cards("Ah 7c 2d").expect("three cards"),
+            street: Street::Flop,
+            position: Position::Button,
+            seat,
+            players: 2,
+            active: 2,
+            pot: 1_000 + committed.iter().sum::<u64>(),
+            to_call: committed.iter().copied().max().unwrap_or(0) - committed[seat],
+            stack: 9_000,
+            stacks: vec![9_000, 9_000],
+            committed,
+            live: vec![true, true],
+            acted: Vec::new(),
+            raises: 0,
+            legal: LegalActions {
+                can_fold: true,
+                can_check: false,
+                call_cost: Some(0),
+                raise_to: Some((100, 9_000)),
+            },
+        };
+
+        let mut history = History::new();
+
+        // Out of position, nothing bet: the street has only just opened.
+        let mut open = flop(1, vec![0, 0]);
+        history.observe(&mut open);
+        assert_eq!(open.raises, 0);
+        assert_eq!(open.acted, vec![false, false]);
+
+        // It checks to the button, who therefore knows the other has acted.
+        let mut checked_to = flop(0, vec![0, 0]);
+        history.observe(&mut checked_to);
+        assert_eq!(checked_to.raises, 0);
+        assert_eq!(checked_to.acted, vec![false, true]);
+
+        // The button bets; the tracker is told, since the bot made the move.
+        history.hero_raised_to(500);
+
+        // Back to the other player, facing it.
+        let mut facing = flop(1, vec![500, 0]);
+        history.observe(&mut facing);
+        assert_eq!(facing.raises, 1);
+        assert_eq!(facing.acted, vec![true, false]);
+
+        // They raise, which the hero sees only as a larger number on the felt.
+        let mut raised_on = flop(0, vec![500, 1_500]);
+        history.observe(&mut raised_on);
+        assert_eq!(raised_on.raises, 2, "the opponent's raise was not counted");
+        assert_eq!(raised_on.acted, vec![false, true]);
+    }
+
+    /// A new street starts the count again.
+    #[test]
+    fn the_turn_does_not_inherit_the_flop() {
+        let mut history = History::new();
+        let mut flop = sample_decision(Street::Flop, 3, vec![0, 800]);
+        history.observe(&mut flop);
+        assert_eq!(flop.raises, 1);
+
+        let mut turn = sample_decision(Street::Turn, 4, vec![0, 0]);
+        history.observe(&mut turn);
+        assert_eq!(turn.raises, 0, "the flop's betting followed it to the turn");
+    }
+
+    /// A new hand starts the count again even on the same street.
+    #[test]
+    fn a_fresh_hand_is_not_the_last_one_continued() {
+        let mut history = History::new();
+        let mut first = sample_decision(Street::Flop, 3, vec![0, 800]);
+        history.observe(&mut first);
+        assert_eq!(first.raises, 1);
+
+        let mut second = sample_decision(Street::Flop, 3, vec![0, 0]);
+        second.hole = parse_two("7c 2h");
+        history.observe(&mut second);
+        assert_eq!(second.raises, 0, "the previous hand's betting carried over");
+    }
+
+    /// Preflop is left as it was found.
+    #[test]
+    fn the_blinds_are_not_read_as_betting() {
+        let mut history = History::new();
+        let mut preflop = sample_decision(Street::Preflop, 0, vec![100, 200]);
+        history.observe(&mut preflop);
+        assert_eq!(preflop.raises, 0);
+        assert!(preflop.acted.is_empty());
+    }
+
+    fn parse_two(text: &str) -> [Card; 2] {
+        let cards = parse_cards(text).expect("two cards");
+        [cards[0], cards[1]]
+    }
+
+    fn sample_decision(street: Street, board: usize, committed: Vec<u64>) -> Decision {
+        let full = parse_cards("Ah 7c 2d 9s 4h").expect("five cards");
+        Decision {
+            hole: parse_two("As Kd"),
+            board: full[..board].to_vec(),
+            street,
+            position: Position::Button,
+            seat: 0,
+            players: 2,
+            active: 2,
+            pot: 1_000,
+            to_call: 0,
+            stack: 9_000,
+            stacks: vec![9_000, 9_000],
+            committed,
+            live: vec![true, true],
+            acted: Vec::new(),
+            raises: 0,
+            legal: LegalActions {
+                can_fold: true,
+                can_check: true,
+                call_cost: None,
+                raise_to: Some((100, 9_000)),
+            },
+        }
+    }
 
     #[test]
     fn blinds_become_chips_without_losing_the_decimal() {
