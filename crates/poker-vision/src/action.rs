@@ -119,6 +119,27 @@ pub struct SitOut {
     pub resume: ActionButton,
 }
 
+/// Finds a dialog's single green confirm button, if one is showing.
+///
+/// # Why one function serves every dialog
+///
+/// Taking a seat walks through several of these — a VPIP warning, a CallTime
+/// notice, the buy-in itself — and which of them appear varies by table and by
+/// what happened last time. They differ in title, in wording, and in size.
+///
+/// What they have in common is the only thing worth keying on: exactly one
+/// green button. So this does not try to tell them apart. It answers "is the
+/// client waiting on a confirmation, and where do I press", which is the whole
+/// of what a caller needs, and it does not go stale when the wording changes.
+///
+/// The felt is green as well, but it is one enormous region rather than a
+/// button-sized rectangle, so size alone separates them. Requiring the green to
+/// be solitary is what keeps this from firing on the action row, where the
+/// buttons are red, or on anything else with a green control beside another.
+pub fn read_confirm(frame: &Frame) -> Option<ActionButton> {
+    read_sit_out(frame).map(|dialog| dialog.resume)
+}
+
 /// Finds the sit-out dialog, if it is showing.
 ///
 /// Recognised by its one green control. The felt is green too, but it is one
