@@ -1052,7 +1052,7 @@ mod tests {
             let ((fewer, wider), (more, tighter)) = (pair[0], pair[1]);
             assert!(
                 tighter < wider,
-                "{more}-handed opens {tighter:.1}%, which is wider than {fewer}-handed                  at {wider:.1}% — a bigger table should open tighter"
+                "{more}-handed opens {tighter:.1}%, which is wider than {fewer}-handed at {wider:.1}% — a bigger table should open tighter"
             );
         }
     }

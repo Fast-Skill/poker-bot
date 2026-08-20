@@ -103,10 +103,10 @@ impl Held {
             Held::NoSuchButton(choice) => format!("there is no {} button on screen", choice.name()),
             Held::WrongAmount { wanted, showing } => match showing {
                 Some(showing) => format!(
-                    "the raise field reads {showing} where {wanted} was wanted, so nothing                      was committed"
+                    "the raise field reads {showing} where {wanted} was wanted, so nothing was committed"
                 ),
                 None => format!(
-                    "the raise field could not be read after writing {wanted} to it, so                      nothing was committed"
+                    "the raise field could not be read after writing {wanted} to it, so nothing was committed"
                 ),
             },
         }
