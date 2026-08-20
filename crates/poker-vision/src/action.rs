@@ -149,14 +149,31 @@ pub fn read_confirm(frame: &Frame) -> Option<ActionButton> {
 /// 247 by 67, and the VPIP and CallTime dialogs draw theirs nearly twice as
 /// wide.
 pub fn green_buttons(frame: &Frame) -> Vec<ActionButton> {
-    /// Wide enough for every confirm the client draws. Measured across the
-    /// dialogs: the buy-in's is about 175 across, the sit-out's 247, and the
-    /// VPIP and CallTime notices stretch theirs to about 485.
-    const SIZE: ((usize, usize), (usize, usize)) = ((140, 620), (35, 130));
+    /// Wide enough for every confirm the client draws, as a share of the
+    /// window rather than a count of pixels.
+    ///
+    /// Measured at a 1430x1040 table: the buy-in's button is about 175 across
+    /// and the VPIP and CallTime notices stretch theirs to about 485, with the
+    /// sit-out's 247 between them; all are near 55 to 67 tall. As fractions
+    /// that is roughly a tenth to a third of the width and a twentieth of the
+    /// height.
+    ///
+    /// Fractions because the client is resizable and the table is not always
+    /// opened at the size the templates were measured at. Fixed pixels cost a
+    /// run: at 850x630 the buy-in button is only about 104 across, under a
+    /// floor set from the larger window, so the first two dialogs were
+    /// confirmed and the third was invisible.
+    const WIDE: (f64, f64) = (0.08, 0.42);
+    const TALL: (f64, f64) = (0.025, 0.11);
+    let span = |(lo, hi): (f64, f64), of: usize| {
+        ((lo * of as f64) as usize, (hi * of as f64).ceil() as usize)
+    };
     /// A button is a filled rectangle. Anything ragged is scenery.
     const MIN_FILL: f32 = 0.80;
 
     let (w, h) = (frame.width, frame.height);
+    let wide = span(WIDE, w);
+    let tall = span(TALL, h);
     let mut green = vec![false; w * h];
     for y in 0..h {
         for x in 0..w {
@@ -169,7 +186,7 @@ pub fn green_buttons(frame: &Frame) -> Vec<ActionButton> {
     let mut found: Vec<ActionButton> = Vec::new();
     for bounds in components(&green, w, h) {
         let (bw, bh) = (bounds.width(), bounds.height());
-        if !(SIZE.0 .0..=SIZE.0 .1).contains(&bw) || !(SIZE.1 .0..=SIZE.1 .1).contains(&bh) {
+        if !(wide.0..=wide.1).contains(&bw) || !(tall.0..=tall.1).contains(&bh) {
             continue;
         }
         let lit = (bounds.y0..=bounds.y1)

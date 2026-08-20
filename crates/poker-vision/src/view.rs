@@ -356,7 +356,27 @@ impl TableView {
     /// doing nothing costs at most one folded blind while acting on a misread
     /// table can cost a stack.
     pub fn is_actionable(&self) -> bool {
-        self.hero_to_act() && self.refusals == 0 && self.hole.len() == 2 && self.is_consistent()
+        self.hero_to_act() && self.reads_what_a_decision_needs() && self.is_consistent()
+    }
+
+    /// Whether every figure the hero's own decision rests on was read.
+    ///
+    /// Not the whole table. Requiring nothing anywhere to have been refused
+    /// meant one unreadable stack across the felt — a seat mid-animation, a
+    /// player joining — blocked a decision that never used it, and the hand was
+    /// then folded by the clock. Over a session that is a real cost, paid in
+    /// hands the strategy wanted to play.
+    ///
+    /// What is still demanded is everything that goes into the answer: the
+    /// hero's two cards, the hero's stack, the pot, and what calling costs.
+    /// Each of those wrong is a decision made about a different table, and the
+    /// money-balance check in [`TableView::is_consistent`] still has to pass on
+    /// top.
+    pub fn reads_what_a_decision_needs(&self) -> bool {
+        self.hole.len() == 2
+            && self.pot.is_some()
+            && self.to_call().is_some()
+            && self.hero().is_some_and(|hero| hero.stack.is_some())
     }
 
     /// Which seats posted the small and big blinds.
