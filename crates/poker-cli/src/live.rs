@@ -71,6 +71,13 @@ pub enum Held {
     NotSettled,
     /// The client is not asking the hero to act.
     NotOurTurn,
+    /// The client went on asking the hero to act long after the click.
+    ///
+    /// Distinct from [`Held::NotSettled`], which it used to be reported as, and
+    /// which said the table was moving — the opposite of what had happened, and
+    /// misleading in a log. This means the action row was still there when the
+    /// waiting ran out.
+    NotTaken,
     /// The client has sat the hero out for not acting in time.
     SatOut,
     /// The reading was incomplete — a refused figure, or unread cards.
@@ -91,6 +98,7 @@ impl Held {
             Held::StopLoss => "the session loss limit has been reached".into(),
             Held::NoPicture => "the window could not be captured".into(),
             Held::NotSettled => "two readings disagreed, so the table was still moving".into(),
+            Held::NotTaken => "the action row was still up after the click, so nothing took".into(),
             Held::NotOurTurn => "the client is not asking us to act".into(),
             Held::SatOut => {
                 "the client has sat us out; nothing will be dealt until we sit back in".into()
@@ -231,6 +239,12 @@ pub fn last_resort(view: &TableView) -> Choice {
 /// Long enough that an animation in flight moves visibly between them, short
 /// enough to fit comfortably inside the client's action timer.
 const SETTLE: Duration = Duration::from_millis(220);
+
+/// How long to keep watching for the action row to clear after a click.
+///
+/// The client takes a variable time to take an action down, and the whole of
+/// that variability used to be read as failure.
+const TOOK: Duration = Duration::from_millis(2_500);
 
 /// How long to give the client to respond to a click before checking.
 const RESPOND: Duration = Duration::from_millis(700);
@@ -489,10 +503,28 @@ impl Session {
 
         // Windows accepting the event says nothing about the client acting on
         // it. The action row going away does.
-        std::thread::sleep(RESPOND);
-        match self.look() {
-            Some(after) if after.hero_to_act() => Err(Held::NotSettled),
-            _ => Ok(began.elapsed()),
+        //
+        // Watched for, rather than glanced at once. A single look a fixed
+        // moment after the click reported perfectly good folds as failures: the
+        // client takes a variable time to clear the row, and a frame caught
+        // before it does looks exactly like a click that never landed. The
+        // difference showed up as a log full of "fold did not take" from a
+        // session in which every fold did take.
+        //
+        // Reading nothing at all is not evidence either way — a frame arriving
+        // mid-animation is unreadable whether or not the click landed — so it
+        // waits rather than concluding.
+        let deadline = Instant::now() + TOOK;
+        loop {
+            std::thread::sleep(Duration::from_millis(200));
+            if let Some(after) = self.look() {
+                if !after.hero_to_act() {
+                    return Ok(began.elapsed());
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(Held::NotTaken);
+            }
         }
     }
 

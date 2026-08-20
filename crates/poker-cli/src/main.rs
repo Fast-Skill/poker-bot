@@ -1249,7 +1249,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         "acting   : {}",
         match acting {
             Acting::Never => "no - watching only",
-            Acting::FoldOnly => "folds when it is our turn, whatever the strategy says",
+            Acting::FoldOnly => "folds every hand - checks when it is free - whatever the strategy says",
             Acting::Play => "PLAYS - folds, calls and raises for real money",
         }
     );
@@ -1364,7 +1364,14 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                 asking_since = None;
                 let choice = match acting {
                     Acting::Never => None,
-                    Acting::FoldOnly => Some(Choice::Fold),
+                    // Checking when nothing is owed, rather than folding.
+                    // Folding a hand that could be seen for free is never right
+                    // and is not always even offered — the client shows Check
+                    // where the fold button would be — so the click went
+                    // nowhere and the turn was lost. The point of this mode is
+                    // to prove the click path while risking only blinds, and
+                    // checking risks less than that.
+                    Acting::FoldOnly => Some(live::last_resort(v)),
                     Acting::Play => pending,
                 };
                 if let Some(choice) = choice {
@@ -1394,10 +1401,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                     && v.hero_to_act()
                     && asking_since.is_some_and(|since| since.elapsed() >= live::DEADLINE) =>
             {
-                let choice = match acting {
-                    Acting::FoldOnly => Choice::Fold,
-                    _ => live::last_resort(v),
-                };
+                let choice = live::last_resort(v);
                 forced += 1;
                 asking_since = None;
                 match session.act(v, choice) {
