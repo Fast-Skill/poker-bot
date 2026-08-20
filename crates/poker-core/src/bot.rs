@@ -366,15 +366,17 @@ impl BlueprintAgent {
         // rather than as it stands. Measuring it mid-street would move the bot
         // between solves as bets went in, and a hand that consulted one strategy
         // to check and another to face the raise is playing neither.
-        let settled = view.pot.saturating_sub(
-            view.street_committed
-                .iter()
-                .enumerate()
-                .filter(|(seat, _)| view.live[*seat])
-                .map(|(_, amount)| *amount)
-                .sum::<u64>(),
-        );
-        let spr = (spot.behind + spot.mine) as f64 / settled.max(1) as f64;
+        //
+        // Taken from whoever knows it rather than derived. Subtracting this
+        // street's wagers from the pot is arithmetic on two separately read
+        // figures, and at a live table it collapsed to nothing — after which
+        // every stack looked bottomless and no rung was ever near one.
+        //
+        // Falling back to the whole pot is safe in the direction that matters:
+        // it can only understate how deep the pot is, which reaches for a
+        // shallower solve and a more cautious strategy.
+        let settled = view.settled.unwrap_or(view.pot).max(1);
+        let spr = (spot.behind + spot.mine) as f64 / settled as f64;
         let rung = self.rung_for(spr).ok_or("no rung near this stack depth")?;
 
         let moves = rung.game.moves_at(&spot);
@@ -1180,6 +1182,7 @@ mod tests {
             street_committed: &[500, 1_000],
             acted: &[false, false],
             raises: 0,
+            settled: None,
             big_blind: 100,
             legal: &legal,
         };
@@ -1239,6 +1242,7 @@ mod tests {
             street_committed: &[0, 50, 100],
             acted: &[false, false, false],
             raises: 0,
+            settled: None,
             big_blind: 100,
             legal: &legal,
         };
@@ -1302,6 +1306,7 @@ mod tests {
             street_committed: &[0, 50, 100, 100],
             acted: &[false, false, false, false],
             raises: 0,
+            settled: None,
             big_blind: 100,
             legal: &legal,
         };
@@ -1367,6 +1372,7 @@ mod tests {
             street_committed: &[0, 50, 100],
             acted: &[false, false, false],
             raises: 0,
+            settled: None,
             big_blind: 100,
             legal: &legal,
         };
@@ -1417,6 +1423,7 @@ mod tests {
             street_committed: &[100, 100],
             acted: &[false, false],
             raises: 0,
+            settled: None,
             big_blind: 100,
             legal: &legal,
         };

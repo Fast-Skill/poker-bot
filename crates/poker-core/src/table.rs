@@ -84,6 +84,22 @@ pub struct View<'a> {
     pub acted: &'a [bool],
     /// Raises made on this street, blind posts excluded.
     pub raises: u8,
+    /// What was in the middle when this street opened, if it is known.
+    ///
+    /// A postflop solve is chosen by how much is behind relative to the pot
+    /// being played for, and that pot is this — the money already committed
+    /// when the cards came, before anybody bet at them.
+    ///
+    /// It used to be derived, as the pot now less everything wagered this
+    /// street, and that was wrong in a way nothing caught until a live table:
+    /// both figures are read separately off the screen, and when the client
+    /// still showed the last street's chips in front of players the
+    /// subtraction came out at nothing. A pot of nothing makes every stack
+    /// look bottomless, no rung is near a bottomless stack, and every postflop
+    /// decision fell to the heuristic while a solved ladder sat loaded. So it
+    /// is stated by whoever actually knows it, and `None` says plainly that
+    /// nobody does.
+    pub settled: Option<u64>,
     /// The big blind, so sizes can be reasoned about in blinds.
     pub big_blind: u64,
     /// What is legal here. An agent returning anything else is a bug.
@@ -336,6 +352,15 @@ impl Table {
                     street_committed: &street_committed,
                     acted: &acted,
                     raises: round.raises(),
+                    // Exact here: the engine knows what each seat had put in
+                    // before this street because it is the one that moved it.
+                    settled: Some(
+                        round
+                            .seats()
+                            .iter()
+                            .map(|s| s.total_committed - s.committed)
+                            .sum(),
+                    ),
                     big_blind: self.big_blind,
                     legal: &legal,
                 };

@@ -1260,6 +1260,13 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     // What the engine decided on this frame, carried from the report to the act.
     let mut pending: Option<Choice> = None;
     let mut history = bridge::History::new();
+    // When the client first asked the hero to act on the turn now in progress.
+    //
+    // Declining a frame is free right up until this is set. After that the
+    // clock is running, and the cost of holding out for a reading that never
+    // comes is the seat itself.
+    let mut asking_since: Option<std::time::Instant> = None;
+    let mut forced = 0usize;
     while std::time::Instant::now() < until {
         let (view, held) = session.assess();
         let line = match (&view, &held) {
@@ -1325,8 +1332,18 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             last = line;
         }
 
+        // How long the client has been waiting on us, which is the only clock
+        // that matters once it starts.
+        match view.as_ref() {
+            Some(v) if v.hero_to_act() => {
+                asking_since.get_or_insert_with(std::time::Instant::now);
+            }
+            _ => asking_since = None,
+        }
+
         match (&view, &held) {
             (Some(v), None) => {
+                asking_since = None;
                 let choice = match acting {
                     Acting::Never => None,
                     Acting::FoldOnly => Some(Choice::Fold),
@@ -1340,6 +1357,39 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
                             took.as_millis()
                         ),
                         Err(why) => println!("  {} did not take: {}", choice.name(), why.explain()),
+                    }
+                }
+            }
+            // The client is asking, the reading will not come good, and the
+            // clock has run down far enough that waiting is the worse risk.
+            //
+            // This is the one place the bot acts on a reading it does not
+            // trust, and it is not a lapse in the rule but the reason for it:
+            // refusing a frame is free only while nothing is at stake. Timing
+            // out folds the hand *and* sits the hero out, after which every
+            // reading fails correctly while the seat is gone. So it takes the
+            // safest action a bad reading still supports — checking when
+            // nothing is owed, folding otherwise — and says plainly that it
+            // did.
+            (Some(v), Some(_))
+                if acting != Acting::Never
+                    && v.hero_to_act()
+                    && asking_since.is_some_and(|since| since.elapsed() >= live::DEADLINE) =>
+            {
+                let choice = match acting {
+                    Acting::FoldOnly => Choice::Fold,
+                    _ => live::last_resort(v),
+                };
+                forced += 1;
+                asking_since = None;
+                match session.act(v, choice) {
+                    Ok(took) => println!(
+                        "  CLOCK - reading never settled, {} instead ({} ms)",
+                        choice.name(),
+                        took.as_millis()
+                    ),
+                    Err(why) => {
+                        println!("  CLOCK - {} did not take either: {}", choice.name(), why.explain())
                     }
                 }
             }
@@ -1364,6 +1414,21 @@ stopping: {}", reason.explain());
 
     println!("
 {} action(s) taken.", session.actions_taken());
+    // Both of these are the reading letting the bot down rather than the
+    // strategy, and both are invisible in a long scroll. A session with many
+    // of either is not the bot that was benchmarked.
+    if forced > 0 {
+        println!(
+            "{forced} turn(s) taken on a reading that never settled - the clock forced it."
+        );
+    }
+    let (retreats, why) = session.retreats();
+    if retreats > 0 {
+        println!(
+            "{retreats} raise(s) given up as calls - the size would not go into the field{}.",
+            why.map(|w| format!(" ({})", w.explain())).unwrap_or_default()
+        );
+    }
     if !keep_unread.is_empty() {
         println!("{} unreadable frame(s) kept in {keep_unread}.", session.frames_kept());
     }
@@ -2114,7 +2179,25 @@ struct Flags {
     values: HashMap<String, String>,
 }
 
+/// Flags that are switches, and so mean `on` when given bare.
+///
+/// Listed rather than inferred, so that a flag needing a real value can never
+/// silently become the string "on" because its value was left off.
+const SWITCHES: &[&str] = &["explain", "monitor", "resize"];
+
 impl Flags {
+    /// Parses `--name value` pairs, and bare switches as `on`.
+    ///
+    /// # Why a bare flag means on
+    ///
+    /// The switches here read as switches — `--explain`, `--monitor`,
+    /// `--resize` — and a bare one is unambiguous: nothing else could be meant
+    /// by it. Demanding `--explain on` bought nothing and cost a run, twice,
+    /// with the whole command rejected over a word that was never in doubt.
+    ///
+    /// Flags that take a real value are unaffected. A missing value is still an
+    /// error for them, because guessing at a stake or a path is not the same
+    /// kind of obvious.
     fn parse(args: &[String]) -> Result<Flags, String> {
         let mut values = HashMap::new();
         let mut index = 0;
@@ -2123,14 +2206,18 @@ impl Flags {
             let name = arg
                 .strip_prefix("--")
                 .ok_or_else(|| format!("expected a --flag, found {arg:?}"))?;
-            let value = args
-                .get(index + 1)
-                .ok_or_else(|| format!("--{name} needs a value"))?;
-            if value.starts_with("--") {
-                return Err(format!("--{name} needs a value, found {value:?}"));
+            let value = args.get(index + 1).filter(|next| !next.starts_with("--"));
+            match value {
+                Some(value) => {
+                    values.insert(name.to_string(), value.clone());
+                    index += 2;
+                }
+                None if SWITCHES.contains(&name) => {
+                    values.insert(name.to_string(), "on".to_string());
+                    index += 1;
+                }
+                None => return Err(format!("--{name} needs a value")),
             }
-            values.insert(name.to_string(), value.clone());
-            index += 2;
         }
         Ok(Flags { values })
     }
@@ -2178,6 +2265,36 @@ impl Flags {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A bare switch means on; a flag wanting a value still says so.
+    #[test]
+    fn a_bare_switch_is_on_and_a_bare_value_flag_is_an_error() {
+        let args = |bits: &[&str]| -> Vec<String> {
+            bits.iter().map(|b| b.to_string()).collect()
+        };
+
+        let flags = Flags::parse(&args(&["--explain"])).expect("a bare switch");
+        assert_eq!(flags.text("explain", "off"), "on");
+
+        let flags =
+            Flags::parse(&args(&["--act", "off", "--explain"])).expect("a switch at the end");
+        assert_eq!(flags.text("act", "off"), "off");
+        assert_eq!(flags.text("explain", "off"), "on");
+
+        let flags =
+            Flags::parse(&args(&["--explain", "--act", "fold"])).expect("a switch before a flag");
+        assert_eq!(flags.text("explain", "off"), "on");
+        assert_eq!(flags.text("act", "off"), "fold");
+
+        // Still explicit where it matters.
+        let flags = Flags::parse(&args(&["--explain", "off"])).expect("explicit off");
+        assert_eq!(flags.text("explain", "on"), "off");
+
+        // A flag that wants a real value is not guessed at.
+        assert!(Flags::parse(&args(&["--seconds"])).is_err());
+        assert!(Flags::parse(&args(&["--out"])).is_err());
+        assert!(Flags::parse(&args(&["--seconds", "--act", "off"])).is_err());
+    }
 
     /// A postflop label says what a bot has to match, and nothing else parses.
     ///
