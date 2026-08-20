@@ -72,6 +72,7 @@ fn main() -> ExitCode {
         Some("see") => see(&args[1..]),
         Some("grab") => grab(&args[1..]),
         Some("sit") => sit(&args[1..]),
+        Some("replay") => replay(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
@@ -110,6 +111,7 @@ USAGE
   poker see   [options]            look at the live table and report what it reads
   poker grab  [options]            save every window of the client as a PNG
   poker sit   [options]            confirm the dialogs between an empty seat and a seat
+  poker replay <dir>               read recorded frames again, offline
   poker live  [options]            watch a live table and decide
                                    --act off|fold|play  (play risks real chips)
                                    --explain on  shows the reasoning behind each decision
@@ -1481,6 +1483,88 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 
 
 
+
+/// Reads a recorded session again, without a table.
+///
+/// # Why this matters more than it looks
+///
+/// Every reading bug so far has cost a live session to find and another to
+/// confirm — and a live table never reproduces anything exactly, so a fix could
+/// only ever be judged by whether the symptom seemed rarer afterwards. That is
+/// a slow and unreliable way to work, and it is why several conclusions drawn
+/// today from summary counts turned out to be wrong when a frame was finally
+/// opened.
+///
+/// A recorded frame is the same pixels every time. Running the reader over one
+/// says exactly what it makes of a moment that actually happened, and running
+/// it over a whole session says how often, so a change can be measured rather
+/// than hoped at.
+fn replay(args: &[String]) -> Result<(), String> {
+    use poker_vision::{Frame, GlyphTemplates, HeroTemplates, TableView, Templates};
+
+    let dir = args.first().ok_or("replay needs the directory a session was recorded to")?;
+    let flags = Flags::parse(&args[1..])?;
+    flags.reject_unknown(&["frames"])?;
+    let most: usize = flags
+        .text("frames", "9999")
+        .parse()
+        .map_err(|_| "--frames wants a number")?;
+
+    let cards = Templates::load(std::path::Path::new(TEMPLATES))
+        .map_err(|e| format!("could not read {TEMPLATES}: {e}"))?;
+    let glyphs = GlyphTemplates::load(std::path::Path::new(GLYPHS))
+        .map_err(|e| format!("could not read {GLYPHS}: {e}"))?;
+    let hero = HeroTemplates::load(std::path::Path::new(HERO_CARDS))
+        .map_err(|e| format!("could not read {HERO_CARDS}: {e}"))?;
+
+    let mut paths: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("could not read {dir}: {e}"))?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "png"))
+        .collect();
+    paths.sort();
+    paths.truncate(most);
+    if paths.is_empty() {
+        return Err(format!("no recorded frames in {dir}"));
+    }
+
+    let (mut read, mut buttons, mut hole, mut actionable) = (0usize, 0usize, 0usize, 0usize);
+    let mut seats: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    for path in &paths {
+        let Ok(bytes) = std::fs::read(path) else { continue };
+        let Some((w, h, rgb)) = png::decode(&bytes) else {
+            println!("{}: not a frame this program wrote", path.display());
+            continue;
+        };
+        let frame = Frame::new(w, h, &rgb);
+        let view = TableView::read(&frame, &cards, &glyphs, &hero, Default::default(), Default::default());
+        read += 1;
+        buttons += view.button.is_some() as usize;
+        hole += (view.hole.len() == 2) as usize;
+        actionable += view.is_actionable() as usize;
+        *seats.entry(view.occupied()).or_insert(0) += 1;
+    }
+
+    println!("{read} frame(s) read from {dir}
+");
+    println!("  dealer button found   {buttons} ({:.0}%)", share(buttons, read));
+    println!("  both hole cards read  {hole} ({:.0}%)", share(hole, read));
+    println!("  fit to act on         {actionable} ({:.0}%)", share(actionable, read));
+    println!("
+  seats seen:");
+    for (count, times) in seats {
+        println!("    {count} seats  x{times}");
+    }
+    Ok(())
+}
+
+fn share(part: usize, whole: usize) -> f64 {
+    if whole == 0 {
+        0.0
+    } else {
+        100.0 * part as f64 / whole as f64
+    }
+}
 
 /// Clicks through the dialogs between choosing a seat and sitting in it.
 ///

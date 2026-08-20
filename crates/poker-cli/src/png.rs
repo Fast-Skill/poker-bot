@@ -115,9 +115,105 @@ fn crc32_from(running: u32, data: &[u8]) -> u32 {
     !crc
 }
 
+/// Reads back a PNG this module wrote.
+///
+/// # Deliberately not a PNG reader
+///
+/// It handles exactly what [`encode`] produces: eight-bit truecolour, no
+/// interlacing, unfiltered scanlines, and zlib stored blocks. A file from
+/// anywhere else will almost certainly be refused, and should be — the purpose
+/// is not to open images but to replay recorded sessions through the reader
+/// offline.
+///
+/// That closes the loop the whole debugging effort was missing. Until now a
+/// suspected misreading could only be confirmed by asking for another live
+/// session, which costs time at a table and reproduces nothing exactly. A
+/// recorded frame is the same pixels every time, so a fix can be checked
+/// against the exact moment it was meant to fix.
+pub fn decode(bytes: &[u8]) -> Option<(usize, usize, Vec<u8>)> {
+    if bytes.len() < 8 || &bytes[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+        return None;
+    }
+    let (mut width, mut height) = (0usize, 0usize);
+    let mut stream: Vec<u8> = Vec::new();
+    let mut at = 8;
+    while at + 8 <= bytes.len() {
+        let len = u32::from_be_bytes(bytes.get(at..at + 4)?.try_into().ok()?) as usize;
+        let kind = bytes.get(at + 4..at + 8)?;
+        let body = bytes.get(at + 8..at + 8 + len)?;
+        match kind {
+            b"IHDR" => {
+                width = u32::from_be_bytes(body.get(0..4)?.try_into().ok()?) as usize;
+                height = u32::from_be_bytes(body.get(4..8)?.try_into().ok()?) as usize;
+                // Eight bits per sample, truecolour, no interlacing.
+                if body.get(8..13)? != [8, 2, 0, 0, 0] {
+                    return None;
+                }
+            }
+            b"IDAT" => stream.extend_from_slice(body),
+            b"IEND" => break,
+            _ => {}
+        }
+        at += 12 + len;
+    }
+    if width == 0 || height == 0 || stream.len() < 6 {
+        return None;
+    }
+
+    // Past the two-byte zlib header, then stored blocks: a flag byte, the
+    // length twice (once complemented), then the bytes themselves.
+    let mut raw = Vec::with_capacity(height * (1 + width * 3));
+    let mut at = 2;
+    loop {
+        let last = stream.get(at)? & 1;
+        let len = u16::from_le_bytes(stream.get(at + 1..at + 3)?.try_into().ok()?) as usize;
+        raw.extend_from_slice(stream.get(at + 5..at + 5 + len)?);
+        at += 5 + len;
+        if last == 1 {
+            break;
+        }
+    }
+
+    let stride = 1 + width * 3;
+    if raw.len() < height * stride {
+        return None;
+    }
+    let mut rgb = Vec::with_capacity(width * height * 3);
+    for row in 0..height {
+        let line = raw.get(row * stride..(row + 1) * stride)?;
+        // Only the "none" filter, which is all `encode` writes.
+        if line[0] != 0 {
+            return None;
+        }
+        rgb.extend_from_slice(&line[1..]);
+    }
+    Some((width, height, rgb))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What was written comes back, which is what makes replay meaningful.
+    #[test]
+    fn a_written_picture_reads_back_identically() {
+        for (width, height) in [(3usize, 2usize), (200, 200)] {
+            let rgb: Vec<u8> = (0..width * height * 3).map(|i| (i % 251) as u8).collect();
+            let png = encode(width, height, &rgb);
+            let (w, h, back) = decode(&png).expect("our own file");
+            assert_eq!((w, h), (width, height));
+            assert_eq!(back, rgb, "{width}x{height} did not survive the round trip");
+        }
+    }
+
+    #[test]
+    fn anything_that_is_not_one_of_ours_is_refused() {
+        assert_eq!(decode(b"not a png at all"), None);
+        assert_eq!(decode(&[]), None);
+        let mut truncated = encode(4, 4, &vec![9u8; 48]);
+        truncated.truncate(20);
+        assert_eq!(decode(&truncated), None);
+    }
 
     /// The parts a decoder checks first: signature, dimensions, and that the
     /// chunk lengths walk cleanly to the end.
