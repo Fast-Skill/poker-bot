@@ -1118,7 +1118,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -1130,6 +1130,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
     let ring_dir = flags.text("ring", "data");
     let keep_unread = flags.text("keep-unread", "");
+    let keep_turns = flags.text("keep-turns", "");
     let explain = flags.text("explain", "off") == "on";
 
     #[derive(PartialEq)]
@@ -1182,6 +1183,9 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let mut session = Session::new(table, cards, glyphs, hero, safety);
     if !keep_unread.is_empty() {
         session.keep_unread = Some(PathBuf::from(&keep_unread));
+    }
+    if !keep_turns.is_empty() {
+        session.keep_turns = Some(PathBuf::from(&keep_turns));
     }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
@@ -1249,6 +1253,20 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             Acting::Play => "PLAYS - folds, calls and raises for real money",
         }
     );
+    // Watching a table is not a free thing to do while sitting at it. The bot
+    // will see its turn, print what it would do, and touch nothing — and the
+    // client reads that as a player who has stopped responding, times the seat
+    // out, and eventually takes it away. Sitting back in is itself a click, so
+    // watch mode cannot undo it either. Worth saying here rather than leaving
+    // it to be discovered from the far side of a Timeout Sit Out dialog.
+    if acting == Acting::Never {
+        println!(
+            "  note   : the client will time this seat out, since watching never presses anything."
+        );
+        println!(
+            "           Use --act fold to keep the seat while still risking nothing but blinds."
+        );
+    }
     println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears", kill_switch.display());
     if !keep_unread.is_empty() {
         println!("keeping  : frames whose hole cards would not read, into {keep_unread}");
@@ -1431,6 +1449,12 @@ stopping: {}", reason.explain());
     }
     if !keep_unread.is_empty() {
         println!("{} unreadable frame(s) kept in {keep_unread}.", session.frames_kept());
+    }
+    if !keep_turns.is_empty() {
+        println!(
+            "{} picture(s) of our own turns kept in {keep_turns}.",
+            session.turns_kept()
+        );
     }
     Ok(())
 }

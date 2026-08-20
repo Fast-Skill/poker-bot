@@ -164,6 +164,16 @@ pub struct Session {
     glyphs: GlyphTemplates,
     hero: HeroTemplates,
     pub safety: Safety,
+    /// Where to keep a picture of every frame where the hero is asked to act.
+    ///
+    /// Different from `keep_unread`, which keeps the frames the reader gave up
+    /// on. These are the ones it read confidently — and confidence is exactly
+    /// the problem when what it is confident about is wrong. Whether a seat
+    /// still holds cards is judged from the picture and never refused, so a
+    /// seat wrongly counted as live produces a clean-looking reading of a table
+    /// that is not there, and no amount of logging catches it. Only the picture
+    /// does.
+    pub keep_turns: Option<PathBuf>,
     /// Where to keep frames the reader could not fully read.
     ///
     /// Only those are worth keeping. A frame the bot understood teaches it
@@ -180,6 +190,7 @@ pub struct Session {
     /// where it happens often is not the bot anybody benchmarked.
     retreats: usize,
     last_retreat: Option<Held>,
+    turns: usize,
 }
 
 /// How long the hero may be to act before the bot stops holding out for a
@@ -238,12 +249,14 @@ impl Session {
             glyphs,
             hero,
             safety,
+            keep_turns: None,
             keep_unread: None,
             started_with: None,
             actions: 0,
             kept: 0,
             retreats: 0,
             last_retreat: None,
+            turns: 0,
         }
     }
 
@@ -383,10 +396,44 @@ impl Session {
         if !view.hero_to_act() {
             return (Some(view), Some(Held::NotOurTurn));
         }
+        self.keep_turn(&view);
         if !view.is_actionable() {
             return (Some(view), Some(Held::NotConfident));
         }
         (Some(view), None)
+    }
+
+    /// Saves a picture of the table on the hero's turn, if asked to.
+    ///
+    /// Named by what the reading claims, so the file itself says what to check:
+    /// a frame called `turn-0003-3of7.png` showing four players with cards is
+    /// the whole bug report.
+    fn keep_turn(&mut self, view: &TableView) {
+        let Some(dir) = self.keep_turns.clone() else {
+            return;
+        };
+        let Some(capture) = self.window.capture() else {
+            return;
+        };
+        if capture.is_blank() {
+            return;
+        }
+        let _ = std::fs::create_dir_all(&dir);
+        let name = format!(
+            "turn-{:04}-{}of{}.png",
+            self.turns,
+            view.active(),
+            view.occupied()
+        );
+        let bytes = crate::png::encode(capture.width, capture.height, &capture.rgb);
+        if std::fs::write(dir.join(name), bytes).is_ok() {
+            self.turns += 1;
+        }
+    }
+
+    /// How many of the hero's turns have been pictured.
+    pub fn turns_kept(&self) -> usize {
+        self.turns
     }
 
     /// Carries out a choice and checks that the client took it.
