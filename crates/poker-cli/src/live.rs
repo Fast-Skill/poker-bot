@@ -27,7 +27,7 @@ use poker_vision::{
     ActionPanel, Frame, GlyphTemplates, HeroTemplates, HeroThresholds, TableView, Templates,
     TextThresholds, Thresholds,
 };
-use poker_win::Window;
+use poker_win::{Capture, Window};
 
 /// What the bot decided to do with its turn.
 ///
@@ -219,6 +219,8 @@ pub struct Session {
     turns: usize,
     frames: usize,
     pictured: usize,
+    /// The picture the last settled reading was made from.
+    seen: Option<Capture>,
 }
 
 /// How long the hero may be to act before the bot stops holding out for a
@@ -294,6 +296,7 @@ impl Session {
             turns: 0,
             frames: 0,
             pictured: 0,
+            seen: None,
         }
     }
 
@@ -313,11 +316,21 @@ impl Session {
 
     /// Reads the table once.
     pub fn look(&self) -> Option<TableView> {
-        self.look_keeping(false).map(|(view, _)| view)
+        self.look_keeping(false).map(|(view, _, _)| view)
+    }
+
+    /// Reads the table, and hands back the picture it read.
+    fn look_seen(&self) -> Option<(TableView, Capture)> {
+        self.look_keeping(false)
+            .map(|(view, _, capture)| (view, capture))
     }
 
     /// Reads the table, optionally keeping the frame if it could not be read.
-    fn look_keeping(&self, may_keep: bool) -> Option<(TableView, bool)> {
+    ///
+    /// Hands back the capture the reading came from, so a caller recording the
+    /// session can keep the very pixels that produced it rather than taking a
+    /// fresh picture of a table that has since moved on.
+    fn look_keeping(&self, may_keep: bool) -> Option<(TableView, bool, Capture)> {
         let capture = self.window.capture()?;
         if capture.is_blank() {
             return None;
@@ -348,16 +361,19 @@ impl Session {
                 let _ = std::fs::write(dir.join(name), bytes);
             }
         }
-        Some((view, keep))
+        Some((view, keep, capture))
     }
 
     /// Reads the table twice and returns the reading only if both agree.
-    pub fn look_settled(&self) -> Result<TableView, Held> {
+    ///
+    /// The picture returned is the second one — the reading that is handed on
+    /// is made from it, so they are the same moment by construction.
+    pub fn look_settled(&self) -> Result<(TableView, Capture), Held> {
         let first = self.look().ok_or(Held::NoPicture)?;
         std::thread::sleep(SETTLE);
-        let second = self.look().ok_or(Held::NoPicture)?;
+        let (second, capture) = self.look_seen().ok_or(Held::NoPicture)?;
         if first.agrees_with(&second) {
-            Ok(second)
+            Ok((second, capture))
         } else {
             Err(Held::NotSettled)
         }
@@ -404,24 +420,26 @@ impl Session {
     pub fn assess(&mut self) -> (Option<TableView>, Option<Held>) {
         // One capture of the pair may be kept, so a frame the reader could not
         // name is not lost just because it was never the hero's turn.
-        if let Some((_, kept)) = self.look_keeping(true) {
+        if let Some((_, kept, _)) = self.look_keeping(true) {
             if kept {
                 self.kept += 1;
             }
         }
 
-        let view = match self.look_settled() {
-            Ok(view) => view,
+        let (view, capture) = match self.look_settled() {
+            Ok(seen) => seen,
             // A table that will not settle may simply be covered by the sit-out
             // dialog, which is worth naming rather than reporting as a failure
             // to read.
             Err(held) => {
+                self.seen = None;
                 if self.is_sat_out() {
                     return (None, Some(Held::SatOut));
                 }
                 return (None, Some(held));
             }
         };
+        self.seen = Some(capture);
 
         let stack = view.hero().and_then(|h| h.stack);
         if self.started_with.is_none() {
@@ -509,12 +527,18 @@ impl Session {
         if self.pictured >= Session::FRAMES {
             return;
         }
-        let Some(capture) = self.window.capture() else {
+        // The picture the line above was made from, not a new one.
+        //
+        // Taking a fresh capture here was wrong in a way that quietly undid the
+        // point of recording: a few hundred milliseconds separated the reading
+        // from the picture beside it, and at a live table that is a different
+        // table. The frames were near enough to find a dialog being misread,
+        // and not near enough to trust a seven-point difference in how often
+        // the dealer button was found — which is exactly the kind of
+        // measurement this exists to support.
+        let Some(capture) = self.seen.as_ref() else {
             return;
         };
-        if capture.is_blank() {
-            return;
-        }
         let name = format!("frame-{:05}.png", self.frames);
         let bytes = crate::png::encode(capture.width, capture.height, &capture.rgb);
         if std::fs::write(dir.join(name), bytes).is_ok() {

@@ -131,7 +131,7 @@ fn crc32_from(running: u32, data: &[u8]) -> u32 {
 /// recorded frame is the same pixels every time, so a fix can be checked
 /// against the exact moment it was meant to fix.
 pub fn decode(bytes: &[u8]) -> Option<(usize, usize, Vec<u8>)> {
-    if bytes.len() < 8 || &bytes[..8] != &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+    if bytes.len() < 8 || bytes[..8] != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
         return None;
     }
     let (mut width, mut height) = (0usize, 0usize);
@@ -210,7 +210,7 @@ mod tests {
     fn anything_that_is_not_one_of_ours_is_refused() {
         assert_eq!(decode(b"not a png at all"), None);
         assert_eq!(decode(&[]), None);
-        let mut truncated = encode(4, 4, &vec![9u8; 48]);
+        let mut truncated = encode(4, 4, &[9u8; 48]);
         truncated.truncate(20);
         assert_eq!(decode(&truncated), None);
     }
