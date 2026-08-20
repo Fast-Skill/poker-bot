@@ -458,8 +458,26 @@ impl TableView {
         };
         let bets: f64 = self.seats.iter().filter_map(|s| s.bet).sum();
         let total = bets + self.collected.unwrap_or(0.0);
+
+        // Only an excess proves anything.
+        //
+        // This used to demand the money match the pot exactly. It cannot: a
+        // figure that failed to read contributes nothing to the sum, so a
+        // collected pile the reader missed is indistinguishable from chips that
+        // are not there — and the shortfall it produces looks exactly like a
+        // frame caught mid-animation. Over three sessions that was most of what
+        // was left of the clock-forced turns, all of them hands the strategy
+        // wanted to play.
+        //
+        // Money adding up to *more* than the pot is different. Nothing on the
+        // felt can exceed what is in the middle, so an excess is a figure read
+        // wrongly rather than one not read at all, and that is worth refusing.
+        // A shortfall is unproven, and the two agreeing captures behind
+        // [`TableView::agrees_with`] already stand between the bot and a frame
+        // taken mid-move.
+        //
         // A tenth of a blind is below anything the client displays.
-        (total - pot).abs() < 0.05
+        total <= pot + 0.05
     }
 }
 
