@@ -537,10 +537,26 @@ pub fn detect_dealer_button(frame: &Frame) -> Option<(usize, usize)> {
         }
     }
 
+    // A button is a disc, so its bounding box is close to square. Requiring
+    // that is what separates it from the other gold on the table.
+    //
+    // Without it the reader gave up almost every frame, and reported no button
+    // at all — which loses position, and position is most of what a preflop
+    // strategy is keyed on. The cause was not the button being hidden but the
+    // jackpot: `BAD BEAT 238,482.93` is drawn in gold across the top, and at
+    // that size each digit is a blob within the same bounds as the disc. Two
+    // candidates meant refusal, and there were always several.
+    //
+    // Digits are tall and narrow, the straddle marker is wide and flat, and
+    // neither survives being asked to be square.
+    const ROUND: f64 = 0.25;
+
     let mut found = None;
     for bounds in components(&gold, w, h) {
+        let (bw, bh) = (bounds.width() as f64, bounds.height() as f64);
         if !(SIZE.0..=SIZE.1).contains(&bounds.width())
             || !(SIZE.0..=SIZE.1).contains(&bounds.height())
+            || (bw / bh - 1.0).abs() > ROUND
             || solidity(&gold, w, bounds) < MIN_FILL
         {
             continue;
