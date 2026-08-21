@@ -1440,7 +1440,16 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             // of the straddle offer's buttons are actions the bot has no
             // business taking, so it is closed rather than answered — which
             // hands the turn back with the clock still running.
-            (_, Some(_)) if acting != Acting::Never => {
+            //
+            // Placed after the arms that stop the session, and never before
+            // them. Written above those, this caught every reason there is and
+            // made the kill switch and the stop loss unreachable — the one
+            // safety net that has already saved a session, disabled by an arm
+            // meant to close a dialog.
+            (_, Some(reason))
+                if acting != Acting::Never
+                    && !matches!(reason, live::Held::KillSwitch | live::Held::StopLoss) =>
+            {
                 if session.decline_dialog() {
                     println!("  declined a dialog - closed it to get the turn back");
                 }
