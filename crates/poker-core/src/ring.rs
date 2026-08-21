@@ -156,7 +156,15 @@ pub struct Ring {
     seats: usize,
     stack: u32,
     ladder: Ladder,
-    showdown: Showdown,
+    /// How pots are split at a showdown.
+    ///
+    /// Only the solver reads this. Every question the bot asks of a ring —
+    /// which stage this is, what the information key is — is answered from the
+    /// betting alone, so a ring built for play carries none. That matters
+    /// because the tables behind it run to seven hundred megabytes, and
+    /// carrying them to a machine that only ever plays is carrying the whole
+    /// weight of the solve to run its result.
+    showdown: Option<Showdown>,
 }
 
 impl Ring {
@@ -181,7 +189,29 @@ impl Ring {
             seats,
             stack: to_chips(stack),
             ladder,
-            showdown,
+            showdown: Some(showdown),
+        }
+    }
+
+    /// The same tree, for a bot rather than a solver.
+    ///
+    /// Carries no equity tables. A blueprint is looked up by an information key
+    /// built from the betting — who is live, what each has committed, whose
+    /// turn it is — and none of that needs to know how a pot would be split.
+    ///
+    /// `seats`, `stack` and `ladder` must match the solve the blueprint came
+    /// from, since the keys are built against that game.
+    pub fn for_play(seats: usize, stack: f64, ladder: Ladder) -> Ring {
+        assert!(
+            (2..=crate::wide::MAX_PLAYERS).contains(&seats),
+            "a table seats between two and {}, not {seats}",
+            crate::wide::MAX_PLAYERS
+        );
+        Ring {
+            seats,
+            stack: to_chips(stack),
+            ladder,
+            showdown: None,
         }
     }
 
@@ -279,7 +309,10 @@ impl Ring {
     fn shares(&self, state: &State, live: &[usize]) -> Vec<f64> {
         let hands: Vec<crate::abstraction::HandClass> =
             live.iter().map(|&seat| state.hand(seat)).collect();
-        self.showdown.shares(&hands)
+        self.showdown
+            .as_ref()
+            .expect("this ring was built for play and cannot settle a showdown")
+            .shares(&hands)
     }
 
     /// Builds an information key from what a table shows.

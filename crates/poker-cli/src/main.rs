@@ -1208,36 +1208,20 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     // Every multiway solve that has been built gets loaded, and pots of a size
     // with no solve fall through to the heuristic. That is a real loss of
     // strength at that size, but not a reason to refuse to play the rest.
+    //
+    // No equity tables are read. They price showdowns, which is a question only
+    // the solver asks; a blueprint is looked up by an information key built
+    // from the betting. Loading them here cost seven hundred megabytes and
+    // several seconds of startup to answer nothing, and made copying the bot to
+    // another machine mean copying the whole apparatus of the solve.
     let mut solved_sizes = Vec::new();
-    if let Ok(three_way) = ThreeWayEquity::load(THREE_WAY_CACHE) {
-        let pairwise = EquityTable::load_or_build(
-            EQUITY_CACHE,
-            EQUITY_SAMPLES,
-            EQUITY_SEED,
-            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
-        )
-        .map_err(|e| format!("could not prepare {EQUITY_CACHE}: {e}"))?;
-
-        // Built up one size at a time, because a game of n seats needs every
-        // table from two-way up to n-way, not just the widest.
-        let mut showdown = Showdown::new(pairwise, three_way);
-        for seats in 3..=poker_core::wide::MAX_PLAYERS {
-            if seats > 3 {
-                match WideEquity::load(format!("data/equity{seats}.bin")) {
-                    Ok(table) => showdown = showdown.with(table),
-                    Err(_) => break,
-                }
-            }
-            let path = format!("{ring_dir}/ring{seats}-100bb.bin");
-            let Ok(solved) = open(&path) else { continue };
-            let ring = Ring::new(seats, 100.0, Ladder::default(), showdown.clone());
-            agent = agent.with_ring(solved, ring);
-            solved_sizes.push(seats);
-        }
+    for seats in 3..=poker_core::wide::MAX_PLAYERS {
+        let path = format!("{ring_dir}/ring{seats}-100bb.bin");
+        let Ok(solved) = open(&path) else { continue };
+        agent = agent.with_ring(solved, Ring::for_play(seats, 100.0, Ladder::default()));
+        solved_sizes.push(seats);
     }
-    let (with_postflop, depths) = load_postflop(agent, POSTFLOP_DIR);
-    agent = with_postflop;
-    println!("{}", postflop_summary(&depths));
+
     if solved_sizes.is_empty() {
         println!("solved   : heads-up only - multiway pots use the heuristic");
     } else {
