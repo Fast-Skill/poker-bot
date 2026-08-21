@@ -222,6 +222,8 @@ pub struct Session {
     pictured: usize,
     /// The picture the last settled reading was made from.
     seen: Option<Capture>,
+    /// When a dialog was last looked for.
+    looked_for_dialog: Option<Instant>,
 }
 
 /// What a session has won or lost, counted a hand at a time.
@@ -347,6 +349,13 @@ pub fn last_resort(view: &TableView) -> Choice {
 /// enough to fit comfortably inside the client's action timer.
 const SETTLE: Duration = Duration::from_millis(220);
 
+/// How often to look for a dialog waiting to be dismissed.
+///
+/// Dialogs do not come and go on their own, so finding one a second or two late
+/// costs nothing. Looking every frame costs a capture of the whole window on
+/// every frame.
+const DIALOG_EVERY: Duration = Duration::from_millis(2_000);
+
 /// How long to keep watching for the action row to clear after a click.
 ///
 /// The client takes a variable time to take an action down, and the whole of
@@ -382,6 +391,7 @@ impl Session {
             frames: 0,
             pictured: 0,
             seen: None,
+            looked_for_dialog: None,
         }
     }
 
@@ -500,7 +510,18 @@ impl Session {
     /// the turn back.
     ///
     /// Returns whether a dialog was there to close.
-    pub fn decline_dialog(&self) -> bool {
+    pub fn decline_dialog(&mut self) -> bool {
+        // Not on every frame. This runs whenever anything at all is holding the
+        // bot up, which is most of the time, and each attempt costs a capture
+        // of the whole window on top of the two the reading already took.
+        // Dialogs wait for an answer, so looking every couple of seconds finds
+        // them just as surely for a third of the work.
+        let now = Instant::now();
+        if self.looked_for_dialog.is_some_and(|last| now - last < DIALOG_EVERY) {
+            return false;
+        }
+        self.looked_for_dialog = Some(now);
+
         let Some(capture) = self.window.capture() else {
             return false;
         };
