@@ -384,6 +384,7 @@ fn solve(args: &[String]) -> Result<(), String> {
     if let Some(exploitability) = blueprint.exploitability() {
         println!("  exploitability    {exploitability:.4} bb/hand");
     }
+
     Ok(())
 }
 
@@ -471,6 +472,37 @@ fn info(args: &[String]) -> Result<(), String> {
     match blueprint.exploitability() {
         Some(value) => println!("  exploitability    {value:.4} bb/hand"),
         None => println!("  exploitability    not measured"),
+    }
+    // How much of this solve actually learned anything.
+    //
+    // An information set the solver barely visited comes back near-uniform:
+    // regrets close to zero on every action, so the average strategy is flat.
+    // Flat is not a decision, it is the absence of one, stored in the shape of
+    // a decision. Playing it is a die roll — which is how a hundred-blind stack
+    // once raised to twenty-two with ten-six offsuit.
+    //
+    // The count matters because it cannot be inferred from the iteration
+    // total: eight million iterations is generous for nine thousand
+    // information sets and nearly nothing for eight hundred thousand.
+    let mut flat = 0usize;
+    let mut decided = 0usize;
+    for (_, strategy) in blueprint.entries() {
+        if strategy.len() < 2 {
+            continue;
+        }
+        let even = 1.0 / strategy.len() as f32;
+        if strategy.iter().any(|share| (share - even).abs() > 0.02) {
+            decided += 1;
+        } else {
+            flat += 1;
+        }
+    }
+    let total = flat + decided;
+    if total > 0 {
+        println!(
+            "  learned           {decided} of {total} ({:.1}%) - the rest are flat, and refused at the table",
+            100.0 * decided as f64 / total as f64
+        );
     }
     match kind {
         Ok(kind) => {
