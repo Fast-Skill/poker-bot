@@ -273,8 +273,15 @@ impl Kind {
             .ok_or_else(|| unknown_stage(self, stage))
     }
 
-    fn default_stage(self) -> &'static str {
-        self.stages()[0].0
+    /// A stage to show when the caller named none, if the game has any.
+    ///
+    /// Ring solves have no named stages — their spots are identified by who is
+    /// live and what each has committed, not by a handful of labels — so this
+    /// is `None` for them. Indexing the empty list panicked, which turned
+    /// `poker query` with a ring blueprint into a crash rather than an
+    /// explanation.
+    fn default_stage(self) -> Option<&'static str> {
+        self.stages().first().map(|(name, _)| *name)
     }
 }
 
@@ -483,7 +490,13 @@ fn query(args: &[String]) -> Result<(), String> {
 
     let blueprint = open(path)?;
     let kind = Kind::from_label(blueprint.label())?;
-    let stage = flags.text("stage", kind.default_stage());
+    let fallback = kind.default_stage().ok_or_else(|| {
+        format!(
+            "{} blueprints have no named stages to query; try `poker info` for what they hold, or `poker postflop` for a postflop solve",
+            kind.name()
+        )
+    })?;
+    let stage = flags.text("stage", fallback);
     let hand = flags.required("hand")?;
     let class: HandClass = hand
         .parse()
@@ -1265,7 +1278,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
             "  note   : the client will time this seat out, since watching never presses anything."
         );
         println!(
-            "           Use --act fold to keep the seat while still risking nothing but blinds."
+            " Use --act fold to keep the seat while still risking nothing but blinds."
         );
     }
     println!("stop     : after {seconds}s, on {stop_loss} BB lost, or when {} appears", kill_switch.display());
@@ -1575,7 +1588,7 @@ fn replay(args: &[String]) -> Result<(), String> {
 ");
     println!("  dealer button found   {buttons} ({:.0}%)", share(buttons, read));
     println!("  both hole cards read  {hole} ({:.0}%)", share(hole, read));
-    println!("  fit to act on         {actionable} ({:.0}%)", share(actionable, read));
+    println!("  fit to act on {actionable} ({:.0}%)", share(actionable, read));
     println!("
   seats seen:");
     for (count, times) in seats {
@@ -1637,7 +1650,7 @@ fn sit(args: &[String]) -> Result<(), String> {
     let table = pick_table(&windows)?;
     println!("watching : {}", table.title());
     println!("waiting  : up to {seconds:.0}s for a dialog, confirming up to {most}");
-    println!("           choose the empty seat yourself; this presses what follows.\n");
+    println!(" choose the empty seat yourself; this presses what follows.\n");
 
     let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds);
     let mut clicked = 0usize;
