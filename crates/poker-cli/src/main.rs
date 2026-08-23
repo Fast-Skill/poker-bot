@@ -1222,6 +1222,15 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         solved_sizes.push(seats);
     }
 
+    // The postflop ladder, which a rewrite of the lines above once quietly
+    // removed. Nothing failed: the bot started, read the table, played, and
+    // sent every flop to the heuristic instead of the solve. The only trace was
+    // a missing line in the banner, which is why the banner names what is
+    // loaded rather than reporting success.
+    let (with_postflop, depths) = load_postflop(agent, POSTFLOP_DIR);
+    agent = with_postflop;
+    println!("{}", postflop_summary(&depths));
+
     if solved_sizes.is_empty() {
         println!("solved   : heads-up only - multiway pots use the heuristic");
     } else {

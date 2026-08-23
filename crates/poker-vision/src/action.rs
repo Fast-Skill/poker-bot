@@ -318,7 +318,7 @@ pub fn read_sit_out(frame: &Frame) -> Option<SitOut> {
         }
     }
 
-    // A red button beside the green one means this is a dialog offering a
+    // A red button BESIDE the green one means this is a dialog offering a
     // choice, not the sit-out notice.
     //
     // Recognising "one green button" was never enough, and the gap was
@@ -340,12 +340,13 @@ pub fn read_sit_out(frame: &Frame) -> Option<SitOut> {
             red[y * w + x] = r > 120 && r - g > 45 && r - b > 45;
         }
     }
-    for bounds in components(&red, w, h) {
-        let (bw, bh) = (bounds.width(), bounds.height());
-        if (SIZE.0 .0..=SIZE.0 .1).contains(&bw) && (SIZE.1 .0..=SIZE.1 .1).contains(&bh) {
-            return None;
-        }
-    }
+    let reds: Vec<Bounds> = components(&red, w, h)
+        .into_iter()
+        .filter(|bounds| {
+            let (bw, bh) = (bounds.width(), bounds.height());
+            (SIZE.0 .0..=SIZE.0 .1).contains(&bw) && (SIZE.1 .0..=SIZE.1 .1).contains(&bh)
+        })
+        .collect();
 
     let mut found = None;
     for bounds in components(&green, w, h) {
@@ -361,6 +362,18 @@ pub fn read_sit_out(frame: &Frame) -> Option<SitOut> {
         }
         // Two green buttons would mean this is not the dialog being looked for.
         if found.is_some() {
+            return None;
+        }
+        // Beside means on the same row. Testing for red anywhere on screen was
+        // too blunt and broke this outright: the table carries a red `Deal Me
+        // In` button in its bottom corner, so every sit-out notice was refused
+        // and the seat was lost while the bot waited politely. The straddle
+        // dialog puts its red and green side by side within the dialog; this
+        // notice has its green alone, with the red far away on the felt.
+        if reds
+            .iter()
+            .any(|red| red.y0.abs_diff(bounds.y0) <= bounds.height())
+        {
             return None;
         }
         found = Some(SitOut {

@@ -539,6 +539,12 @@ impl Session {
         true
     }
 
+    /// Whether a picture already taken shows the sit-out notice.
+    fn showing_sit_out(&self, capture: &Capture) -> bool {
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        poker_vision::read_sit_out(&frame).is_some()
+    }
+
     /// Whether the client is showing the sit-out dialog.
     pub fn is_sat_out(&self) -> bool {
         self.window
@@ -582,6 +588,20 @@ impl Session {
             return (Some(view), Some(held));
         }
         if !view.hero_to_act() {
+            // Being sat out reads as a perfectly ordinary quiet table.
+            //
+            // The check used to live only where a reading failed, on the
+            // assumption that a dialog over the felt would stop two captures
+            // agreeing. Once the settle test was narrowed to the figures a
+            // decision needs, two readings of a dimmed table agreed easily —
+            // both saw no seats and no turn — so the reading succeeded, this
+            // returned "not our turn", and the seat ran down with the notice
+            // sitting on screen the whole time.
+            //
+            // It costs nothing to ask here: the picture is already in hand.
+            if self.seen.as_ref().is_some_and(|seen| self.showing_sit_out(seen)) {
+                return (Some(view), Some(Held::SatOut));
+            }
             return (Some(view), Some(Held::NotOurTurn));
         }
         self.keep_turn(&view);
