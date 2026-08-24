@@ -312,7 +312,7 @@ impl Observer for Review {
                 .join(" ")
         };
 
-        if record.perception.hole != self.hole {
+        if self.hole != record.perception.hole {
             self.hole = record.perception.hole.to_vec();
             self.hands += 1;
             self.write(&format!(

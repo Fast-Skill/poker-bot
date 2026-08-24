@@ -1171,7 +1171,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns", "record"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns", "record", "review"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -1185,6 +1185,8 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let keep_unread = flags.text("keep-unread", "");
     let keep_turns = flags.text("keep-turns", "");
     let record = flags.text("record", "");
+    let review = flags.text("review", "");
+    let review_file = review.clone();
     let explain = flags.text("explain", "off") == "on";
 
     #[derive(PartialEq)]
@@ -1246,12 +1248,27 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     }
     let blueprint = open(&blueprint_path)?;
     let mut agent = BlueprintAgent::new("bot", blueprint, Sizing::default());
+    // A hand history a person can read, which is what a decision-quality
+    // benchmark actually delivers. Attached alongside the console output rather
+    // than instead of it, since the two serve different readers.
+    let reviewing = (!review.is_empty()).then(|| {
+        let _ = std::fs::remove_file(&review);
+        live::Shared::new(live::Review::new(PathBuf::from(&review)))
+    });
     if explain {
         // The full reasoning behind each decision: what was seen, how confident
         // the reading was, which spot was consulted and how often it plays each
         // action. Worth reading before letting it play, since a decision that
         // looks wrong is far easier to diagnose alongside what produced it.
-        agent = agent.watch(Box::new(ConsoleMonitor::new(bridge::CHIPS_PER_BB as u64)));
+        agent = agent.watch(match reviewing.clone() {
+            Some(review) => Box::new(live::Both(
+                Box::new(ConsoleMonitor::new(bridge::CHIPS_PER_BB as u64)),
+                Box::new(review),
+            )),
+            None => Box::new(ConsoleMonitor::new(bridge::CHIPS_PER_BB as u64)),
+        });
+    } else if let Some(review) = reviewing.clone() {
+        agent = agent.watch(Box::new(review));
     }
 
     // Every multiway solve that has been built gets loaded, and pots of a size
@@ -1342,6 +1359,9 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
         if let Some(net) = view.as_ref().and_then(|v| ledger.observe(v)) {
             let (hands, running) = ledger.tally();
             println!("  hand {hands} finished {net:+.2} bb  (session {running:+.2} bb)");
+            if let Some(review) = reviewing.as_ref() {
+                review.note_result(net);
+            }
         }
         let line = match (&view, &held) {
             (Some(v), None) => {
@@ -1510,6 +1530,16 @@ stopping: {}", reason.explain());
 
     println!("
 {} action(s) taken.", session.actions_taken());
+    if let Some(review) = reviewing.as_ref() {
+        let (hands, decisions, solved) = review.tally();
+        let share = if decisions == 0 {
+            0.0
+        } else {
+            100.0 * solved as f64 / decisions as f64
+        };
+        println!("{hands} hand(s) written to {review_path}, {decisions} decision(s).", review_path = review_file);
+        println!("  a solve decided {solved} of them ({share:.0}%) - the benchmark asks for 90%.");
+    }
     let (hands, net) = ledger.tally();
     if hands > 0 {
         let (best, worst) = ledger.extremes();

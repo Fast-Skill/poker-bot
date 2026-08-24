@@ -1,0 +1,286 @@
+
+HAND 1  Ts 7d
+  preflop  board -              pot    5.5  to call   1.0
+           7-handed preflop
+           fold 40%  passive 59%  raise 0%  jam 1%
+           => Call
+  flop     board 5d 2c Ad       pot    8.6  to call   2.1
+           heads-up flop
+           fold 97%  check/call 1%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   -1.50 bb
+
+HAND 2  9d 6c
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 3  Kc 5s
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 4  Ah Td
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 5  Ts 8c
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   -1.00 bb
+
+HAND 6  7s 5s
+  preflop  board -              pot    9.6  to call   5.1
+           7-handed preflop
+           fold 96%  passive 2%  raise 0%  jam 2%
+           => Fold
+  result   -0.50 bb
+
+HAND 7  9d 2c
+  preflop  board -              pot    6.0  to call   4.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 8  6c 4c
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 9  Kh 2d
+  preflop  board -              pot    1.5  to call   1.0
+           HEURISTIC - preflop line beyond the solved ladder
+           
+           => Fold
+  result   +0.00 bb
+
+HAND 10  Jc 6d
+  preflop  board -              pot    6.0  to call   4.5
+           HEURISTIC - preflop line beyond the solved ladder
+           
+           => Fold
+  result   +0.00 bb
+
+HAND 11  9h 6c
+  preflop  board -              pot    1.5  to call   1.0
+           HEURISTIC - preflop line beyond the solved ladder
+           
+           => Fold
+  result   -1.00 bb
+
+HAND 12  2d 2c
+  preflop  board -              pot    6.5  to call   3.0
+           7-handed preflop
+           fold 56%  passive 39%  raise 2%  jam 3%
+           => Fold
+  result   -0.50 bb
+
+HAND 13  5s 4d
+  preflop  board -              pot    2.5  to call   0.5
+           7-handed preflop
+           fold 25%  passive 74%  raise 0%  jam 1%
+           => Call
+  flop     board Ad Kh 8c       pot    6.0  to call   3.0
+           HEURISTIC - postflop pot with more than two players
+           
+           => Fold
+  result   -0.50 bb
+
+HAND 14  8d 5h
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 15  Ad Kd
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 0%  passive 13%  raise 81%  jam 5%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 16  Th 8d
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 17  As 5c
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   -1.00 bb
+
+HAND 18  Ks 8d
+  preflop  board -              pot    7.5  to call   2.0
+           7-handed preflop
+           fold 32%  passive 66%  raise 0%  jam 1%
+           => Call
+  flop     board 5c 2c 4h       pot   15.8  to call   3.1
+           HEURISTIC - postflop pot with more than two players
+           
+           => Fold
+  result   -2.50 bb
+  result   +0.00 bb
+
+HAND 19  Ah 5d
+  preflop  board -              pot    2.5  to call   1.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 20  Kd 5c
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 21  8d 4s
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 22  Ac 5d
+  preflop  board -              pot    1.5  to call   1.0
+           HEURISTIC - preflop line beyond the solved ladder
+           
+           => Fold
+  result   -1.00 bb
+
+HAND 23  9c 5d
+  preflop  board -              pot    9.6  to call   5.1
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -0.50 bb
+
+HAND 24  Kd Qs
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 25  9c 6s
+  preflop  board -              pot    7.0  to call   4.5
+           7-handed preflop
+           fold 97%  passive 1%  raise 0%  jam 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 26  Kd 8d
+  preflop  board -              pot    3.5  to call   2.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  preflop  board -              pot    3.5  to call   2.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 27  Ad Ks
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 1%  passive 8%  raise 88%  jam 3%
+           => RaiseTo(250)
+  turn     board 7h 8c Ac 5h    pot   10.5  to call   4.5
+           heads-up turn
+           fold 0%  check/call 50%  bet small 46%  bet large 3%  all in 2%
+           => RaiseTo(945)
+  result   +10.40 bb
+
+HAND 28  8s 8h
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 1%  passive 1%  raise 98%  jam 0%
+           => RaiseTo(250)
+  flop     board 4d 6h 6c       pot   19.1  to call   3.8
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  turn     board 4d 6h 6c 7h    pot   34.3  to call  11.4
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  river    board 4d 6h 6c 7h 7s pot   64.0  to call   6.7
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  result   -25.50 bb
+  result   +1.00 bb
+
+HAND 29  Tc 7s
+  preflop  board -              pot    1.5  to call   0.5
+           7-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  result   -0.50 bb
+
+HAND 30  Qd Tc
+  preflop  board -              pot    2.5  to call   1.0
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 31  9c 8c
+  preflop  board -              pot    2.5  to call   1.0
+           7-handed preflop
+           fold 97%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 32  Td 5s
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 33  8c 6s
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 34  Kd Jc
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 12%  passive 5%  raise 83%  jam 0%
+           => RaiseTo(250)
+  flop     board Ks Ad 4d       pot   12.0  to call   4.0
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  turn     board Ks Ad 4d 9h    pot   24.0  to call   8.0
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  result   -15.50 bb
+
+HAND 35  Ks 7s
+  flop     board 9c Ad 3d       pot    5.0  to call   0.0
+           HEURISTIC - no price the solve knows is near this one
+           
+           => Check
