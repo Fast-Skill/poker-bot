@@ -1082,11 +1082,15 @@ fn typetest(args: &[String]) -> Result<(), String> {
         let Some(capture) = table.capture() else { continue };
         let frame = Frame::new(capture.width, capture.height, &capture.rgb);
         let Some(panel) = poker_vision::read_action_panel(&frame) else {
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            // Short, because a turn is only noticed on a pass through here
+            // and every pass now costs one reading rather than three.
+            std::thread::sleep(std::time::Duration::from_millis(120));
             continue;
         };
         let (Some(box_), true) = (panel.amount_box, panel.offers_plain_fold()) else {
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            // Short, because a turn is only noticed on a pass through here
+            // and every pass now costs one reading rather than three.
+            std::thread::sleep(std::time::Duration::from_millis(120));
             continue;
         };
 
@@ -1818,7 +1822,9 @@ fn grab(args: &[String]) -> Result<(), String> {
 
         if after == 0.0 {
             window.focus();
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            // Short, because a turn is only noticed on a pass through here
+            // and every pass now costs one reading rather than three.
+            std::thread::sleep(std::time::Duration::from_millis(120));
         }
         let Some(capture) = window.capture() else {
             println!("   -- could not be captured");

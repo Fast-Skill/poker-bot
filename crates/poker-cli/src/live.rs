@@ -222,6 +222,8 @@ pub struct Session {
     pictured: usize,
     /// The picture the last settled reading was made from.
     seen: Option<Capture>,
+    /// The previous turn's reading, which this turn's is checked against.
+    before: Option<TableView>,
     /// When a dialog was last looked for.
     looked_for_dialog: Option<Instant>,
 }
@@ -343,12 +345,6 @@ pub fn last_resort(view: &TableView) -> Choice {
     }
 }
 
-/// How long to leave between the two captures that must agree.
-///
-/// Long enough that an animation in flight moves visibly between them, short
-/// enough to fit comfortably inside the client's action timer.
-const SETTLE: Duration = Duration::from_millis(220);
-
 /// How often to look for a dialog waiting to be dismissed.
 ///
 /// Dialogs do not come and go on their own, so finding one a second or two late
@@ -391,6 +387,7 @@ impl Session {
             frames: 0,
             pictured: 0,
             seen: None,
+            before: None,
             looked_for_dialog: None,
         }
     }
@@ -414,11 +411,6 @@ impl Session {
         self.look_keeping(false).map(|(view, _, _)| view)
     }
 
-    /// Reads the table, and hands back the picture it read.
-    fn look_seen(&self) -> Option<(TableView, Capture)> {
-        self.look_keeping(false)
-            .map(|(view, _, capture)| (view, capture))
-    }
 
     /// Reads the table, optionally keeping the frame if it could not be read.
     ///
@@ -459,20 +451,6 @@ impl Session {
         Some((view, keep, capture))
     }
 
-    /// Reads the table twice and returns the reading only if both agree.
-    ///
-    /// The picture returned is the second one — the reading that is handed on
-    /// is made from it, so they are the same moment by construction.
-    pub fn look_settled(&self) -> Result<(TableView, Capture), Held> {
-        let first = self.look().ok_or(Held::NoPicture)?;
-        std::thread::sleep(SETTLE);
-        let (second, capture) = self.look_seen().ok_or(Held::NoPicture)?;
-        if first.agrees_with(&second) {
-            Ok((second, capture))
-        } else {
-            Err(Held::NotSettled)
-        }
-    }
 
     /// Reads the table, and reports what may be done with the reading.
     ///
@@ -557,27 +535,45 @@ impl Session {
     }
 
     pub fn assess(&mut self) -> (Option<TableView>, Option<Held>) {
-        // One capture of the pair may be kept, so a frame the reader could not
-        // name is not lost just because it was never the hero's turn.
-        if let Some((_, kept, _)) = self.look_keeping(true) {
-            if kept {
-                self.kept += 1;
+        // One reading a turn, checked against the one before it.
+        //
+        // This used to take three: one that was read and thrown away so an
+        // unreadable frame could be kept, then a pair a fifth of a second apart
+        // to prove the table was still. Reading a table costs about a third of
+        // a second, so that was more than a second of looking before a decision
+        // could even begin, and it showed at the table — folds landing two and
+        // three seconds after the turn arrived.
+        //
+        // The pair is still there; it is just spread across turns rather than
+        // taken back to back. Last turn's reading is this turn's first half, so
+        // the table still has to hold still across two readings to be acted on
+        // — over a longer gap, if anything, which is a stricter test.
+        let seen = self.look_keeping(self.keep_unread.is_some());
+        let Some((view, kept, capture)) = seen else {
+            self.before = None;
+            self.seen = None;
+            if self.is_sat_out() {
+                return (None, Some(Held::SatOut));
             }
+            return (None, Some(Held::NoPicture));
+        };
+        if kept {
+            self.kept += 1;
         }
 
-        let (view, capture) = match self.look_settled() {
-            Ok(seen) => seen,
-            // A table that will not settle may simply be covered by the sit-out
-            // dialog, which is worth naming rather than reporting as a failure
-            // to read.
-            Err(held) => {
-                self.seen = None;
-                if self.is_sat_out() {
-                    return (None, Some(Held::SatOut));
-                }
-                return (None, Some(held));
+        let settled = self
+            .before
+            .as_ref()
+            .is_some_and(|before| before.agrees_with(&view));
+        self.before = Some(view.clone());
+        if !settled {
+            self.seen = None;
+            if self.is_sat_out() {
+                return (Some(view), Some(Held::SatOut));
             }
-        };
+            return (Some(view), Some(Held::NotSettled));
+        }
+
         self.seen = Some(capture);
 
         let stack = view.hero().and_then(|h| h.stack);
@@ -809,17 +805,24 @@ impl Session {
         // Reading nothing at all is not evidence either way — a frame arriving
         // mid-animation is unreadable whether or not the click landed — so it
         // waits rather than concluding.
+        // Looked at before being waited on. A client that took the action
+        // immediately was still charged a fifth of a second for the privilege
+        // of being asked politely.
         let deadline = Instant::now() + TOOK;
         loop {
-            std::thread::sleep(Duration::from_millis(200));
             if let Some(after) = self.look() {
                 if !after.hero_to_act() {
+                    // The table has moved on, so what was remembered of it has
+                    // too.
+                    self.before = None;
                     return Ok(began.elapsed());
                 }
             }
             if Instant::now() >= deadline {
+                self.before = None;
                 return Err(Held::NotTaken);
             }
+            std::thread::sleep(Duration::from_millis(120));
         }
     }
 
