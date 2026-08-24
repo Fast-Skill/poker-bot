@@ -85,8 +85,8 @@ pub enum Held {
     SatOut,
     /// The money on the table did not add up to the pot.
     NotAdding,
-    /// The reading was incomplete — a refused figure, or unread cards.
-    NotConfident,
+    /// A figure the decision rests on did not read. Names which.
+    NotConfident(&'static str),
     /// The button the choice needs is not on screen.
     NoSuchButton(Choice),
     /// The raise field would not take the amount, or did not read back as it.
@@ -109,9 +109,8 @@ impl Held {
             Held::SatOut => {
                 "the client has sat us out; nothing will be dealt until we sit back in".into()
             }
-            Held::NotConfident => {
-                "a figure the decision needs did not read - our two cards, the pot, the amount to call, or our own stack"
-                    .into()
+            Held::NotConfident(missing) => {
+                format!("{missing} did not read")
             }
             Held::NoSuchButton(choice) => format!("there is no {} button on screen", choice.name()),
             Held::WrongAmount { wanted, showing } => match showing {
@@ -773,8 +772,8 @@ impl Session {
         // not read is the reader failing at its main job; a table whose money
         // does not add up is almost always a frame caught mid-animation and
         // will come good on its own.
-        if !view.reads_what_a_decision_needs() {
-            return (Some(view), Some(Held::NotConfident));
+        if let Some(missing) = view.missing_figure() {
+            return (Some(view), Some(Held::NotConfident(missing)));
         }
         if !view.is_consistent() {
             return (Some(view), Some(Held::NotAdding));
@@ -1179,7 +1178,7 @@ mod tests {
             Held::NoPicture,
             Held::NotSettled,
             Held::NotOurTurn,
-            Held::NotConfident,
+            Held::NotConfident("our two cards"),
             Held::NoSuchButton(Choice::Aggressive { to_blinds: 9.0 }),
             Held::WrongAmount {
                 wanted: 9.0,

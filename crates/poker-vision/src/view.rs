@@ -387,10 +387,33 @@ impl TableView {
     /// money-balance check in [`TableView::is_consistent`] still has to pass on
     /// top.
     pub fn reads_what_a_decision_needs(&self) -> bool {
-        self.hole.len() == 2
-            && self.pot.is_some()
-            && self.to_call().is_some()
-            && self.hero().is_some_and(|hero| hero.stack.is_some())
+        self.missing_figure().is_none()
+    }
+
+    /// Which figure a decision needs and did not get, if any.
+    ///
+    /// Named rather than counted. Reporting only that *something* was missing
+    /// left the commonest failure at the table undiagnosable: a hand would sit
+    /// until the clock folded it, and the log said four things might have gone
+    /// wrong without saying which. The fix for an unread hole card and the fix
+    /// for an unread pot have nothing in common.
+    pub fn missing_figure(&self) -> Option<&'static str> {
+        if self.hero().is_none() {
+            return Some("our own seat");
+        }
+        if self.hole.len() != 2 {
+            return Some("our two cards");
+        }
+        if self.pot.is_none() {
+            return Some("the pot");
+        }
+        if self.to_call().is_none() {
+            return Some("the amount to call");
+        }
+        if self.hero().is_some_and(|hero| hero.stack.is_none()) {
+            return Some("our own stack");
+        }
+        None
     }
 
     /// Which seats posted the small and big blinds.
