@@ -23,7 +23,9 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use crate::bridge;
 use poker_core::card::Card;
+use poker_core::telemetry::{DecisionRecord, Observer, Source};
 use poker_vision::{
     ActionPanel, Frame, GlyphTemplates, HeroTemplates, HeroThresholds, TableView, Templates,
     TextThresholds, Thresholds,
@@ -226,6 +228,172 @@ pub struct Session {
     before: Option<TableView>,
     /// When a dialog was last looked for.
     looked_for_dialog: Option<Instant>,
+}
+
+/// Writes a hand history a person can read and argue with.
+///
+/// # Why this is not the console output
+///
+/// `--explain` already prints every decision, but it prints it between the
+/// hundreds of lines the bot emits while waiting for its turn. Reviewing a
+/// hundred hands from that means scrolling past several thousand lines of
+/// "the client is not asking us to act", and the decisions do not group by
+/// hand, so a flop and the river it led to sit a page apart.
+///
+/// What a reviewer needs is the opposite: one block per hand, every decision
+/// in it, the strategy behind each, and the result at the end. Then the
+/// question "was that fold right?" has everything beside it — the price, the
+/// board, the frequencies the solve actually held — and can be answered
+/// without the bot's help.
+///
+/// This is the deliverable of a decision-quality benchmark. A win rate over a
+/// hundred hands says nothing; a hundred readable decisions say a hundred
+/// things.
+#[derive(Debug)]
+pub struct Review {
+    to: PathBuf,
+    /// The hand being written, recognised by the hero's cards changing.
+    hole: Vec<Card>,
+    hands: u64,
+    decisions: u64,
+    /// Decisions that came from a solve rather than the fallback.
+    solved: u64,
+}
+
+impl Review {
+    pub fn new(to: PathBuf) -> Review {
+        Review {
+            to,
+            hole: Vec::new(),
+            hands: 0,
+            decisions: 0,
+            solved: 0,
+        }
+    }
+
+    /// How much of the session a solve decided, which is one of the
+    /// benchmark's own criteria.
+    pub fn coverage(&self) -> (u64, u64) {
+        (self.solved, self.decisions)
+    }
+
+    pub fn hands(&self) -> u64 {
+        self.hands
+    }
+
+    /// Closes a hand with what it came to.
+    pub fn note_result(&mut self, net: f64) {
+        if self.hands > 0 {
+            self.write(&format!("  result   {net:+.2} bb\n"));
+        }
+    }
+
+    fn write(&self, text: &str) {
+        use std::io::Write;
+        if let Some(parent) = self.to.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.to)
+        {
+            let _ = file.write_all(text.as_bytes());
+        }
+    }
+}
+
+impl Observer for Review {
+    fn on_decision(&mut self, record: &DecisionRecord) {
+        let cards = |of: &[Card]| {
+            of.iter()
+                .map(|card| card.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+
+        if record.perception.hole != self.hole {
+            self.hole = record.perception.hole.to_vec();
+            self.hands += 1;
+            self.write(&format!(
+                "\nHAND {}  {}\n",
+                self.hands,
+                cards(&record.perception.hole)
+            ));
+        }
+
+        self.decisions += 1;
+        let (spot, solved) = match &record.source {
+            Source::Blueprint { spot, .. } => (spot.clone(), true),
+            Source::Fallback { reason } => (format!("HEURISTIC - {reason}"), false),
+        };
+        self.solved += u64::from(solved);
+
+        let board = cards(&record.perception.board);
+        let board = if board.is_empty() {
+            "-".to_string()
+        } else {
+            board
+        };
+        // Big blinds, since that is how a poker player reads a pot.
+        let bb = |chips: u64| chips as f64 / bridge::CHIPS_PER_BB;
+        self.write(&format!(
+            "  {:<8} board {:<14} pot {:>6.1}  to call {:>5.1}\n           {}\n           {}\n           => {:?}\n",
+            format!("{:?}", record.perception.street).to_lowercase(),
+            board,
+            bb(record.perception.pot),
+            bb(record.perception.to_call),
+            spot,
+            record
+                .frequencies
+                .iter()
+                .map(|(name, share)| format!("{name} {:.0}%", share * 100.0))
+                .collect::<Vec<_>>()
+                .join("  "),
+            record.action,
+        ));
+    }
+}
+
+/// A handle to a [`Review`] that can be given away and still read.
+///
+/// The agent takes ownership of whatever watches it, so a caller that wants to
+/// print the session's coverage at the end needs a second way in.
+#[derive(Debug, Clone)]
+pub struct Shared(std::rc::Rc<std::cell::RefCell<Review>>);
+
+impl Shared {
+    pub fn new(review: Review) -> Shared {
+        Shared(std::rc::Rc::new(std::cell::RefCell::new(review)))
+    }
+
+    pub fn note_result(&self, net: f64) {
+        self.0.borrow_mut().note_result(net);
+    }
+
+    /// Hands written, decisions taken, and how many a solve decided.
+    pub fn tally(&self) -> (u64, u64, u64) {
+        let review = self.0.borrow();
+        let (solved, decisions) = review.coverage();
+        (review.hands(), decisions, solved)
+    }
+}
+
+impl Observer for Shared {
+    fn on_decision(&mut self, record: &DecisionRecord) {
+        self.0.borrow_mut().on_decision(record);
+    }
+}
+
+/// Two watchers where one is expected.
+#[derive(Debug)]
+pub struct Both(pub Box<dyn Observer>, pub Box<dyn Observer>);
+
+impl Observer for Both {
+    fn on_decision(&mut self, record: &DecisionRecord) {
+        self.0.on_decision(record);
+        self.1.on_decision(record);
+    }
 }
 
 /// What a session has won or lost, counted a hand at a time.
