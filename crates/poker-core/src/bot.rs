@@ -887,8 +887,11 @@ impl Agent for BlueprintAgent {
         // it was already doing.
         if let Some((action, frequencies, key, _)) = self.chart_action(view, rng) {
             self.preflop_decisions += 1;
-            let named = charts::spot_of(view).map_or_else(String::new, |spot| spot.name());
             if let Some(observer) = self.observer.as_mut() {
+                // Named inside the block: this repeats the spot lookup and
+                // allocates a string for it, and there is no reason to pay
+                // either when nobody is watching.
+                let named = charts::spot_of(view).map_or_else(String::new, |spot| spot.name());
                 observer.on_decision(&DecisionRecord {
                     hand: self.hand,
                     perception: Perception {

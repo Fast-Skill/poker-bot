@@ -194,13 +194,26 @@ impl fmt::Display for RingReport {
 /// once. Card luck does not average out over the cycle — it cancels within it,
 /// because every agent got the identical set of holdings.
 ///
-/// What remains is what the agents did with them, which is the question. It
-/// costs one playing per seat, so a cycle of seven hands yields one deal's
-/// worth of independent information — expensive, and the only reason the answer
-/// means anything.
+/// # The dice are held still too
 ///
-/// Position is fair for the same reason: the rotation moves the button past
-/// every agent inside each cycle rather than relying on it evening out.
+/// Cards are not the only chance in a hand. These strategies are *mixed* — a
+/// hand that three-bets 30% of the time consults a random number — so replaying
+/// the same cards does not replay the same hand, and a rotation that re-rolled
+/// the dice each time would put back most of the variance it just removed.
+///
+/// So every playing of a deal runs on its own generator, seeded identically.
+/// Each rotation therefore faces the same cards *and* the same rolls, and the
+/// only thing that differs is which strategy was sitting where.
+///
+/// This was missing at first, and the omission was invisible because the test
+/// covering it used a deterministic agent — which cancels perfectly whether the
+/// dice are held or not. Measured with real mixed strategies, the noise floor
+/// was thirty big blinds per hundred, larger than the plain ring play this was
+/// meant to improve on.
+///
+/// Position is fair for the same reason as the cards: the rotation moves the
+/// button past every agent inside each cycle rather than relying on it evening
+/// out.
 ///
 /// # Panics
 /// Panics if there are fewer than two agents, or `deals` is zero.
@@ -223,13 +236,16 @@ pub fn rotated_ring_match(
 
     for _ in 0..deals {
         deck.shuffle(rng);
+        // One seed per deal, shared by every replay of it. This is what keeps
+        // the mixed strategies from re-rolling between rotations.
+        let seed = rng.next_u64();
+        let cards = deck.hand_cards(players).to_vec();
+
         // Shuffled once and played `players` times. Every rotation sees the
         // same cards in the same seats; only who is sitting there changes.
         for _ in 0..players {
-            let result = {
-                let cards = deck.hand_cards(players).to_vec();
-                table.play_hand(&mut seats, &cards, rng)
-            };
+            let mut dice = Rng::new(seed);
+            let result = table.play_hand(&mut seats, &cards, &mut dice);
             if result.showdown {
                 showdowns += 1;
             }
@@ -499,63 +515,100 @@ impl Agent for ChartBot {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn table() -> Table {
+        Table::standard()
+    }
+
+    /// A strategy that flips a coin, so the deck is not the only chance in the
+    /// hand.
+    ///
+    /// This exists because the deterministic baselines cannot test what needs
+    /// testing. The strategies this module is built to compare are *mixed* —
+    /// they consult a random number to decide how often to raise — and a
+    /// measurement that cancels card luck while leaving that roll free cancels
+    /// far less than it appears to.
+    struct Coinflip;
+
+    impl Agent for Coinflip {
+        fn name(&self) -> &str {
+            "coinflip"
+        }
+
+        fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
+            if rng.next_f64() < 0.5 && view.legal.can_check {
+                Action::Check
+            } else if rng.next_f64() < 0.7 {
+                match view.legal.call_cost {
+                    Some(_) => Action::Call,
+                    None => Action::Check,
+                }
+            } else if view.legal.can_fold {
+                Action::Fold
+            } else {
+                Action::Check
+            }
+        }
+    }
 
     /// Identical strategies must come out at exactly nothing.
     ///
     /// This is the property the whole measurement rests on. Over a full
-    /// rotation every agent holds every seat's cards once, so seven identical
-    /// players cannot be separated by the deck — any spread at all would be
-    /// luck that failed to cancel, and any edge measured on top of it would be
-    /// that luck rather than strategy.
+    /// rotation every agent holds every seat's cards once and plays them
+    /// against the same rolls, so identical players cannot be separated — any
+    /// spread at all is chance that failed to cancel, and an edge measured on
+    /// top of it would be that chance rather than strategy.
     ///
-    /// Worth pinning because the plain [`ring_match`] fails it badly: the same
-    /// seven identical agents there come out tens of big blinds per hundred
-    /// apart, which is how a three big blind "difference" between two real
-    /// strategies got reported as though it meant something.
+    /// Checked with a *mixed* strategy, which is the version that matters and
+    /// the version an earlier test got wrong. It used a deterministic agent,
+    /// which cancels whether or not the dice are held still, and so passed
+    /// against an implementation that re-rolled them every rotation. Measured
+    /// afterwards with the real bot, the noise floor was thirty big blinds per
+    /// hundred — worse than the plain ring play this replaced.
     #[test]
-    fn identical_agents_cannot_be_separated_by_the_deck() {
+    fn identical_agents_cannot_be_separated_by_chance() {
         let table = Table::new(100, 10_000);
-        let mut rng = Rng::new(12_345);
 
-        let mut agents: Vec<AlwaysCall> = (0..7).map(|_| AlwaysCall).collect();
-        let playing: Vec<&mut dyn Agent> = agents
-            .iter_mut()
-            .map(|agent| agent as &mut dyn Agent)
-            .collect();
-        let rotated = rotated_ring_match(&table, playing, 40, &mut rng);
+        for deterministic in [true, false] {
+            let mut fixed: Vec<AlwaysCall> = (0..7).map(|_| AlwaysCall).collect();
+            let mut mixed: Vec<Coinflip> = (0..7).map(|_| Coinflip).collect();
+            let playing: Vec<&mut dyn Agent> = if deterministic {
+                fixed.iter_mut().map(|a| a as &mut dyn Agent).collect()
+            } else {
+                mixed.iter_mut().map(|a| a as &mut dyn Agent).collect()
+            };
 
-        for (name, rate) in rotated.names.iter().zip(&rotated.bb_per_100) {
-            assert!(
-                rate.abs() < 1e-9,
-                "{name} came out {rate:+.3} bb/100 against copies of itself"
-            );
+            let report = rotated_ring_match(&table, playing, 40, &mut Rng::new(12_345));
+            for (name, rate) in report.names.iter().zip(&report.bb_per_100) {
+                assert!(
+                    rate.abs() < 1e-9,
+                    "{name} came out {rate:+.3} bb/100 against copies of itself \
+                     ({} strategy)",
+                    if deterministic { "deterministic" } else { "mixed" }
+                );
+            }
         }
+    }
 
-        // And the same agents dealt fresh cards every hand do not manage it,
-        // which is the reason this function exists.
-        let mut agents: Vec<AlwaysCall> = (0..7).map(|_| AlwaysCall).collect();
+    /// Plain ring play cannot do it, which is the reason the rotated version
+    /// exists at all.
+    #[test]
+    fn fresh_deals_leave_identical_agents_far_apart() {
+        let table = Table::new(100, 10_000);
+        let mut agents: Vec<Coinflip> = (0..7).map(|_| Coinflip).collect();
         let playing: Vec<&mut dyn Agent> = agents
             .iter_mut()
             .map(|agent| agent as &mut dyn Agent)
             .collect();
         let plain = ring_match(&table, playing, 280, &mut Rng::new(12_345));
-        let spread = plain
-            .bb_per_100
-            .iter()
-            .cloned()
-            .fold(f64::MIN, f64::max)
+
+        let spread = plain.bb_per_100.iter().cloned().fold(f64::MIN, f64::max)
             - plain.bb_per_100.iter().cloned().fold(f64::MAX, f64::min);
         assert!(
             spread > 1.0,
             "plain ring play is supposed to be noisy; spread was only {spread:.3}"
         );
-    }
-
-
-    use super::*;
-
-    fn table() -> Table {
-        Table::standard()
     }
 
     #[test]
