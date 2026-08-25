@@ -325,8 +325,153 @@ impl fmt::Display for Range {
     }
 }
 
+/// Why a combination list could not be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseCombosError {
+    pub entry: String,
+    pub why: &'static str,
+}
+
+impl fmt::Display for ParseCombosError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {}", self.entry, self.why)
+    }
+}
+
+impl std::error::Error for ParseCombosError {}
+
+impl Range {
+    /// Reads a range given combination by combination.
+    ///
+    /// ```text
+    /// Ac5c: 1,Ac5d: 0.2218,Ac5h: 0.2218,Kc6c: 0.7063,3d3c: 0.0104
+    /// ```
+    ///
+    /// # Why a second reader
+    ///
+    /// [`Range::from_str`] takes the notation people write — `A2s+`, `KQo`,
+    /// `22+`. Solvers export something else: every one of the 1326 individual
+    /// combinations, each with its own weight. `Ac5c` and `Ac5d` are the same
+    /// two ranks and different hands — one suited, one not — and only the exact
+    /// suits say which.
+    ///
+    /// # Weights within a class
+    ///
+    /// A hand class covers several combinations: six for a pair, four suited,
+    /// twelve offsuit. A solver may weight them differently, since the specific
+    /// suits matter once a board is out. This abstraction cannot hold that — it
+    /// keys on the class — so the weights of a class's combinations are
+    /// averaged over the whole class, counting the ones absent from the export
+    /// as zero.
+    ///
+    /// In the exports this was built against the difference is nil: every
+    /// combination of a class carries the same weight preflop, which is what
+    /// one would expect when no board has been dealt to tell them apart. The
+    /// averaging is there for the cases where that stops being true rather than
+    /// because it is needed now.
+    pub fn from_combos(text: &str) -> Result<Range, ParseCombosError> {
+        let mut total = [0.0f64; 169];
+        for entry in text
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let fail = |why: &'static str| ParseCombosError {
+                entry: entry.to_string(),
+                why,
+            };
+            let (cards, weight) = entry.split_once(':').ok_or_else(|| fail("no ':'"))?;
+            let weight: f64 = weight
+                .trim()
+                .parse()
+                .map_err(|_| fail("the weight is not a number"))?;
+            if !(0.0..=1.0).contains(&weight) {
+                return Err(fail("a weight runs from 0 to 1"));
+            }
+
+            let cards = cards.trim();
+            if cards.len() != 4 {
+                return Err(fail("expected two cards, like Ac5d"));
+            }
+            let card = |at: usize| {
+                crate::card::parse_cards(&cards[at..at + 2])
+                    .ok()
+                    .and_then(|read| read.first().copied())
+                    .ok_or_else(|| fail("not a card"))
+            };
+            let (first, second) = (card(0)?, card(2)?);
+            if first == second {
+                return Err(fail("the same card twice"));
+            }
+            total[HandClass::from_cards(first, second).index()] += weight;
+        }
+
+        // Averaged over every combination the class has, present or not: a
+        // class named for only half its combinations is played half the time.
+        let mut range = Range::empty();
+        for class in HandClass::all() {
+            let combos = class.combinations().len() as f64;
+            let weight = total[class.index()] / combos;
+            if weight > 0.0 {
+                range.set(class, weight.min(1.0));
+            }
+        }
+        Ok(range)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    /// The format a solver actually exports, as opposed to the one people write.
+    ///
+    /// This is a slice of GTO Wizard's under-the-gun opening range, copied
+    /// verbatim. It is here because the assumption that an export would be
+    /// ordinary range notation was wrong, and a sample of the real thing is the
+    /// only defence against being wrong about it again.
+    #[test]
+    fn a_solver_export_reads_back_as_a_range() {
+        // Note `Ac5c` beside `Ac5d`: same ranks, different hands, and only the
+        // suits say which. Notation cannot express the difference per
+        // combination, which is exactly why this reader exists.
+        let export = "3d3c: 0.0104,3h3c: 0.0104,3h3d: 0.0104,3s3c: 0.0104,3s3d: 0.0104,3s3h: 0.0104,                      Ac5c: 1,Ad5d: 1,Ah5h: 1,As5s: 1,                      Ac5d: 0.2218,Ac5h: 0.2218,Ac5s: 0.2218,Ad5c: 0.2218,Ad5h: 0.2218,Ad5s: 0.2218,                      Ah5c: 0.2218,Ah5d: 0.2218,Ah5s: 0.2218,As5c: 0.2218,As5d: 0.2218,As5h: 0.2218,                      AcAd: 1,AcAh: 1,AcAs: 1,AdAh: 1,AdAs: 1,AhAs: 1";
+        let range = Range::from_combos(export).expect("a solver export");
+
+        let weight = |hand: &str| range.weight(hand.parse::<HandClass>().expect("a hand"));
+        assert!((weight("AA") - 1.0).abs() < 1e-9, "every combination, always");
+        assert!((weight("33") - 0.0104).abs() < 1e-9, "a hand played rarely");
+        // The suited and offsuit halves of ace-five are separate hands and the
+        // solver plays them very differently. Collapsing them would put the
+        // offsuit one in at full weight, which is a real leak.
+        assert!((weight("A5s") - 1.0).abs() < 1e-9);
+        assert!((weight("A5o") - 0.2218).abs() < 1e-9);
+        assert_eq!(weight("72o"), 0.0, "never named, never played");
+    }
+
+    /// A class named for only some of its combinations is played only that
+    /// often, since the missing ones are hands the solver folds.
+    #[test]
+    fn absent_combinations_count_as_folded() {
+        // Three of ace-king's twelve offsuit combinations, at full weight.
+        let partial = "AcKd: 1,AcKh: 1,AcKs: 1";
+        let range = Range::from_combos(partial).expect("a partial class");
+        let ako = range.weight("AKo".parse::<HandClass>().expect("a hand"));
+        assert!((ako - 3.0 / 12.0).abs() < 1e-9, "three of twelve, so a quarter");
+    }
+
+    #[test]
+    fn a_malformed_export_says_which_entry_broke() {
+        let bad = Range::from_combos("AcKd: 1,AxKd: 1").expect_err("a bad card");
+        assert!(bad.entry.contains("AxKd"), "names the offender: {bad}");
+
+        let twice = Range::from_combos("AcAc: 1").expect_err("the same card twice");
+        assert!(twice.why.contains("same card"), "{twice}");
+
+        let over = Range::from_combos("AcKd: 1.5").expect_err("an impossible weight");
+        assert!(over.why.contains("0 to 1"), "{over}");
+    }
+
+
     use super::*;
     use crate::card::parse_cards;
 
@@ -344,14 +489,15 @@ mod tests {
         found
     }
 
-    /// The notation a solver exports its preflop ranges in.
+    /// The notation people write ranges in, as in books and charts.
     ///
-    /// Checked against a real cutoff opening range, because that is the form
-    /// the preflop strategy will arrive in: published ranges rather than a
-    /// solve of our own, which reached 845,000 information sets with a quarter
-    /// of them untrained and disagreed with itself about king-queen.
+    /// Checked against a cutoff opening range written the usual way. Note that
+    /// this is *not* the form a solver exports — that turned out to be one
+    /// entry per combination, which [`Range::from_combos`] reads instead. This
+    /// covers the hand-written notation, which the bot still needs for the
+    /// ranges nobody has exported.
     #[test]
-    fn a_solver_export_reads_back_as_a_range() {
+    fn written_notation_reads_back_as_a_range() {
         let cutoff = "22+, A2s+, K7s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s,                       A9o+, KTo+, QTo+, JTo";
         let range: Range = cutoff.parse().expect("standard notation");
 

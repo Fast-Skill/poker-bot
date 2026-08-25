@@ -14,6 +14,7 @@ pub mod betting;
 pub mod blueprint;
 pub mod bot;
 pub mod card;
+pub mod charts;
 pub mod cfr;
 pub mod equity;
 pub mod eval;

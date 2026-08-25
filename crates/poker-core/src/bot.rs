@@ -24,6 +24,7 @@ use crate::blueprint::Blueprint;
 use crate::abstraction::HandClass;
 use crate::preflop::{self, Preflop, Sizing};
 use crate::postflop::{self, Postflop, Spot};
+use crate::charts::{self, Charts};
 use crate::ring::{Move, Ring};
 use crate::rng::Rng;
 use crate::table::{Agent, Position, View};
@@ -66,6 +67,15 @@ fn informative(strategy: &[f32]) -> bool {
 /// which lands on proportions the game dictated, not on exact fractions —
 /// passes.
 const FLAT: f32 = 0.02;
+
+/// Where a seat acts after the flop, counting from first.
+///
+/// Seat zero holds the button and acts last, the small blind acts first, and
+/// the rest follow round. Who is in position is decided by this and not by the
+/// seat numbers, which run the other way.
+fn after_flop_order(seat: usize, players: usize) -> usize {
+    (seat + players - 1) % players
+}
 
 /// Caps what a guess may stake.
 ///
@@ -219,6 +229,11 @@ pub struct BlueprintAgent {
     /// half million, so the board in play is almost never among them. What
     /// carries across is the procedure, not the table: this repeats it.
     reader: Option<Reader>,
+    /// Published preflop ranges, consulted before any preflop solve.
+    ///
+    /// Empty unless charts were loaded, which is what keeps a bot without them
+    /// behaving exactly as it did before.
+    charts: Charts,
     /// Covers postflop, and any preflop spot the blueprint does not hold.
     fallback: ChartBot,
     /// Preflop decisions taken so far this hand, used to tell an open from a
@@ -254,6 +269,7 @@ impl BlueprintAgent {
     pub fn new(name: impl Into<String>, blueprint: Blueprint, sizing: Sizing) -> BlueprintAgent {
         BlueprintAgent {
             name: name.into(),
+            charts: Charts::new(),
             rings: vec![None; crate::wide::MAX_PLAYERS + 1],
             postflop: Vec::new(),
             reader: None,
@@ -318,6 +334,115 @@ impl BlueprintAgent {
         self.postflop
             .sort_by(|a, b| a.spr.total_cmp(&b.spr));
         self
+    }
+
+    /// Attaches published preflop ranges.
+    ///
+    /// These take precedence over every preflop solve, for the spots they
+    /// cover. That ordering is the whole point: the solve is what these
+    /// replace. Where a chart says nothing — three-bet pots, short-handed
+    /// tables, anything past a single raise — the solve still answers, so this
+    /// narrows the solve's job rather than removing it.
+    pub fn with_charts(mut self, charts: Charts) -> BlueprintAgent {
+        self.charts = charts;
+        self
+    }
+
+    /// The spots charts cover, for reporting what is loaded.
+    pub fn charted_spots(&self) -> Vec<String> {
+        self.charts
+            .spots()
+            .map(|(name, _)| name.to_string())
+            .collect()
+    }
+
+    /// Looks up a preflop decision in the published charts, if one covers it.
+    fn chart_action(&self, view: &View, rng: &mut Rng) -> Option<Consulted> {
+        if self.charts.is_empty() {
+            return None;
+        }
+        let spot = charts::spot_of(view)?;
+        let chart = self.charts.get(spot)?;
+        let class = HandClass::from_cards(view.hole[0], view.hole[1]);
+        let strategy = chart.strategy(class);
+        let (last, _) = *strategy.last()?;
+
+        // Sampled, not taken at the mode. A chart's mixed frequencies are the
+        // strategy; playing the likeliest branch every time is a different and
+        // more exploitable one.
+        let roll = rng.next_f64();
+        let mut seen = 0.0;
+        let chosen = strategy
+            .iter()
+            .find(|(_, share)| {
+                seen += share;
+                roll < seen
+            })
+            .map_or(last, |(action, _)| *action);
+
+        let action = match chosen {
+            // Folding when nothing is owed would be throwing away a free card.
+            // It happens in the big blind, where the chart's leftover weight is
+            // "do not put more in" rather than "give up the hand".
+            Move::Fold | Move::Passive if view.to_call == 0 => Action::Check,
+            Move::Fold => Action::Fold,
+            Move::Passive => Action::Call,
+            Move::Raise => Action::RaiseTo(self.chart_raise(view, spot)?),
+            Move::Jam => view.legal.raise_to.map(|(_, max)| Action::RaiseTo(max))?,
+        };
+
+        let frequencies = strategy
+            .iter()
+            .map(|(action, share)| (format!("{action:?}").to_lowercase(), *share))
+            .collect();
+
+        // Keyed by the hand, since a chart has no information sets to number.
+        // It still identifies the lookup uniquely within a spot, which is what
+        // a reviewer reading the history needs it for.
+        view.legal
+            .permits(action)
+            .then_some((action, frequencies, class.index() as u64, view.players))
+    }
+
+    /// How much a charted raise is for.
+    ///
+    /// A range says which hands raise, never for how much — the size is a
+    /// property of the solution the range came from, and it has to be stated
+    /// somewhere. Getting it wrong does not make the bot raise the wrong hands;
+    /// it makes it raise them at a price the range was not solved against,
+    /// which is a smaller error but a real one.
+    ///
+    /// The sizes are the ones the published six-handed solutions use: two and a
+    /// half blinds to open, and a three-bet of three times the raise in
+    /// position or four times out of it, since acting last afterwards is worth
+    /// a smaller price.
+    fn chart_raise(&self, view: &View, spot: charts::Spot) -> Option<u64> {
+        const OPEN: f64 = 2.5;
+        const IN_POSITION: f64 = 3.0;
+        const OUT_OF_POSITION: f64 = 4.0;
+
+        let (least, most) = view.legal.raise_to?;
+        let target = match spot.versus {
+            None => OPEN * view.big_blind as f64,
+            Some(_) => {
+                let raiser = (0..view.players)
+                    .filter(|&at| at != view.seat && view.live[at])
+                    .max_by_key(|&at| view.committed[at])?;
+                let multiple = if after_flop_order(view.seat, view.players)
+                    > after_flop_order(raiser, view.players)
+                {
+                    IN_POSITION
+                } else {
+                    OUT_OF_POSITION
+                };
+                multiple * view.committed[raiser] as f64
+            }
+        };
+
+        // Clamped rather than abandoned: a table that will not take the solved
+        // size will take the nearest one it allows, and raising this hand at a
+        // slightly wrong price beats falling through to a different strategy.
+        Some((target.round() as u64).clamp(least, most))
     }
 
     /// The stack-to-pot ratios this agent has a postflop solve for, ascending.
@@ -756,6 +881,37 @@ impl Agent for BlueprintAgent {
     fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
         self.decisions += 1;
 
+        // Published ranges first, where they cover the spot. They are better
+        // than anything solved here — see the `charts` module — and they answer
+        // only preflop spots at six or more players, so nothing else loses work
+        // it was already doing.
+        if let Some((action, frequencies, key, _)) = self.chart_action(view, rng) {
+            self.preflop_decisions += 1;
+            let named = charts::spot_of(view).map_or_else(String::new, |spot| spot.name());
+            if let Some(observer) = self.observer.as_mut() {
+                observer.on_decision(&DecisionRecord {
+                    hand: self.hand,
+                    perception: Perception {
+                        hole: view.hole,
+                        board: view.board.to_vec(),
+                        street: view.street,
+                        position: view.position,
+                        pot: view.pot,
+                        to_call: view.to_call,
+                        stacks: view.stacks.to_vec(),
+                        confidence: Confidence::certain(),
+                    },
+                    source: Source::Blueprint {
+                        key,
+                        spot: format!("chart {named}"),
+                    },
+                    action,
+                    frequencies,
+                });
+            }
+            return action;
+        }
+
         // Three-handed preflop has its own solve, and it is consulted before
         // the heads-up one because the heads-up blueprint has nothing to say
         // about a three-way pot — it would fall through to the heuristic.
@@ -1049,6 +1205,152 @@ mod tests {
             counts.solved,
             counts.solved + counts.fallback
         );
+    }
+
+    /// A charted hand reaches the table as the action the chart names.
+    ///
+    /// Everything between the range file and the click is covered here: naming
+    /// the seat, recognising an unopened pot, finding the hand in the range,
+    /// and sizing the raise. Each of those has been wrong at some point in some
+    /// other part of this bot, and none of them fails loudly.
+    #[test]
+    fn a_charted_hand_is_played_as_the_chart_says() {
+        let hole = crate::card::parse_cards("AhJc").expect("two cards");
+        let legal = LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(100),
+            raise_to: Some((200, 10_000)),
+        };
+        // Seven-handed, folded round to the button. Seat 0 is the button, and
+        // seats 1 and 2 have posted the blinds.
+        let stacks = [10_000u64; 7];
+        let committed = [0, 50, 100, 0, 0, 0, 0];
+        let live = [true, true, true, false, false, false, false];
+        let acted = [false, false, false, true, true, true, true];
+        let street_committed = committed;
+        let view = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Preflop,
+            position: Position::Button,
+            seat: 0,
+            players: 7,
+            active: 3,
+            pot: 150,
+            to_call: 100,
+            stack: 10_000,
+            stacks: &stacks,
+            committed: &committed,
+            live: &live,
+            street_committed: &street_committed,
+            acted: &acted,
+            raises: 0,
+            settled: None,
+            big_blind: 100,
+            legal: &legal,
+        };
+
+        assert_eq!(
+            charts::spot_of(&view).map(|spot| spot.name()),
+            Some("btn".to_string()),
+            "the button, in an unopened pot"
+        );
+
+        let mut charts = Charts::new();
+        charts.insert(
+            charts::Spot::from_name("btn").expect("a spot"),
+            crate::charts::Chart::default()
+                .with(Move::Raise, "AJo".parse().expect("a range")),
+        );
+        let agent = BlueprintAgent::new(
+            "charted",
+            Blueprint::from_profile(&Default::default(), "empty"),
+            Sizing::default(),
+        )
+        .with_charts(charts);
+
+        let mut rng = Rng::new(7);
+        let (action, frequencies, _, _) = agent
+            .chart_action(&view, &mut rng)
+            .expect("the chart covers this");
+        // Two and a half blinds, which is what the ranges were solved at.
+        assert_eq!(action, Action::RaiseTo(250));
+        assert_eq!(frequencies, vec![("raise".to_string(), 1.0)]);
+
+        // A hand outside the range folds, and folds rather than checking,
+        // because there is a blind to call.
+        let weak = crate::card::parse_cards("7c2d").expect("two cards");
+        let outside = View {
+            hole: [weak[0], weak[1]],
+            ..view
+        };
+        let (action, _, _, _) = agent
+            .chart_action(&outside, &mut rng)
+            .expect("the chart still covers the spot");
+        assert_eq!(action, Action::Fold);
+    }
+
+    /// Charts answer preflop at a full table and nothing else, so everything
+    /// they decline still reaches the strategy that used to handle it.
+    #[test]
+    fn charts_decline_every_spot_they_do_not_cover() {
+        let hole = crate::card::parse_cards("AhJc").expect("two cards");
+        let legal = LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(100),
+            raise_to: Some((200, 10_000)),
+        };
+        let stacks = [10_000u64; 7];
+        let committed = [0, 50, 100, 0, 0, 0, 0];
+        let live = [true, true, true, false, false, false, false];
+        let acted = [false, false, false, true, true, true, true];
+        let board = crate::card::parse_cards("2h7d9s").expect("a flop");
+        let base = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Preflop,
+            position: Position::Button,
+            seat: 0,
+            players: 7,
+            active: 3,
+            pot: 150,
+            to_call: 100,
+            stack: 10_000,
+            stacks: &stacks,
+            committed: &committed,
+            live: &live,
+            street_committed: &committed,
+            acted: &acted,
+            raises: 0,
+            settled: None,
+            big_blind: 100,
+            legal: &legal,
+        };
+        assert!(charts::spot_of(&base).is_some(), "the covered case");
+
+        // After the flop there is no such thing as a preflop chart.
+        assert!(charts::spot_of(&View {
+            street: Street::Flop,
+            board: &board,
+            ..base
+        })
+        .is_none());
+
+        // Five-handed: the published six-handed ranges are far too tight.
+        assert!(charts::spot_of(&View { players: 5, ..base }).is_none());
+
+        // Past a single raise the tree is deeper than any chart here.
+        assert!(charts::spot_of(&View { raises: 2, ..base }).is_none());
+
+        // A limp in front is not an unopened pot, and no chart covers it.
+        let limped = [0, 50, 100, 0, 0, 100, 0];
+        assert!(charts::spot_of(&View {
+            committed: &limped,
+            ..base
+        })
+        .is_none());
     }
 
     /// A guess may be wrong; it may not be ruinous.

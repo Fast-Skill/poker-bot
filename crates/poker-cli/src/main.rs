@@ -24,6 +24,7 @@ use poker_core::abstraction::HandClass;
 use poker_core::bench::{duplicate_match, AlwaysCall, AlwaysFold, AlwaysJam, ChartBot};
 use poker_core::blueprint::Blueprint;
 use poker_core::bot::BlueprintAgent;
+use poker_core::charts::Charts;
 use poker_core::card::{Rank, NUM_RANKS};
 use poker_core::cfr::{InfoKey, Solver};
 use poker_core::betting::Action;
@@ -72,6 +73,8 @@ fn main() -> ExitCode {
         Some("see") => see(&args[1..]),
         Some("grab") => grab(&args[1..]),
         Some("sit") => sit(&args[1..]),
+        Some("ranges") => ranges(&args[1..]),
+        Some("ringbench") => ringbench(&args[1..]),
         Some("replay") => replay(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
         Some("help") | Some("--help") | Some("-h") | None => {
@@ -1182,6 +1185,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let kill_switch = PathBuf::from(flags.text("kill-switch", "STOP"));
     let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
     let ring_dir = flags.text("ring", "data");
+    let charts_dir = flags.text("charts", CHARTS_DIR);
     let keep_unread = flags.text("keep-unread", "");
     let keep_turns = flags.text("keep-turns", "");
     let record = flags.text("record", "");
@@ -1293,6 +1297,10 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     // sent every flop to the heuristic instead of the solve. The only trace was
     // a missing line in the banner, which is why the banner names what is
     // loaded rather than reporting success.
+    let (with_charts, charted) = load_charts(agent, &charts_dir);
+    agent = with_charts;
+    println!("{charted}");
+
     let (with_postflop, depths) = load_postflop(agent, POSTFLOP_DIR);
     agent = with_postflop;
     println!("{}", postflop_summary(&depths));
@@ -1603,6 +1611,204 @@ fn live_cmd(_args: &[String]) -> Result<(), String> {
 /// A recorded frame is the same pixels every time. Running the reader over one
 /// says exactly what it makes of a moment that actually happened, and running
 /// it over a whole session says how often, so a change can be measured rather
+/// Shows what the published preflop ranges actually say.
+///
+/// # Why this exists
+///
+/// A chart that loaded and a chart that did not both leave the bot playing.
+/// The difference only shows up as slightly different hands going in, hundreds
+/// of hands later, which is the worst way to find out that a file was named
+/// wrong or a range pasted twice.
+///
+/// So this prints them back: which spots are held, how wide each is, and — with
+/// a hand named — exactly what would be done with it. A range printed back in
+/// the notation people read is something a poker player can check against their
+/// own judgement in a few seconds, without running a hand.
+fn ranges(args: &[String]) -> Result<(), String> {
+    let flags = Flags::parse(args)?;
+    let from = flags.text("dir", CHARTS_DIR);
+    let hand = flags.text("hand", "");
+    let spot_wanted = flags.text("spot", "");
+
+    let charts = Charts::load(std::path::Path::new(&from))?;
+    if charts.is_empty() {
+        return Err(format!(
+            "no charts in {from}\n\
+             \n\
+             Each file is named for the spot it covers and the action it holds:\n\
+             \n  {from}/utg.raise.txt         hands opened from under the gun\n\
+             \n  {from}/btn-vs-co.call.txt    hands called on the button facing a cutoff raise\n\
+             \n  {from}/btn-vs-co.raise.txt   hands three-bet in that same spot\n\
+             \n\
+             Positions are utg, hj, co, btn, sb, bb. Actions are raise, call, jam.\n\
+             The contents are what a solver exports: AcKd: 1,Ah5s: 0.22, and so on."
+        ));
+    }
+
+    println!("{} spots from {from}", charts.spots().count());
+    for gap in charts.gaps() {
+        println!("  INCOMPLETE {gap}");
+    }
+    println!();
+
+    for (name, chart) in charts.spots() {
+        if !spot_wanted.is_empty() && name != spot_wanted {
+            continue;
+        }
+        // How much of a random hand this spot plays, which is the one number a
+        // player can sanity-check at a glance: an under-the-gun opening range
+        // is about a sixth of hands, a button one about half.
+        let played: f64 = HandClass::all()
+            .map(|class| {
+                let folding = chart
+                    .strategy(class)
+                    .iter()
+                    .find(|(action, _)| matches!(action, poker_core::ring::Move::Fold))
+                    .map_or(0.0, |(_, share)| *share);
+                (1.0 - folding) * class.combinations().len() as f64
+            })
+            .sum();
+        let actions: Vec<String> = chart
+            .actions()
+            .map(|action| format!("{action:?}").to_lowercase())
+            .collect();
+        println!(
+            "{name:<14} {:>5.1}% of hands   [{}]",
+            played / 13.26,
+            actions.join(", ")
+        );
+
+        if !hand.is_empty() {
+            let class: HandClass = hand.parse().map_err(|_| format!("{hand:?} is not a hand"))?;
+            let strategy = chart
+                .strategy(class)
+                .iter()
+                // Anything under half a percent rounds to "0%", and printing
+                // "fold 0%  raise 100%" reads as a contradiction rather than as
+                // the rounding it is.
+                .filter(|(_, share)| *share >= 0.005)
+                .map(|(action, share)| {
+                    format!("{} {:.0}%", format!("{action:?}").to_lowercase(), share * 100.0)
+                })
+                .collect::<Vec<_>>()
+                .join("  ");
+            println!("               {hand}: {strategy}");
+        }
+    }
+    Ok(())
+}
+
+/// Seats charted bots against uncharted ones at a full table.
+///
+/// # Why this and not `bench`
+///
+/// `bench` is heads-up, and charts only apply from six players up, so it cannot
+/// see them at all. Whether reading published ranges beats solving our own is a
+/// question about a full ring, and it has to be asked at one.
+///
+/// # How the comparison is kept fair
+///
+/// Every seat is the same bot with the same blueprint, the same ring solves and
+/// the same postflop ladder. The only difference is that alternate seats have
+/// the charts attached. They are interleaved rather than grouped so that no
+/// side is systematically to the left of the other, and the button rotates
+/// every hand, so position evens out.
+///
+/// This measures the two strategies against *each other*, which is the useful
+/// question here: the club's players are the real opposition, but the charts
+/// cannot be worse than the solve against them and simultaneously better than
+/// it head to head.
+fn ringbench(args: &[String]) -> Result<(), String> {
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["hands", "seats", "stack", "seed", "blueprint", "ring", "charts"])?;
+
+    let seats = flags.number("seats", 7.0)? as usize;
+    if !(charts_min()..=poker_core::wide::MAX_PLAYERS).contains(&seats) {
+        return Err(format!(
+            "--seats must be between {} and {}; charts do not apply below that",
+            charts_min(),
+            poker_core::wide::MAX_PLAYERS
+        ));
+    }
+    let hands = flags.number("hands", 20_000.0)? as u64;
+    let stack_bb = flags.number("stack", 100.0)?;
+    let seed = flags.number("seed", 1.0)? as u64;
+    let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
+    let ring_dir = flags.text("ring", "data");
+    let charts_dir = flags.text("charts", CHARTS_DIR);
+
+    let blueprint = open(&blueprint_path)?;
+    let charts = Charts::load(std::path::Path::new(&charts_dir))?;
+    if charts.is_empty() {
+        return Err(format!("no charts in {charts_dir}; nothing to compare"));
+    }
+
+    let build = |name: &str, charted: bool| -> BlueprintAgent {
+        let mut agent = BlueprintAgent::new(name, blueprint.clone(), Sizing::default());
+        for count in 3..=poker_core::wide::MAX_PLAYERS {
+            if let Ok(solved) = open(&format!("{ring_dir}/ring{count}-100bb.bin")) {
+                agent = agent.with_ring(solved, Ring::for_play(count, 100.0, Ladder::default()));
+            }
+        }
+        let (with_postflop, _) = load_postflop(agent, POSTFLOP_DIR);
+        agent = with_postflop;
+        if charted {
+            agent = agent.with_charts(charts.clone());
+        }
+        agent
+    };
+
+    // Interleaved, so neither strategy is always the one acting first.
+    let mut bots: Vec<BlueprintAgent> = (0..seats)
+        .map(|seat| {
+            let charted = seat % 2 == 0;
+            build(
+                &format!("{} {seat}", if charted { "chart" } else { "solve" }),
+                charted,
+            )
+        })
+        .collect();
+
+    let big_blind = 100u64;
+    let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
+    println!("{seats}-handed, {hands} hands, {table}");
+    println!("charts   : {} spots from {charts_dir}\n", charts.spots().count());
+
+    let mut rng = Rng::new(seed);
+    let report = {
+        let playing: Vec<&mut dyn Agent> = bots.iter_mut().map(|b| b as &mut dyn Agent).collect();
+        poker_core::bench::ring_match(&table, playing, hands, &mut rng)
+    };
+    println!("{report}\n");
+
+    // Averaged across each side's seats. One seat's number is mostly noise at
+    // any sample a person will wait for; the difference between the two
+    // averages is the measurement.
+    let rates = &report.bb_per_100;
+    let mean = |charted: bool| {
+        let taken: Vec<f64> = rates
+            .iter()
+            .enumerate()
+            .filter(|(seat, _)| (seat % 2 == 0) == charted)
+            .map(|(_, rate)| *rate)
+            .collect();
+        taken.iter().sum::<f64>() / taken.len() as f64
+    };
+    let (charted, solved) = (mean(true), mean(false));
+    println!("charts   {charted:+.1} bb/100 averaged over {} seats", (seats + 1) / 2);
+    println!("solve    {solved:+.1} bb/100 averaged over {} seats", seats / 2);
+    println!("\ndifference {:+.1} bb/100 in favour of {}",
+        (charted - solved).abs(),
+        if charted > solved { "the published charts" } else { "the solve" });
+    Ok(())
+}
+
+/// The fewest players charts apply to, named once so the message and the check
+/// cannot drift apart.
+fn charts_min() -> usize {
+    poker_core::charts::FEWEST_SEATS
+}
+
 /// than hoped at.
 fn replay(args: &[String]) -> Result<(), String> {
     use poker_vision::{Frame, GlyphTemplates, HeroTemplates, TableView, Templates};
@@ -2000,6 +2206,47 @@ fn postflop_chart(args: &[String]) -> Result<(), String> {
 /// depths actually loaded, so a caller can say plainly what is covered.
 ///
 /// The board sample is not read. A solve needs it; a bot does not, because it
+/// Where published preflop ranges live by default.
+const CHARTS_DIR: &str = "data/charts";
+
+/// Reads the published preflop ranges, and says plainly what was found.
+///
+/// Missing charts are not an error. The bot played before they existed and
+/// still can — the preflop solves answer everything a chart does not — so an
+/// absent folder prints one line and carries on. What would be an error is
+/// loading them silently: a chart that failed to parse and a chart that is not
+/// there look identical from the table, and the difference is a strategy.
+fn load_charts(agent: BlueprintAgent, from: &str) -> (BlueprintAgent, String) {
+    let path = std::path::Path::new(from);
+    if !path.exists() {
+        return (
+            agent,
+            format!("charts   : none at {from} - preflop uses the solves"),
+        );
+    }
+    let charts = match Charts::load(path) {
+        Ok(charts) => charts,
+        Err(why) => return (agent, format!("charts   : FAILED to read - {why}")),
+    };
+    if charts.is_empty() {
+        return (
+            agent,
+            format!("charts   : {from} holds none - preflop uses the solves"),
+        );
+    }
+
+    let mut lines = vec![format!(
+        "charts   : {} preflop spots from {from}",
+        charts.spots().count()
+    )];
+    // Half-exported spots are the failure worth shouting about: they play, and
+    // they play a systematically folding strategy against every three-bet.
+    for gap in charts.gaps() {
+        lines.push(format!("           INCOMPLETE {gap}"));
+    }
+    (agent.with_charts(charts), lines.join("\n"))
+}
+
 /// reads strength off the board in front of it. The rungs cost kilobytes.
 fn load_postflop(mut agent: BlueprintAgent, dir: &str) -> (BlueprintAgent, Vec<f64>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
