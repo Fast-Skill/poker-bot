@@ -160,8 +160,16 @@ impl Textures {
     /// Positive when the first wins, negative when the second does, zero for a
     /// split. Settled from the finished hands, not from buckets.
     pub fn showdown(&self, board: usize, first: usize, second: usize) -> std::cmp::Ordering {
-        let made = &self.boards[board].made;
-        made[first].cmp(&made[second])
+        self.rank(board, first).cmp(&self.rank(board, second))
+    }
+
+    /// How the finished hand ranks, higher being better.
+    ///
+    /// The number itself means nothing; only comparisons between two of them on
+    /// the same board do. Exposed so that more than two hands can be compared
+    /// at once, which [](Self::showdown) cannot express.
+    pub fn rank(&self, board: usize, holding: usize) -> u32 {
+        self.boards[board].made[holding]
     }
 
     /// How strong a holding is on a board at a street.

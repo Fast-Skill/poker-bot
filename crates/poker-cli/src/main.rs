@@ -299,6 +299,9 @@ fn unknown_stage(kind: Kind, stage: &str) -> String {
 
 // --- commands ---------------------------------------------------------------
 
+/// Where solved three-way postflop rungs are kept.
+const POSTFLOP3_DIR: &str = "data/postflop3";
+
 /// Where solved postflop rungs are kept.
 const POSTFLOP_DIR: &str = "data/postflop";
 
@@ -391,7 +394,7 @@ fn solve(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Solves the heads-up postflop tree at one stack-to-pot ratio.
+/// Solves the postflop tree at one stack-to-pot ratio.
 ///
 /// # Why the ratio and not the stakes
 ///
@@ -404,11 +407,26 @@ fn solve(args: &[String]) -> Result<(), String> {
 /// The ratios worth having are the ones preflop actually produces: a four-bet
 /// pot leaves about 1.7, a three-bet pot about 5, a single raise about 18, and
 /// a limped pot more still.
+///
+/// # Seats
+///
+/// `--players 3` solves the three-way tree instead. That is the largest hole in
+/// this bot: seven of every twelve spots it cannot answer are pots with more
+/// than two players, and they are the ones where a mistake costs a stack. The
+/// two solves are kept in separate files and separate key spaces, so a
+/// three-way rung can never be read as a heads-up one.
 fn solve_postflop(args: &[String]) -> Result<(), String> {
     use poker_core::texture::Textures;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["spr", "iterations", "textures", "out"])?;
+    flags.reject_unknown(&["spr", "iterations", "textures", "out", "players"])?;
+    let players = flags.number("players", 2.0)? as usize;
+    if !(2..=poker_core::postflop::MAX_PLAYERS).contains(&players) {
+        return Err(format!(
+            "--players {players} is outside 2..={}; a wider tree than that is not modelled",
+            poker_core::postflop::MAX_PLAYERS
+        ));
+    }
     let spr = flags.number("spr", 4.0)?;
     if !(0.25..=64.0).contains(&spr) {
         return Err(format!(
@@ -441,12 +459,19 @@ fn solve_postflop(args: &[String]) -> Result<(), String> {
     // blueprint cut into forty-eight strength groups means something different
     // by "group 30" than one cut into twenty, and nothing else on disk says
     // which this is.
-    let label = format!("postflop/spr{spr}/b{}", sample.buckets());
+    // The seat count is in the label because it changes what the keys mean.
+    // Heads-up keeps its name unqualified so that the ladder already on disk
+    // still reads back as what it is.
+    let label = if players == 2 {
+        format!("postflop/spr{spr}/b{}", sample.buckets())
+    } else {
+        format!("postflop{players}/spr{spr}/b{}", sample.buckets())
+    };
 
     eprint!("solving {label} for {iterations} iterations... ");
     let began = std::time::Instant::now();
     let mut rng = Rng::new(SOLVE_SEED);
-    let game = Postflop::new(sample, POT, stack, PostflopSizing::default());
+    let game = Postflop::multiway(players, sample, POT, stack, PostflopSizing::default());
     let mut solver = Solver::new(game);
     solver.train_sampled(iterations, &mut rng);
     let blueprint = Blueprint::from_solver(&solver, label);
@@ -457,6 +482,7 @@ fn solve_postflop(args: &[String]) -> Result<(), String> {
         .map_err(|e| format!("could not write {out}: {e}"))?;
 
     println!("wrote {out}");
+    println!("  seats             {players}");
     println!("  pot / stack       {POT} / {stack}");
     println!("  information sets  {}", blueprint.len());
     println!("  size {} bytes", blueprint.size_on_disk());
@@ -1304,6 +1330,29 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     let (with_postflop, depths) = load_postflop(agent, POSTFLOP_DIR);
     agent = with_postflop;
     println!("{}", postflop_summary(&depths));
+
+    // The three-way ladder, kept in its own directory because it is its own
+    // solve with its own key space. Absent until one has been trained, and
+    // absent is not an error — multiway pots simply keep falling to the
+    // heuristic, which is what they did before.
+    let (with_multiway, three) = load_postflop(agent, POSTFLOP3_DIR);
+    agent = with_multiway;
+    println!(
+        "3-way    : {}",
+        if three.is_empty() {
+            "none - multiway pots use the heuristic".to_string()
+        } else {
+            format!(
+                "{} rungs at {} - the spots that risk stacks",
+                three.len(),
+                three
+                    .iter()
+                    .map(|spr| format!("{spr}"))
+                    .collect::<Vec<_>>()
+                    .join("/")
+            )
+        }
+    );
 
     if solved_sizes.is_empty() {
         println!("solved   : heads-up only - multiway pots use the heuristic");
@@ -2159,14 +2208,15 @@ fn postflop_chart(args: &[String]) -> Result<(), String> {
         .map_err(|_| "--rows wants a number")?;
 
     let blueprint = open(path)?;
-    let (spr, buckets) = postflop_label(blueprint.label()).ok_or_else(|| {
+    let (players, spr, buckets) = postflop_label(blueprint.label()).ok_or_else(|| {
         format!(
             "{path} is labelled {:?}, which is not a postflop solve",
             blueprint.label()
         )
     })?;
     let stack = (100.0 * spr).round() as u32;
-    let game = Postflop::for_play(buckets, 100, stack, PostflopSizing::default());
+    let game =
+        Postflop::multiway_for_play(players, buckets, 100, stack, PostflopSizing::default());
 
     println!("{path}");
     println!("  {}  ({} information sets)", blueprint.label(), blueprint.len());
@@ -2182,6 +2232,7 @@ fn postflop_chart(args: &[String]) -> Result<(), String> {
     ] {
         for street in [Street::Flop, Street::Turn, Street::River] {
             let spot = |strength: u8| Spot {
+                live: 2,
                 street,
                 player,
                 strength,
@@ -2306,11 +2357,17 @@ fn load_postflop(mut agent: BlueprintAgent, dir: &str) -> (BlueprintAgent, Vec<f
         let Ok(blueprint) = Blueprint::load(&path) else {
             continue;
         };
-        let Some((spr, buckets)) = postflop_label(blueprint.label()) else {
+        let Some((players, spr, buckets)) = postflop_label(blueprint.label()) else {
             continue;
         };
         let stack = (100.0 * spr).round() as u32;
-        let game = Postflop::for_play(buckets, 100, stack, PostflopSizing::default());
+        let game = Postflop::multiway_for_play(
+            players,
+            buckets,
+            100,
+            stack,
+            PostflopSizing::default(),
+        );
         agent = agent.with_postflop(spr, blueprint, game);
         depths.push(spr);
     }
@@ -2318,20 +2375,31 @@ fn load_postflop(mut agent: BlueprintAgent, dir: &str) -> (BlueprintAgent, Vec<f
     (agent, depths)
 }
 
-/// Reads the depth and strength-group count out of a postflop label.
+/// Reads the seat count, depth and strength-group count out of a postflop
+/// label.
 ///
 /// The label is written by `poker solve postflop` and looks like
-/// `postflop/spr4/b48`. Anything else is not a postflop blueprint, and saying
-/// so by returning nothing is what stops a preflop solve dropped into the same
-/// directory from being loaded as one.
-fn postflop_label(label: &str) -> Option<(f64, usize)> {
+/// `postflop/spr4/b48` heads-up, or `postflop3/spr4/b48` for three seats.
+/// Anything else is not a postflop blueprint, and saying so by returning
+/// nothing is what stops a preflop solve dropped into the same directory from
+/// being loaded as one.
+///
+/// The seat count belongs in the label because it changes what every key in
+/// the file means. A three-way blueprint loaded as a heads-up one would answer
+/// every lookup with a strategy for a different situation, and nothing about
+/// the file would look wrong.
+fn postflop_label(label: &str) -> Option<(usize, f64, usize)> {
     let mut parts = label.split('/');
-    if parts.next()? != "postflop" {
+    let players = match parts.next()? {
+        "postflop" => 2,
+        named => named.strip_prefix("postflop")?.parse().ok()?,
+    };
+    if !(2..=poker_core::postflop::MAX_PLAYERS).contains(&players) {
         return None;
     }
     let spr: f64 = parts.next()?.strip_prefix("spr")?.parse().ok()?;
     let buckets: usize = parts.next()?.strip_prefix('b')?.parse().ok()?;
-    (spr > 0.0 && buckets >= 2).then_some((spr, buckets))
+    (spr > 0.0 && buckets >= 2).then_some((players, spr, buckets))
 }
 
 /// A line describing what postflop coverage an agent has.

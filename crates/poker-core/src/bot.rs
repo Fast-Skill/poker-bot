@@ -458,21 +458,41 @@ impl BlueprintAgent {
     ///
     /// Nearest is not the same as near: past [`FURTHEST_RUNG`] this gives up
     /// rather than answer.
-    fn rung_for(&self, spr: f64) -> Option<&Rung> {
+    fn rung_for(&self, spr: f64, players: usize) -> Option<&Rung> {
         let gap = |rung: &Rung| (rung.spr / spr).max(spr / rung.spr);
+        // Only rungs solved for this many seats. A three-way pot answered from
+        // a heads-up solve is not an approximation — the keys mean different
+        // things, and the strategy that came back would be for a different
+        // situation entirely.
         let nearest = self
             .postflop
             .iter()
+            .filter(|rung| rung.game.players() == players)
             .min_by(|a, b| gap(a).total_cmp(&gap(b)))?;
         (gap(nearest) <= FURTHEST_RUNG).then_some(nearest)
     }
 
+    /// The seat counts this agent has any postflop solve for.
+    pub fn solved_postflop_seats(&self) -> Vec<usize> {
+        let mut seats: Vec<usize> = self
+            .postflop
+            .iter()
+            .map(|rung| rung.game.players())
+            .collect();
+        seats.sort_unstable();
+        seats.dedup();
+        seats
+    }
+
     /// The situation a view describes, as the postflop tree would describe it.
     ///
-    /// `None` when the view is not one this tree models: not postflop, not
-    /// heads-up, or a board that did not read.
+    /// `None` when the view is not one this tree models: not postflop, more
+    /// players than any tree holds, or a board that did not read.
     fn spot_for(&mut self, view: &View) -> Option<Spot> {
-        if view.street == Street::Preflop || view.active != 2 {
+        if view.street == Street::Preflop {
+            return None;
+        }
+        if !(2..=postflop::MAX_PLAYERS).contains(&view.active) {
             return None;
         }
         // The street and the board must be the same fact stated twice. They
@@ -488,13 +508,20 @@ impl BlueprintAgent {
         }
         let strength = self.reader.as_mut()?.strength(view.board, view.hole)?;
 
-        // Who acts last. Postflop the order runs from the seat after the button
-        // round to the button itself, so the last live seat in that order has
-        // position — and position, not the blind that was posted, is what the
-        // tree means by player 0.
-        let last = (1..view.players)
+        // Postflop the order runs from the seat after the button round to the
+        // button itself. The tree numbers by position rather than by seat: the
+        // player who acts last is 0, and the rest are 1, 2, ... in the order
+        // they act. Position, not the blind that was posted, is what the tree
+        // means by player 0.
+        let order: Vec<usize> = (1..view.players)
             .chain(std::iter::once(0))
-            .rfind(|seat| view.live[*seat])?;
+            .filter(|seat| view.live[*seat])
+            .collect();
+        // A seat's number in the tree, which is not its number at the table.
+        let numbered = |seat: usize| -> Option<usize> {
+            let at = order.iter().position(|held| *held == seat)?;
+            Some(if at + 1 == order.len() { 0 } else { at + 1 })
+        };
 
         let bet = view
             .street_committed
@@ -506,19 +533,21 @@ impl BlueprintAgent {
             .unwrap_or(0);
         let mine = *view.street_committed.get(view.seat)?;
 
-        // The tree numbers the two sides by position; the table numbers them by
-        // seat. `acted` is a bit per tree player, so it has to be translated,
-        // not copied.
-        let hero = usize::from(view.seat != last);
+        // `acted` is a bit per tree player, so it has to be translated rather
+        // than copied across.
+        let hero = numbered(view.seat)?;
         let mut acted = 0u8;
         for (seat, done) in view.acted.iter().enumerate() {
             if !view.live[seat] || !done {
                 continue;
             }
-            acted |= 1 << usize::from(seat != last);
+            if let Some(player) = numbered(seat) {
+                acted |= 1 << player;
+            }
         }
 
         Some(Spot {
+            live: view.active as u8,
             street: view.street,
             player: hero,
             strength,
@@ -526,7 +555,8 @@ impl BlueprintAgent {
             bet,
             mine,
             behind: view.stack,
-            // The one opponent left, since this only runs on heads-up pots.
+            // The deepest opponent still in, since a raise is answerable if
+            // anybody can answer it.
             opponent_behind: view
                 .stacks
                 .iter()
@@ -559,8 +589,21 @@ impl BlueprintAgent {
         if self.postflop.is_empty() {
             return Err("no postflop solve loaded");
         }
-        if view.active != 2 {
-            return Err("postflop pot with more than two players");
+        if view.active > postflop::MAX_PLAYERS {
+            return Err("postflop pot with more players than any tree holds");
+        }
+        if !self
+            .postflop
+            .iter()
+            .any(|rung| rung.game.players() == view.active)
+        {
+            // Named for the size of pot rather than "no solve", because the two
+            // want different work: a missing three-way ladder is a solve to run,
+            // where a missing rung is a depth to add.
+            return Err(match view.active {
+                3 => "no three-way postflop solve loaded",
+                _ => "no postflop solve for this many players",
+            });
         }
         let spot = self
             .spot_for(view)
@@ -581,7 +624,9 @@ impl BlueprintAgent {
         // shallower solve and a more cautious strategy.
         let settled = view.settled.unwrap_or(view.pot).max(1);
         let spr = (spot.behind + spot.mine) as f64 / settled as f64;
-        let rung = self.rung_for(spr).ok_or("no rung near this stack depth")?;
+        let rung = self
+            .rung_for(spr, view.active)
+            .ok_or("no rung near this stack depth")?;
 
         let moves = rung.game.moves_at(&spot);
         // The exact spot first, then the nearest prices and depths the solve
@@ -614,7 +659,7 @@ impl BlueprintAgent {
             .zip(strategy.iter())
             .map(|(mv, share)| (mv.name().to_string(), *share as f64))
             .collect();
-        Ok((action, frequencies, key, 2))
+        Ok((action, frequencies, key, view.active))
     }
 
     /// The pot sizes this agent has a solved strategy for, ascending.
@@ -1103,14 +1148,14 @@ mod tests {
             Blueprint::from_profile(&Default::default(), "postflop/spr1.5/b12"),
             Postflop::for_play(12, 100, 150, sizing),
         );
-        assert!(only_shallow.rung_for(1.5).is_some(), "its own depth");
-        assert!(only_shallow.rung_for(4.0).is_some(), "within reach");
+        assert!(only_shallow.rung_for(1.5, 2).is_some(), "its own depth");
+        assert!(only_shallow.rung_for(4.0, 2).is_some(), "within reach");
         assert!(
-            only_shallow.rung_for(25.0).is_none(),
+            only_shallow.rung_for(25.0, 2).is_none(),
             "a pot twenty-five times the pot deep is not a shallow pot"
         );
         assert!(
-            only_shallow.rung_for(0.1).is_none(),
+            only_shallow.rung_for(0.1, 2).is_none(),
             "nor is one with almost nothing behind"
         );
     }
@@ -1354,6 +1399,162 @@ mod tests {
             ..base
         })
         .is_none());
+    }
+
+    /// A three-way pot is described to the tree with the right seat numbers.
+    ///
+    /// # What this is guarding
+    ///
+    /// The tree numbers players by position — whoever acts last is 0, the rest
+    /// are 1, 2 in the order they act — while the table numbers them by seat,
+    /// counting the other way from the button. The translation between them is
+    /// three lines and it is the sort of thing that fails without failing:
+    /// every lookup succeeds, a strategy comes back, and it is the strategy for
+    /// the player sitting somewhere else.
+    ///
+    /// Heads-up it was a single comparison. Three-handed there is a middle
+    /// seat, and a middle seat is exactly what a two-player translation has
+    /// nowhere to put.
+    #[test]
+    fn a_three_way_pot_is_numbered_by_position() {
+        let hole = crate::card::parse_cards("AhKh").expect("two cards");
+        let board = crate::card::parse_cards("2c7d9s").expect("a flop");
+        let legal = LegalActions {
+            can_fold: true,
+            can_check: true,
+            call_cost: None,
+            raise_to: Some((200, 9_000)),
+        };
+
+        // Seven seats dealt, three still in: the button (seat 0), and seats 3
+        // and 5. Postflop the order runs 1, 2, ... 6, then the button last, so
+        // seat 3 leads, seat 5 acts second, and seat 0 acts last.
+        let stacks = [9_000u64; 7];
+        let live = [true, false, false, true, false, true, false];
+        let street_committed = [0u64; 7];
+        let acted = [false; 7];
+        let view = |seat: usize| View {
+            hole: [hole[0], hole[1]],
+            board: &board,
+            street: Street::Flop,
+            position: Position::Middle,
+            seat,
+            players: 7,
+            active: 3,
+            pot: 3_000,
+            to_call: 0,
+            stack: 9_000,
+            stacks: &stacks,
+            committed: &street_committed,
+            live: &live,
+            street_committed: &street_committed,
+            acted: &acted,
+            raises: 0,
+            settled: Some(3_000),
+            big_blind: 100,
+            legal: &legal,
+        };
+
+        let mut agent = BlueprintAgent::new(
+            "three-way",
+            Blueprint::from_profile(&Default::default(), "empty"),
+            Sizing::default(),
+        )
+        .with_postflop(
+            3.0,
+            Blueprint::from_profile(&Default::default(), "empty"),
+            crate::postflop::Postflop::multiway_for_play(
+                3,
+                8,
+                100,
+                300,
+                crate::postflop::Sizing::default(),
+            ),
+        );
+
+        for (seat, expected, why) in [
+            (3usize, 1usize, "leads out, so it is player 1"),
+            (5, 2, "acts second, so it is player 2"),
+            (0, 0, "has the button and acts last, so it is player 0"),
+        ] {
+            let spot = agent.spot_for(&view(seat)).expect("a readable three-way spot");
+            assert_eq!(spot.player, expected, "seat {seat} {why}");
+            assert_eq!(spot.live, 3, "three players are still in");
+        }
+
+        // And with one of them folded it becomes a two-player description,
+        // which must not be answered from a three-way solve by accident.
+        let heads_up_live = [true, false, false, true, false, false, false];
+        let spot = agent
+            .spot_for(&View {
+                active: 2,
+                live: &heads_up_live,
+                ..view(3)
+            })
+            .expect("a readable heads-up spot");
+        assert_eq!(spot.live, 2);
+        assert_eq!(spot.player, 1, "seat 3 still acts before the button");
+    }
+
+    /// A pot with more players than any tree holds says so, rather than
+    /// answering from the nearest tree that does not fit.
+    #[test]
+    fn a_pot_too_wide_for_any_tree_is_declined_by_name() {
+        let hole = crate::card::parse_cards("AhKh").expect("two cards");
+        let board = crate::card::parse_cards("2c7d9s").expect("a flop");
+        let legal = LegalActions {
+            can_fold: true,
+            can_check: true,
+            call_cost: None,
+            raise_to: None,
+        };
+        let stacks = [9_000u64; 7];
+        let live = [true; 7];
+        let zeros = [0u64; 7];
+        let acted = [false; 7];
+        let crowded = View {
+            hole: [hole[0], hole[1]],
+            board: &board,
+            street: Street::Flop,
+            position: Position::Middle,
+            seat: 3,
+            players: 7,
+            active: 5,
+            pot: 3_000,
+            to_call: 0,
+            stack: 9_000,
+            stacks: &stacks,
+            committed: &zeros,
+            live: &live,
+            street_committed: &zeros,
+            acted: &acted,
+            raises: 0,
+            settled: Some(3_000),
+            big_blind: 100,
+            legal: &legal,
+        };
+
+        let mut agent = BlueprintAgent::new(
+            "three-way",
+            Blueprint::from_profile(&Default::default(), "empty"),
+            Sizing::default(),
+        )
+        .with_postflop(
+            3.0,
+            Blueprint::from_profile(&Default::default(), "empty"),
+            crate::postflop::Postflop::multiway_for_play(
+                3,
+                8,
+                100,
+                300,
+                crate::postflop::Sizing::default(),
+            ),
+        );
+
+        let mut rng = Rng::new(1);
+        let refused = agent.postflop_action(&crowded, &mut rng).expect_err("too wide");
+        assert!(refused.contains("more players"), "{refused}");
+        assert!(agent.spot_for(&crowded).is_none(), "and no spot is built");
     }
 
     /// A guess may be wrong; it may not be ruinous.

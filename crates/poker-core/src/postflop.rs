@@ -97,8 +97,17 @@ impl Move {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spot {
     pub street: Street,
-    /// Which side is acting: 0 acts last on every street, 1 acts first.
+    /// Which seat is acting. Seat 0 acts last on every street; the rest act
+    /// before it in ascending order, so seat 1 leads and the highest-numbered
+    /// seat is the last of them.
     pub player: usize,
+    /// How many players are still holding cards, the actor included.
+    ///
+    /// A three-way pot that folds to two is not the same as a pot that started
+    /// with two: the money already in the middle is larger relative to the
+    /// stacks, and the ranges that got there are different. Keying on this
+    /// keeps those apart instead of averaging them together.
+    pub live: u8,
     /// The acting player's strength group, from the same abstraction the solve
     /// was trained on.
     pub strength: u8,
@@ -110,10 +119,11 @@ pub struct Spot {
     pub mine: u64,
     /// What the acting player has left behind.
     pub behind: u64,
-    /// What the other player has left behind.
+    /// The most any live opponent has left behind.
     ///
     /// Only ever asked one question: whether there is anyone left to respond to
-    /// a raise. Betting into a player who is already all in cannot win a chip —
+    /// a raise. With more than one opponent it is the largest of them, since a
+    /// raise is answerable if *anybody* can answer it. Betting into a player who is already all in cannot win a chip —
     /// the excess comes straight back — and a real table will not accept the
     /// action at all.
     ///
@@ -155,29 +165,52 @@ const PRICE_SHIFT: u32 = DEPTH_SHIFT + DEPTH_BITS;
 /// How many raises a street allows before the only move left is all-in.
 const RAISE_CAP: u8 = 3;
 
+/// The most players one postflop tree models.
+pub const MAX_PLAYERS: usize = 3;
+
+/// Set on every key belonging to a multiway tree.
+///
+/// # Why the two key spaces are kept apart
+///
+/// A multiway spot needs fields a heads-up one does not — which of three seats
+/// is acting, how many are still in — and there is no room for them inside the
+/// heads-up layout without shifting every field along. Shifting them would
+/// renumber every key in the solved ladder already on disk, which is the one
+/// change that breaks silently: the file still loads, lookups still succeed,
+/// and each one returns the strategy for a different situation.
+///
+/// So heads-up keeps its layout untouched and multiway gets its own, marked by
+/// a bit no heads-up key ever sets. The two cannot collide, and a blueprint
+/// trained on one is visibly not the other.
+const MULTIWAY: u64 = 1 << 40;
+
 /// A node in the tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
     /// Which sampled board this hand is being played on.
     board: u32,
     /// Each player's holding, as an index into that board's holdings.
-    holdings: [u16; 2],
+    holdings: [u16; MAX_PLAYERS],
     street: Street,
     /// Chips each has put in on the current street.
-    wagered: [u32; 2],
+    wagered: [u32; MAX_PLAYERS],
     /// Chips each has put in on earlier streets of this hand.
     ///
     /// Tracked per player as well as in the pot, because what a player has left
     /// behind depends on their own outlay rather than on the pot's size.
-    spent: [u32; 2],
+    spent: [u32; MAX_PLAYERS],
     /// Chips already in the pot from earlier streets, including preflop.
     settled: u32,
     to_act: u8,
     /// Bit per player: has acted since the last raise on this street.
     acted: u8,
     raises: u8,
-    /// Who folded, if anyone.
-    folded: Option<u8>,
+    /// Bit per player, set when they have folded.
+    ///
+    /// A bitmask rather than "who folded", because with three players one fold
+    /// does not end the hand and the second one has to be recorded beside the
+    /// first.
+    folded: u8,
     dealt: bool,
 }
 
@@ -188,7 +221,12 @@ impl State {
 
     /// Chips in the middle, including this street's wagers.
     pub fn pot(&self) -> u32 {
-        self.settled + self.wagered[0] + self.wagered[1]
+        self.settled + self.wagered.iter().sum::<u32>()
+    }
+
+    /// Whether a player is still holding cards.
+    pub fn is_live(&self, player: usize) -> bool {
+        self.folded & (1 << player) == 0
     }
 
     pub fn holding(&self, player: usize) -> usize {
@@ -216,6 +254,8 @@ pub struct Postflop {
     /// than three-quarters of a gigabyte.
     textures: Option<Textures>,
     buckets: usize,
+    /// How many seats this tree deals to.
+    players: usize,
     /// Chips in the pot when the flop is dealt.
     pot: u32,
     /// Chips each player has behind at that moment.
@@ -230,9 +270,44 @@ impl Postflop {
         Postflop {
             buckets: textures.buckets(),
             textures: Some(textures),
+            players: 2,
             pot,
             stack,
             sizing,
+        }
+    }
+
+    /// The same tree dealt to more seats.
+    ///
+    /// # Why this is a separate constructor
+    ///
+    /// Three-way postflop is the largest hole in this bot: seven of every
+    /// twelve spots it cannot answer are pots with more than two players in
+    /// them, and they are the spots where a mistake costs a stack rather than a
+    /// bet. Nothing published covers them — board texture makes charts
+    /// impractical after the flop — so unlike preflop there is nothing to read
+    /// and it has to be solved.
+    ///
+    /// The heads-up tree is left exactly as it was, down to the numbering of
+    /// its information keys, because a solved ladder trained against those
+    /// numbers is already on disk.
+    ///
+    /// # Panics
+    /// Panics outside two to [`MAX_PLAYERS`] seats.
+    pub fn multiway(
+        players: usize,
+        textures: Textures,
+        pot: u32,
+        stack: u32,
+        sizing: Sizing,
+    ) -> Postflop {
+        assert!(
+            (2..=MAX_PLAYERS).contains(&players),
+            "a postflop tree holds two to {MAX_PLAYERS} seats, not {players}"
+        );
+        Postflop {
+            players,
+            ..Postflop::new(textures, pot, stack, sizing)
         }
     }
 
@@ -251,10 +326,37 @@ impl Postflop {
         Postflop {
             textures: None,
             buckets,
+            players: 2,
             pot,
             stack,
             sizing,
         }
+    }
+
+    /// A tree for play with more than two seats.
+    ///
+    /// # Panics
+    /// Panics outside two to [`MAX_PLAYERS`] seats.
+    pub fn multiway_for_play(
+        players: usize,
+        buckets: usize,
+        pot: u32,
+        stack: u32,
+        sizing: Sizing,
+    ) -> Postflop {
+        assert!(
+            (2..=MAX_PLAYERS).contains(&players),
+            "a postflop tree holds two to {MAX_PLAYERS} seats, not {players}"
+        );
+        Postflop {
+            players,
+            ..Postflop::for_play(buckets, pot, stack, sizing)
+        }
+    }
+
+    /// How many seats this tree deals to.
+    pub fn players(&self) -> usize {
+        self.players
     }
 
     /// How many groups hand strength is cut into.
@@ -290,20 +392,45 @@ impl Postflop {
     }
 
     /// The largest wager on this street.
+    ///
+    /// Only live players count. A folded player's chips stay in the pot but
+    /// stop being a price anyone has to match, and counting them would leave
+    /// the survivors owing money to somebody who has given up the hand.
     fn owed(&self, state: &State) -> u32 {
-        state.wagered[0].max(state.wagered[1])
+        (0..self.players)
+            .filter(|&player| state.is_live(player))
+            .map(|player| state.wagered[player])
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// How many players still hold cards.
+    fn live_count(&self, state: &State) -> usize {
+        (0..self.players)
+            .filter(|&player| state.is_live(player))
+            .count()
     }
 
     /// Whether the betting on this street has finished.
     fn street_closed(&self, state: &State) -> bool {
-        if state.folded.is_some() {
+        if self.live_count(state) <= 1 {
             return true;
         }
         let owed = self.owed(state);
-        (0..2).all(|player| {
+        (0..self.players).filter(|&p| state.is_live(p)).all(|player| {
             self.behind(state, player) == 0
                 || (state.acted & (1 << player) != 0 && state.wagered[player] == owed)
         })
+    }
+
+    /// The next seat with a decision, going round from `from`.
+    ///
+    /// Seat 0 acts last, so the order runs 1, 2, ... and then back to 0.
+    /// Players who have folded or have nothing behind are stepped over.
+    fn next_actor(&self, state: &State, from: usize) -> Option<usize> {
+        (1..=self.players)
+            .map(|step| (from + step) % self.players)
+            .find(|&seat| state.is_live(seat) && self.behind(state, seat) > 0)
     }
 
     /// What a raise to this fraction of the pot commits the raiser to.
@@ -401,12 +528,19 @@ impl Postflop {
         Spot {
             street: state.street,
             player,
+            live: self.live_count(state) as u8,
             strength,
             pot: state.pot() as u64,
             bet: self.owed(state) as u64,
             mine: state.wagered[player] as u64,
             behind: self.behind(state, player) as u64,
-            opponent_behind: self.behind(state, 1 - player) as u64,
+            // The deepest live opponent, since a raise is answerable if
+            // anybody can answer it.
+            opponent_behind: (0..self.players)
+                .filter(|&seat| seat != player && state.is_live(seat))
+                .map(|seat| self.behind(state, seat) as u64)
+                .max()
+                .unwrap_or(0),
             raises: state.raises,
             acted: state.acted,
         }
@@ -451,6 +585,18 @@ impl Postflop {
             .fold(0, |mask, bit| mask | bit);
 
         let mut key = street_index(spot.street) as u64;
+        if self.players > 2 {
+            // A wider layout, kept apart from the heads-up one by `MULTIWAY`
+            // so the ladder already solved for two players keeps its numbering.
+            key = (key << 2) | spot.player.min(3) as u64;
+            key = (key << 2) | u64::from(spot.live.min(3));
+            key = (key << 3) | spot.raises.min(7) as u64;
+            key = (key << 3) | u64::from(spot.acted & 0b111);
+            key = (key << PRICE_BITS) | price;
+            key = (key << DEPTH_BITS) | depth;
+            key = (key << SHAPE_BITS) | shape;
+            return MULTIWAY | (key << STRENGTH_BITS) | spot.strength as u64;
+        }
         key = (key << 1) | spot.player as u64;
         key = (key << 3) | spot.raises.min(7) as u64;
         key = (key << 2) | spot.acted as u64;
@@ -541,11 +687,11 @@ impl Postflop {
     /// Moves the hand to the next street, or to showdown after the river.
     fn advance(&self, state: &State) -> State {
         let mut next = *state;
-        for player in 0..2 {
+        for player in 0..self.players {
             next.spent[player] += next.wagered[player];
         }
         next.settled = state.pot();
-        next.wagered = [0, 0];
+        next.wagered = [0; MAX_PLAYERS];
         next.acted = 0;
         next.raises = 0;
         next.street = match state.street {
@@ -554,32 +700,60 @@ impl Postflop {
             // The river has no next street; the caller checks for that.
             other => other,
         };
-        // Out of position acts first on every postflop street.
-        next.to_act = 1;
+        // Out of position acts first on every postflop street. Seat 1 leads;
+        // if it has folded or is all in, the next seat that can act does.
+        next.to_act = self.next_actor(&next, 0).unwrap_or(0) as u8;
         next
     }
 
-    /// Whether both players are all in, so the rest is dealt out.
+    /// Whether nobody live has a decision left, so the rest is dealt out.
+    ///
+    /// One player with chips behind is enough to end the betting but not to
+    /// make it a decision: with everyone else all in there is nothing left to
+    /// bet at. So this asks whether at most one live player has anything
+    /// behind, rather than whether every one of them is all in.
     fn all_in(&self, state: &State) -> bool {
-        (0..2).all(|player| self.behind(state, player) == 0)
+        (0..self.players)
+            .filter(|&player| state.is_live(player))
+            .filter(|&player| self.behind(state, player) > 0)
+            .count()
+            <= 1
     }
 }
 
 impl Game for Postflop {
     type State = State;
 
+    /// How many seats the solver should traverse.
+    ///
+    /// The trait's default is two, and inheriting it was a live bug for as long
+    /// as this took to notice: a three-way tree would report two players, the
+    /// solver would update regrets for seats 0 and 1 and never for seat 2, and
+    /// the third seat would be left playing whatever an untrained node returns
+    /// while everything else looked like it had converged.
+    ///
+    /// The inherent `Postflop::players` does not save it. A generic solver
+    /// calls through the trait, so the trait is where the answer has to be.
+    fn players(&self) -> usize {
+        self.players
+    }
+
     fn initial(&self) -> State {
+        let mut holdings = [0u16; MAX_PLAYERS];
+        for (seat, holding) in holdings.iter_mut().enumerate() {
+            *holding = seat as u16;
+        }
         State {
             board: 0,
-            holdings: [0, 1],
+            holdings,
             street: Street::Flop,
-            wagered: [0, 0],
-            spent: [0, 0],
+            wagered: [0; MAX_PLAYERS],
+            spent: [0; MAX_PLAYERS],
             settled: self.pot,
             to_act: 1,
             acted: 0,
             raises: 0,
-            folded: None,
+            folded: 0,
             dealt: false,
         }
     }
@@ -588,7 +762,8 @@ impl Game for Postflop {
         if !state.dealt {
             return false;
         }
-        if state.folded.is_some() {
+        // Everyone but one has given up; there is nothing left to play for.
+        if self.live_count(state) <= 1 {
             return true;
         }
         // All in with cards to come is terminal too: nobody has a decision left
@@ -598,11 +773,21 @@ impl Game for Postflop {
 
     /// What the hand was worth to player 0.
     ///
+    /// Only meaningful with two seats, where one signed number describes both.
+    /// Three-handed there is no such number and [`Game::utility_for`] is the
+    /// one to ask.
+    fn terminal_utility(&self, state: &State) -> f64 {
+        debug_assert_eq!(self.players, 2, "multiway payoffs need utility_for");
+        self.utility_for(state, 0)
+    }
+
+    /// What the hand was worth to one player.
+    ///
     /// # The pot that is already there
     ///
-    /// A hand arrives at the flop with money in the middle that neither player
-    /// puts in during this tree — it went in preflop — and whoever wins takes
-    /// it. That dead money is most of what makes postflop poker a game.
+    /// A hand arrives at the flop with money in the middle that nobody puts in
+    /// during this tree — it went in preflop — and whoever wins takes it. That
+    /// dead money is most of what makes postflop poker a game.
     ///
     /// Leaving it out was a real bug, and an instructive one: every invariant
     /// held. Payoffs summed to zero, nobody wagered more than their stack, the
@@ -616,39 +801,55 @@ impl Game for Postflop {
     /// No test caught it because no test asked whether the strategy was poker.
     /// `the_best_hands_bet` now does.
     ///
-    /// # Why half each
+    /// # Why it is measured against a share rather than the whole pot
     ///
-    /// The solver is zero-sum: it takes one signed number and reads the
-    /// opponent's payoff as its negation. Awarding the whole pot to the winner
-    /// would make the game constant-sum instead, and break that. So payoffs are
-    /// measured against the two splitting it: the winner is up half the pot
-    /// plus what the loser staked, the loser down half the pot plus their own.
-    /// That is a fixed offset per player, and an offset changes no decision —
-    /// what a strategy responds to is the difference between its actions.
-    fn terminal_utility(&self, state: &State) -> f64 {
-        let staked = |player: usize| (state.spent[player] + state.wagered[player]) as f64;
-        let dead = self.pot as f64 / 2.0;
-        match state.folded {
-            Some(0) => -staked(0) - dead,
-            Some(1) => staked(1) + dead,
-            Some(_) => unreachable!("only two players can fold"),
-            None => {
-                // Matched by definition — betting closed with both live — so
-                // the winner takes what the loser put in, and the pot besides.
-                let at_risk = staked(0).min(staked(1));
-                match self.sample().showdown(
-                    state.board as usize,
-                    state.holdings[0] as usize,
-                    state.holdings[1] as usize,
-                ) {
-                    std::cmp::Ordering::Greater => at_risk + dead,
-                    std::cmp::Ordering::Less => -at_risk - dead,
-                    // Split: each takes back their own and half the pot, which
-                    // is the baseline everything here is measured against.
-                    std::cmp::Ordering::Equal => 0.0,
-                }
-            }
+    /// The solver needs payoffs that sum to zero. Handing the winner the whole
+    /// pot makes the game constant-sum instead, which is a different thing and
+    /// breaks the arithmetic underneath.
+    ///
+    /// So every player is measured against the same baseline: getting their own
+    /// money back, plus an equal share of the dead pot. Win, and you are up by
+    /// everything the others staked and their shares besides; lose, and you are
+    /// down your own stake and your share. Those cancel exactly. It is a fixed
+    /// offset per player, and an offset changes no decision — what a strategy
+    /// responds to is the difference between its actions.
+    ///
+    /// Written as one formula for any number of seats rather than as a case per
+    /// outcome. The heads-up cases it replaced were four separate branches that
+    /// each had to be got right, and the pinned keys and payoff tests confirm
+    /// it reproduces them exactly.
+    fn utility_for(&self, state: &State, player: usize) -> f64 {
+        debug_assert!(player < self.players);
+        let staked = |seat: usize| (state.spent[seat] + state.wagered[seat]) as f64;
+
+        // Everything in the middle: what everyone put in, plus what arrived
+        // from preflop.
+        let whole: f64 = (0..self.players).map(staked).sum::<f64>() + self.pot as f64;
+        // What this player would have if the hand had never been played.
+        let baseline = staked(player) + self.pot as f64 / self.players as f64;
+
+        let live: Vec<usize> = (0..self.players)
+            .filter(|&seat| state.is_live(seat))
+            .collect();
+        if live.len() == 1 {
+            let winner = live[0];
+            return if winner == player { whole } else { 0.0 } - baseline;
         }
+
+        // A showdown among everyone still holding cards. Settled from the
+        // finished hands rather than from strength buckets, which are an
+        // abstraction for deciding and not for paying out.
+        let sample = self.sample();
+        let rank = |seat: usize| sample.rank(state.board as usize, state.holdings[seat] as usize);
+        let best = live.iter().map(|&seat| rank(seat)).max().expect("someone is live");
+        let winners = live.iter().filter(|&&seat| rank(seat) == best).count();
+
+        let won = if state.is_live(player) && rank(player) == best {
+            whole / winners as f64
+        } else {
+            0.0
+        };
+        won - baseline
     }
 
     fn is_chance(&self, state: &State) -> bool {
@@ -672,26 +873,41 @@ impl Game for Postflop {
         let board = rng.below(sample.len() as u64) as usize;
         let holdings = sample.holdings(board);
 
-        // Two holdings that do not share a card, since both cannot hold it.
-        let first = rng.below(HOLDINGS as u64) as usize;
-        let mut second = first;
-        for _ in 0..64 {
-            let candidate = rng.below(HOLDINGS as u64) as usize;
-            let clash = holdings[candidate]
-                .iter()
-                .any(|card| holdings[first].contains(card));
-            if !clash {
-                second = candidate;
-                break;
+        // One holding per seat, none of them sharing a card: two players cannot
+        // both be holding the ace of spades.
+        //
+        // Drawn by retrying rather than by dealing from a shrinking deck,
+        // because the holdings are pre-enumerated per board and there is no
+        // deck here to remove cards from. A clash is rare enough that a handful
+        // of attempts finds a free holding; on the rare miss the seat keeps a
+        // duplicate rather than looping forever, which costs one sampled hand
+        // out of very many and cannot stall a solve.
+        let mut dealt = [0usize; MAX_PLAYERS];
+        for seat in 0..self.players {
+            let mut choice = rng.below(HOLDINGS as u64) as usize;
+            for _ in 0..64 {
+                let clash = (0..seat).any(|taken| {
+                    holdings[choice]
+                        .iter()
+                        .any(|card| holdings[dealt[taken]].contains(card))
+                });
+                if !clash {
+                    break;
+                }
+                choice = rng.below(HOLDINGS as u64) as usize;
             }
+            dealt[seat] = choice;
         }
 
-        State {
+        let mut next = State {
             board: board as u32,
-            holdings: [first as u16, second as u16],
             dealt: true,
             ..*state
+        };
+        for seat in 0..self.players {
+            next.holdings[seat] = dealt[seat] as u16;
         }
+        next
     }
 
     fn current_player(&self, state: &State) -> usize {
@@ -723,7 +939,7 @@ impl Game for Postflop {
         let mut next = *state;
 
         match chosen {
-            Move::Fold => next.folded = Some(player as u8),
+            Move::Fold => next.folded |= 1 << player,
             Move::Passive => {
                 next.wagered[player] = owed.min(state.wagered[player] + behind);
             }
@@ -748,14 +964,14 @@ impl Game for Postflop {
         next.acted |= 1 << player;
 
         if self.street_closed(&next) {
-            let finished = next.folded.is_some()
+            let finished = self.live_count(&next) <= 1
                 || next.street == Street::River
                 || self.all_in(&next);
             if !finished {
                 return self.advance(&next);
             }
-        } else {
-            next.to_act = 1 - player as u8;
+        } else if let Some(seat) = self.next_actor(&next, player) {
+            next.to_act = seat as u8;
         }
         next
     }
@@ -772,6 +988,68 @@ fn street_index(street: Street) -> usize {
 
 #[cfg(test)]
 mod tests {
+
+    /// The exact information keys a heads-up solve produces.
+    ///
+    /// # Why these are written down
+    ///
+    /// A blueprint is a map from these numbers to strategies. The numbers are
+    /// not stored in it — only the keys they came out as — so any change to how
+    /// a key is packed silently repoints every solved strategy at a different
+    /// situation. Nothing fails: the file loads, lookups succeed, and the bot
+    /// plays a river strategy on a flop.
+    ///
+    /// The solved ladder in `data/postflop` was trained against exactly these
+    /// numbers. They are pinned here so that widening the tree to three players
+    /// cannot move them without a test saying so.
+    #[test]
+    fn heads_up_keys_are_fixed() {
+        let game = Postflop::for_play(48, 100, 1_000, Sizing::default());
+        let spot = |street, player, strength, pot, bet, mine, behind, raises, acted| Spot {
+            street,
+            player,
+            live: 2,
+            strength,
+            pot,
+            bet,
+            mine,
+            behind,
+            opponent_behind: behind,
+            raises,
+            acted,
+        };
+
+        for (expected, name, spot) in [
+            (
+                25_169_408,
+                "flop, first to act, nothing bet",
+                spot(Street::Flop, 1, 0, 100, 0, 0, 1_000, 0, 0),
+            ),
+            (
+                18_386_712,
+                "flop, in position, facing a bet",
+                spot(Street::Flop, 0, 24, 133, 33, 0, 1_000, 1, 0b10),
+            ),
+            (
+                44_371_759,
+                "turn, facing a raise",
+                spot(Street::Turn, 1, 47, 400, 200, 60, 800, 2, 0b01),
+            ),
+            (
+                52_003_119,
+                "river, all in",
+                spot(Street::River, 0, 47, 900, 500, 0, 500, 1, 0b10),
+            ),
+        ] {
+            assert_eq!(
+                game.key_at(&spot),
+                expected,
+                "{name}: the solved ladder in data/postflop is keyed on the old number"
+            );
+        }
+    }
+
+
     use super::*;
     use crate::cfr::Solver;
 
@@ -783,6 +1061,243 @@ mod tests {
             10_000,
             Sizing::default(),
         )
+    }
+
+    /// A three-way tree on the same small board sample.
+    fn three_way() -> Postflop {
+        Postflop::multiway(
+            3,
+            Textures::sample(8, 10, 0x7E47, 4),
+            1_000,
+            10_000,
+            Sizing::default(),
+        )
+    }
+
+    /// Chips move between three players and are never created.
+    ///
+    /// The heads-up version of this passed throughout a period when the pot was
+    /// not being awarded at all — summing to zero is necessary and nowhere near
+    /// sufficient. What it does catch is the thing three players make easy to
+    /// get wrong: paying a folded player, or paying the pot out twice when two
+    /// hands tie.
+    #[test]
+    fn three_way_payoffs_sum_to_zero() {
+        let game = three_way();
+        let mut rng = Rng::new(21);
+        for round in 0..400 {
+            let mut state = game.sample_chance(&game.initial(), &mut rng);
+            while !game.is_terminal(&state) {
+                let count = game.num_actions(&state);
+                assert!(count >= 2, "only {count} action(s) at {state:?}");
+                state = game.apply(&state, rng.below(count as u64) as usize);
+            }
+            let payoffs: Vec<f64> = (0..3).map(|seat| game.utility_for(&state, seat)).collect();
+            let total: f64 = payoffs.iter().sum();
+            assert!(
+                total.abs() < 1e-9,
+                "round {round}: {payoffs:?} sum to {total}, not zero"
+            );
+            for (seat, payoff) in payoffs.iter().enumerate() {
+                assert!(
+                    payoff.abs() <= 21_000.0,
+                    "round {round}: seat {seat} won or lost {payoff}, more than the table holds"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nobody_in_a_three_way_pot_wagers_more_than_they_have() {
+        let game = three_way();
+        let mut rng = Rng::new(33);
+        for _ in 0..400 {
+            let mut state = game.sample_chance(&game.initial(), &mut rng);
+            while !game.is_terminal(&state) {
+                let count = game.num_actions(&state);
+                state = game.apply(&state, rng.below(count as u64) as usize);
+                for player in 0..3 {
+                    assert!(
+                        state.spent[player] + state.wagered[player] <= 10_000,
+                        "player {player} has put in more than their stack: {state:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn three_players_never_hold_the_same_card() {
+        let game = three_way();
+        let mut rng = Rng::new(9);
+        let sample = game.textures().expect("a solving tree carries boards");
+        for _ in 0..300 {
+            let state = game.sample_chance(&game.initial(), &mut rng);
+            let holdings = sample.holdings(state.board as usize);
+            let mut seen = Vec::new();
+            for seat in 0..3 {
+                for card in holdings[state.holdings[seat] as usize] {
+                    assert!(!seen.contains(&card), "two seats hold {card}: {state:?}");
+                    seen.push(card);
+                }
+            }
+        }
+    }
+
+    /// One fold leaves a hand to play; the second ends it.
+    ///
+    /// This is the whole difference between a three-way tree and a heads-up
+    /// one, and the place a heads-up assumption would survive unnoticed: the
+    /// old tree treated any fold as the end of the hand.
+    #[test]
+    fn a_three_way_pot_survives_the_first_fold() {
+        let game = three_way();
+        let state = game.sample_chance(&game.initial(), &mut Rng::new(5));
+
+        // Seat 1 leads on every postflop street.
+        assert_eq!(game.current_player(&state), 1);
+
+        let fold = |game: &Postflop, state: &State| {
+            let at = game
+                .moves(state)
+                .iter()
+                .position(|move_| *move_ == Move::Fold)
+                .expect("a fold is on offer");
+            game.apply(state, at)
+        };
+        let bet = |game: &Postflop, state: &State| {
+            let at = game
+                .moves(state)
+                .iter()
+                .position(|move_| *move_ == Move::Small)
+                .expect("a bet is on offer");
+            game.apply(state, at)
+        };
+
+        // Seat 1 bets, seat 2 folds. Two are left, so the hand goes on.
+        let after_bet = bet(&game, &state);
+        assert_eq!(game.current_player(&after_bet), 2, "seat 2 acts second");
+        let one_gone = fold(&game, &after_bet);
+        assert!(
+            !game.is_terminal(&one_gone),
+            "two players are still in: {one_gone:?}"
+        );
+        assert_eq!(game.current_player(&one_gone), 0, "seat 0 acts last");
+
+        // Seat 0 folds too. Now there is one player and the hand is over.
+        let both_gone = fold(&game, &one_gone);
+        assert!(game.is_terminal(&both_gone), "only seat 1 is left");
+        assert!(
+            game.utility_for(&both_gone, 1) > 0.0,
+            "the last player standing wins the pot"
+        );
+        assert!(game.utility_for(&both_gone, 0) < 0.0);
+        assert!(game.utility_for(&both_gone, 2) < 0.0);
+    }
+
+    /// A folded player is not owed anything and cannot be paid.
+    #[test]
+    fn a_folded_player_is_never_paid() {
+        let game = three_way();
+        let mut rng = Rng::new(77);
+        for _ in 0..400 {
+            let mut state = game.sample_chance(&game.initial(), &mut rng);
+            while !game.is_terminal(&state) {
+                let count = game.num_actions(&state);
+                state = game.apply(&state, rng.below(count as u64) as usize);
+            }
+            for seat in 0..3 {
+                if !state.is_live(seat) {
+                    assert!(
+                        game.utility_for(&state, seat) < 0.0,
+                        "seat {seat} folded and came out ahead: {state:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The two key spaces cannot collide, and neither can two spots that offer
+    /// different numbers of actions.
+    ///
+    /// The second half is the one that bites. The solver stores its regrets
+    /// against a key and trusts the action count to match, so a collision
+    /// indexes past the end of another node's actions — which is not a wrong
+    /// strategy but a wrong memory read.
+    #[test]
+    fn multiway_keys_stand_apart_from_heads_up_ones() {
+        let heads_up = Postflop::for_play(48, 1_000, 10_000, Sizing::default());
+        let three = Postflop::multiway_for_play(3, 48, 1_000, 10_000, Sizing::default());
+
+        let spot = |live: u8, player: usize, bet: u64, mine: u64, raises: u8, acted: u8| Spot {
+            street: Street::Flop,
+            player,
+            live,
+            strength: 20,
+            pot: 1_000,
+            bet,
+            mine,
+            behind: 9_000,
+            opponent_behind: 9_000,
+            raises,
+            acted,
+        };
+
+        // Nothing a three-way tree produces can be mistaken for a heads-up key.
+        let mut by_key = std::collections::HashMap::new();
+        for live in 2..=3u8 {
+            for player in 0..3 {
+                for (bet, mine) in [(0, 0), (300, 0), (300, 300), (900, 300)] {
+                    for raises in 0..3u8 {
+                        for acted in 0..8u8 {
+                            let spot = spot(live, player, bet, mine, raises, acted);
+                            let key = three.key_at(&spot);
+                            assert!(
+                                key & MULTIWAY != 0,
+                                "a multiway key must carry its marker: {spot:?}"
+                            );
+                            let count = three.moves_at(&spot).len();
+                            let held = by_key.entry(key).or_insert(count);
+                            assert_eq!(
+                                *held, count,
+                                "two spots share key {key} while offering {held} and {count} actions"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        for player in 0..2 {
+            for (bet, mine) in [(0, 0), (300, 0), (300, 300), (900, 300)] {
+                let spot = spot(2, player, bet, mine, 1, 0b10);
+                let key = heads_up.key_at(&spot);
+                assert!(key & MULTIWAY == 0, "a heads-up key carries no marker");
+                assert!(
+                    !by_key.contains_key(&key),
+                    "heads-up key {key} collides with a multiway one"
+                );
+            }
+        }
+    }
+
+    /// The solver must be told how many seats to traverse.
+    ///
+    /// It reaches this through the [`Game`] trait, not through the inherent
+    /// method of the same name, and the trait's default is two. A three-way
+    /// tree that inherited the default would train two of its three seats and
+    /// report nothing wrong.
+    #[test]
+    fn the_tree_reports_its_seat_count_through_the_trait() {
+        fn asked_as_a_game<G: Game>(game: &G) -> usize {
+            game.players()
+        }
+
+        let heads_up = Postflop::for_play(48, 1_000, 10_000, Sizing::default());
+        assert_eq!(asked_as_a_game(&heads_up), 2);
+
+        let three = Postflop::multiway_for_play(3, 48, 1_000, 10_000, Sizing::default());
+        assert_eq!(asked_as_a_game(&three), 3, "the solver would skip a seat");
     }
 
     fn dealt(game: &Postflop) -> State {
@@ -845,6 +1360,7 @@ mod tests {
 
         let game = Postflop::for_play(BUCKETS, 100, 400, Sizing::default());
         let spot = |strength: u8| Spot {
+            live: 2,
             street: Street::River,
             // Out of position, first to act, nothing bet yet.
             player: 1,
@@ -890,6 +1406,7 @@ mod tests {
         let game = game();
         // The hero has plenty behind; the opponent has shoved and has nothing.
         let facing_a_shove = Spot {
+            live: 2,
             street: Street::Flop,
             player: 0,
             strength: 5,
