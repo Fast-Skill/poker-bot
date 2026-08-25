@@ -177,13 +177,91 @@ impl fmt::Display for RingReport {
     }
 }
 
+/// Plays a ring game with every deal replayed from every seat.
+///
+/// # What this is for
+///
+/// Measuring a small edge in a ring game. [`ring_match`] deals fresh cards each
+/// hand, so what it mostly measures is who was dealt aces. Over twenty thousand
+/// seven-handed hands two *bit-identical* strategies came out twenty-five big
+/// blinds per hundred apart, which is far larger than any edge worth looking
+/// for — the measurement had no power at all.
+///
+/// # How the luck is cancelled
+///
+/// Each deal is played once per seat. After every playing the lineup rotates by
+/// one, so over a full cycle each agent has held each seat's cards exactly
+/// once. Card luck does not average out over the cycle — it cancels within it,
+/// because every agent got the identical set of holdings.
+///
+/// What remains is what the agents did with them, which is the question. It
+/// costs one playing per seat, so a cycle of seven hands yields one deal's
+/// worth of independent information — expensive, and the only reason the answer
+/// means anything.
+///
+/// Position is fair for the same reason: the rotation moves the button past
+/// every agent inside each cycle rather than relying on it evening out.
+///
+/// # Panics
+/// Panics if there are fewer than two agents, or `deals` is zero.
+pub fn rotated_ring_match(
+    table: &Table,
+    mut seats: Vec<&mut dyn Agent>,
+    deals: u64,
+    rng: &mut Rng,
+) -> RingReport {
+    assert!(seats.len() >= 2, "a ring game needs at least two agents");
+    assert!(deals > 0, "a match needs at least one deal");
+
+    let players = seats.len();
+    let names: Vec<String> = seats.iter().map(|agent| agent.name().to_string()).collect();
+    let big_blind = table.big_blind() as f64;
+    let mut totals = vec![0i64; players];
+    let mut showdowns = 0u64;
+    let mut deck = Deck::fresh();
+    let mut rotations = 0usize;
+
+    for _ in 0..deals {
+        deck.shuffle(rng);
+        // Shuffled once and played `players` times. Every rotation sees the
+        // same cards in the same seats; only who is sitting there changes.
+        for _ in 0..players {
+            let result = {
+                let cards = deck.hand_cards(players).to_vec();
+                table.play_hand(&mut seats, &cards, rng)
+            };
+            if result.showdown {
+                showdowns += 1;
+            }
+            for (seat, net) in result.net.iter().enumerate() {
+                totals[(seat + rotations) % players] += net;
+            }
+            seats.rotate_left(1);
+            rotations = (rotations + 1) % players;
+        }
+    }
+
+    let hands = deals * players as u64;
+    RingReport {
+        names,
+        hands,
+        bb_per_100: totals
+            .iter()
+            .map(|chips| *chips as f64 / big_blind / hands as f64 * 100.0)
+            .collect(),
+        showdowns,
+    }
+}
+
 /// Plays a ring game, rotating the button so every agent sits in every seat.
 ///
 /// Unlike [`duplicate_match`] the deal is not paired, so results are far
-/// noisier — three-handed and up there is no clean way to replay a deal such
-/// that every seat sees the same cards. Use this to measure *coverage* and to
-/// check a bot plays legally at a full table; use duplicate matches to measure
-/// an edge.
+/// noisier: every hand is fresh cards, and card luck stays in the numbers. Use
+/// this to measure *coverage* and to check a bot plays legally at a full table.
+///
+/// To measure an *edge* between two strategies at a full table, use
+/// [`rotated_ring_match`], which replays each deal until every agent has held
+/// every seat's cards.
 ///
 /// # Panics
 /// Panics if there are fewer than two agents, or `hands` is zero.
@@ -421,6 +499,59 @@ impl Agent for ChartBot {
 
 #[cfg(test)]
 mod tests {
+
+    /// Identical strategies must come out at exactly nothing.
+    ///
+    /// This is the property the whole measurement rests on. Over a full
+    /// rotation every agent holds every seat's cards once, so seven identical
+    /// players cannot be separated by the deck — any spread at all would be
+    /// luck that failed to cancel, and any edge measured on top of it would be
+    /// that luck rather than strategy.
+    ///
+    /// Worth pinning because the plain [`ring_match`] fails it badly: the same
+    /// seven identical agents there come out tens of big blinds per hundred
+    /// apart, which is how a three big blind "difference" between two real
+    /// strategies got reported as though it meant something.
+    #[test]
+    fn identical_agents_cannot_be_separated_by_the_deck() {
+        let table = Table::new(100, 10_000);
+        let mut rng = Rng::new(12_345);
+
+        let mut agents: Vec<AlwaysCall> = (0..7).map(|_| AlwaysCall).collect();
+        let playing: Vec<&mut dyn Agent> = agents
+            .iter_mut()
+            .map(|agent| agent as &mut dyn Agent)
+            .collect();
+        let rotated = rotated_ring_match(&table, playing, 40, &mut rng);
+
+        for (name, rate) in rotated.names.iter().zip(&rotated.bb_per_100) {
+            assert!(
+                rate.abs() < 1e-9,
+                "{name} came out {rate:+.3} bb/100 against copies of itself"
+            );
+        }
+
+        // And the same agents dealt fresh cards every hand do not manage it,
+        // which is the reason this function exists.
+        let mut agents: Vec<AlwaysCall> = (0..7).map(|_| AlwaysCall).collect();
+        let playing: Vec<&mut dyn Agent> = agents
+            .iter_mut()
+            .map(|agent| agent as &mut dyn Agent)
+            .collect();
+        let plain = ring_match(&table, playing, 280, &mut Rng::new(12_345));
+        let spread = plain
+            .bb_per_100
+            .iter()
+            .cloned()
+            .fold(f64::MIN, f64::max)
+            - plain.bb_per_100.iter().cloned().fold(f64::MAX, f64::min);
+        assert!(
+            spread > 1.0,
+            "plain ring play is supposed to be noisy; spread was only {spread:.3}"
+        );
+    }
+
+
     use super::*;
 
     fn table() -> Table {

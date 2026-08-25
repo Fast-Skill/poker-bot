@@ -1775,9 +1775,14 @@ fn ringbench(args: &[String]) -> Result<(), String> {
     println!("charts   : {} spots from {charts_dir}\n", charts.spots().count());
 
     let mut rng = Rng::new(seed);
+    // Rotated, so every bot plays every seat's cards. Plain ring play was
+    // tried first and could not answer the question: two identical strategies
+    // in the same run came out twenty-five big blinds per hundred apart, so a
+    // real edge of a few would have been invisible underneath.
+    let deals = (hands / seats as u64).max(1);
     let report = {
         let playing: Vec<&mut dyn Agent> = bots.iter_mut().map(|b| b as &mut dyn Agent).collect();
-        poker_core::bench::ring_match(&table, playing, hands, &mut rng)
+        poker_core::bench::rotated_ring_match(&table, playing, deals, &mut rng)
     };
     println!("{report}\n");
 
@@ -1794,12 +1799,49 @@ fn ringbench(args: &[String]) -> Result<(), String> {
             .collect();
         taken.iter().sum::<f64>() / taken.len() as f64
     };
+    // The spread within one side is the noise floor: those seats run the same
+    // strategy, so whatever separates them is not strategy. A difference
+    // between the two sides means nothing unless it clears this. Reported every
+    // time because the first version of this command printed a three big blind
+    // "difference" from a run where identical strategies were twenty-five
+    // apart, and the number looked perfectly convincing on its own.
+    let spread = |charted: bool| {
+        let taken: Vec<f64> = rates
+            .iter()
+            .enumerate()
+            .filter(|(seat, _)| (seat % 2 == 0) == charted)
+            .map(|(_, rate)| *rate)
+            .collect();
+        taken.iter().cloned().fold(f64::MIN, f64::max)
+            - taken.iter().cloned().fold(f64::MAX, f64::min)
+    };
+    let floor = spread(true).max(spread(false));
+
     let (charted, solved) = (mean(true), mean(false));
-    println!("charts   {charted:+.1} bb/100 averaged over {} seats", (seats + 1) / 2);
+    println!(
+        "charts   {charted:+.1} bb/100 averaged over {} seats",
+        (seats + 1) / 2
+    );
     println!("solve    {solved:+.1} bb/100 averaged over {} seats", seats / 2);
-    println!("\ndifference {:+.1} bb/100 in favour of {}",
-        (charted - solved).abs(),
-        if charted > solved { "the published charts" } else { "the solve" });
+    println!("noise    {floor:.1} bb/100 between seats running the SAME strategy");
+
+    let gap = (charted - solved).abs();
+    println!(
+        "\ndifference {gap:.1} bb/100 in favour of {}",
+        if charted > solved {
+            "the published charts"
+        } else {
+            "the solve"
+        }
+    );
+    println!(
+        "{}",
+        if gap > floor {
+            "  -> clears the noise floor, so worth believing"
+        } else {
+            "  -> BELOW the noise floor: this run cannot tell them apart"
+        }
+    );
     Ok(())
 }
 

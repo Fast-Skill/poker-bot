@@ -268,31 +268,54 @@ impl Charts {
         Ok(charts)
     }
 
-    /// Spots that are held but almost certainly incomplete.
+    /// Spots that are held but genuinely incomplete.
     ///
-    /// A spot facing a raise has two ways to continue — call, or three-bet —
-    /// and solvers export one range per action. A chart holding only one of
-    /// them is a playable strategy, just a narrower one than the solution it
-    /// came from, and it fails silently: nothing crashes, the bot simply never
-    /// takes the missing line. Only the range that is there says which loss it
-    /// is, so the message names it.
+    /// # Where a single raising range is the whole strategy
     ///
-    /// An unopened pot is the exception. Raise-or-fold really is the whole
-    /// strategy there, so a single raising range is complete.
+    /// Almost everywhere. Raise-or-fold is complete in an unopened pot, and —
+    /// less obviously — three-bet-or-fold is complete facing a raise from every
+    /// position except the big blind. That is not a simplification but the
+    /// equilibrium: once the rake is priced in, flat-calling a raise out of
+    /// position is dominated, so the solutions simply have no calling range to
+    /// export.
     ///
-    /// Reported rather than refused, because a partial chart still beats no
-    /// chart and the caller may already know what it is missing.
+    /// The exported ranges agree. Button versus cutoff three-bets 11.5% of
+    /// hands, which is wide for that spot and is what a position three-bets
+    /// when it has no flatting range to fall back on.
+    ///
+    /// This was first written the other way round, flagging all nine
+    /// three-betting charts as half-finished and sending someone off to export
+    /// nine calling ranges that do not exist.
+    ///
+    /// # The big blind, which is the real exception
+    ///
+    /// It has already paid a blind and it closes the action, so it defends by
+    /// calling far more than it raises. A big-blind chart holding only a
+    /// three-betting range folds most of a range it should be playing — the one
+    /// spot where a missing calling range is a real and expensive hole.
+    ///
+    /// Reported rather than refused, since a partial chart still beats none.
     pub fn gaps(&self) -> Vec<String> {
         self.spots
             .iter()
-            .filter(|(name, chart)| name.contains("-vs-") && chart.by_action.len() < 2)
-            .map(|(name, chart)| {
-                let missing = match chart.by_action.first().map(|(action, _)| action) {
-                    Some(Move::Raise) => "no calling range, so it three-bets or folds and never flats",
-                    Some(Move::Passive) => "no three-betting range, so it calls or folds and never raises",
-                    _ => "only one action, where the solution has two",
-                };
-                format!("{name}: {missing}")
+            .filter(|(name, chart)| {
+                let facing = name.contains("-vs-");
+                let defending = name.starts_with("bb-vs-");
+                let calls = chart.actions().any(|action| action == Move::Passive);
+                let raises = chart.actions().any(|action| action == Move::Raise);
+                // Only the big blind needs both. Everywhere else a raising
+                // range on its own is the finished strategy.
+                (defending && !calls) || (facing && !defending && !raises)
+            })
+            .map(|(name, _)| {
+                if name.starts_with("bb-vs-") {
+                    format!(
+                        "{name}: no calling range. The big blind defends mostly by \
+                         calling, so this folds most of the range it should play."
+                    )
+                } else {
+                    format!("{name}: no three-betting range, and outside the big blind three-bet-or-fold is the whole strategy")
+                }
             })
             .collect()
     }
@@ -562,6 +585,191 @@ mod tests {
         );
     }
 
+    /// Counts preflop spots by how often they happen *and* by how much money
+    /// goes through them.
+    ///
+    /// # Why both numbers
+    ///
+    /// Counting decisions alone is misleading, and this test originally did
+    /// only that: it reported three-bet pots as 7% of preflop decisions, which
+    /// invited the conclusion that charting them was not worth the work. But a
+    /// three-bet pot is not one seventh as important as a raised pot — it is
+    /// several times larger. A fold from under the gun and a five-bet call are
+    /// both one decision and they are not both worth one decision's attention.
+    ///
+    /// So the money is counted too: for each hand, how deep the preflop betting
+    /// went, and how many chips actually changed hands. That is the number that
+    /// says whether a spot is worth charting.
+    ///
+    /// # What this cannot tell you
+    ///
+    /// The bots playing are the ones being measured, and they have no charts
+    /// past a single raise. Their three- and four-bet frequencies come from the
+    /// solve and the heuristic, so the deep buckets here reflect how *this* bot
+    /// reaches them rather than how a table of solid players would. Treat the
+    /// deep percentages as the right order of magnitude, not a decimal place.
+    ///
+    /// Run with:
+    /// `cargo test --release -p poker-core -- --ignored --nocapture census`
+    #[test]
+    #[ignore = "a simulation for reporting, not a pass/fail check; run with --ignored --nocapture"]
+    fn census_of_preflop_spots() {
+        use crate::betting::Action;
+        use crate::blueprint::Blueprint;
+        use crate::bot::BlueprintAgent;
+        use crate::preflop::Sizing;
+        use crate::rng::Rng;
+        use crate::table::{Agent, Deck, Table};
+        use std::cell::RefCell;
+        use std::collections::BTreeMap;
+        use std::rc::Rc;
+
+        let charts = Charts::load(std::path::Path::new("../../data/charts"))
+            .or_else(|_| Charts::load(std::path::Path::new("data/charts")))
+            .expect("the exported ranges");
+
+        #[derive(Default)]
+        struct Census {
+            /// Preflop decisions, by what kind of spot they were.
+            decisions: BTreeMap<&'static str, u64>,
+            /// How deep the preflop betting has gone in the hand being played.
+            deepest: u8,
+        }
+        type Shared = Rc<RefCell<Census>>;
+
+        /// Classifies each preflop decision, then plays it as normal.
+        struct Counting {
+            inner: BlueprintAgent,
+            census: Shared,
+            held: Charts,
+        }
+
+        impl Agent for Counting {
+            fn name(&self) -> &str {
+                self.inner.name()
+            }
+
+            fn new_hand(&mut self) {
+                self.inner.new_hand();
+            }
+
+            fn act(&mut self, view: &View, rng: &mut Rng) -> Action {
+                if view.street == Street::Preflop {
+                    let seat = seat_position(view.seat, view.players);
+                    let kind = match (spot_of(view), view.raises) {
+                        (Some(spot), _) if self.held.get(spot).is_some() => "charted",
+                        (Some(_), 0) => "unopened, no chart yet",
+                        (Some(_), 1) => "facing a raise, no chart yet",
+                        (Some(_), _) => "other, no chart yet",
+                        (None, 0) => "limped pot",
+                        (None, 1) if seat == Some(Seat::Utg) => {
+                            "facing a raise from the same charted position"
+                        }
+                        (None, 1) => "facing a raise, uncharted shape",
+                        (None, 2) => "three-bet pot",
+                        (None, 3) => "four-bet pot",
+                        (None, _) => "five-bet pot or deeper",
+                    };
+                    let mut census = self.census.borrow_mut();
+                    *census.decisions.entry(kind).or_default() += 1;
+                    census.deepest = census.deepest.max(view.raises);
+                }
+                self.inner.act(view, rng)
+            }
+        }
+
+        let census: Shared = Rc::new(RefCell::new(Census::default()));
+        let blueprint = Blueprint::from_profile(&Default::default(), "empty");
+        let mut agents: Vec<Counting> = (0..7)
+            .map(|seat| Counting {
+                inner: BlueprintAgent::new(
+                    format!("seat {seat}"),
+                    blueprint.clone(),
+                    Sizing::default(),
+                )
+                .with_charts(charts.clone()),
+                census: Rc::clone(&census),
+                held: charts.clone(),
+            })
+            .collect();
+
+        let table = Table::new(100, 10_000);
+        let mut rng = Rng::new(99);
+        let mut deck = Deck::fresh();
+        let hands = 20_000u64;
+
+        // Chips that actually changed hands, by how deep the preflop betting
+        // went in that hand. Money lost by the losing seats is the cleanest
+        // measure available from a hand result, and it is the money that a
+        // wrong decision in that spot would have been wrong about.
+        let mut money = BTreeMap::<&'static str, i64>::new();
+        let mut hands_at = BTreeMap::<&'static str, u64>::new();
+        let depth_name = |raises: u8| match raises {
+            0 => "limped or walked",
+            1 => "single raised pot",
+            2 => "three-bet pot",
+            3 => "four-bet pot",
+            _ => "five-bet pot or deeper",
+        };
+
+        for _ in 0..hands {
+            deck.shuffle(&mut rng);
+            let result = {
+                let mut seats: Vec<&mut dyn Agent> = agents
+                    .iter_mut()
+                    .map(|agent| agent as &mut dyn Agent)
+                    .collect();
+                table.play_hand(&mut seats, deck.hand_cards(7), &mut rng)
+            };
+            let mut census = census.borrow_mut();
+            let name = depth_name(census.deepest);
+            census.deepest = 0;
+            drop(census);
+            *money.entry(name).or_default() +=
+                result.net.iter().filter(|net| **net < 0).map(|net| -net).sum::<i64>();
+            *hands_at.entry(name).or_default() += 1;
+        }
+
+        let census = census.borrow();
+        let total: u64 = census.decisions.values().sum();
+        println!("\n{total} preflop decisions over {hands} seven-handed hands\n");
+        let mut rows: Vec<_> = census.decisions.iter().collect();
+        rows.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        for (kind, count) in rows {
+            println!(
+                "  {:>6.2}%  {:>7}  {kind}",
+                *count as f64 / total as f64 * 100.0,
+                count
+            );
+        }
+        let charted = census.decisions.get("charted").copied().unwrap_or(0);
+        println!(
+            "\n  charts already decide {:.1}% of preflop decisions",
+            charted as f64 / total as f64 * 100.0
+        );
+
+        // And the same hands weighted by what was at stake, which is the
+        // number that says where charting effort pays.
+        let staked: i64 = money.values().sum();
+        println!("\nmoney that changed hands, by how deep the preflop betting went:\n");
+        let mut rows: Vec<_> = money.iter().collect();
+        rows.sort_by_key(|(_, chips)| std::cmp::Reverse(*chips));
+        for (depth, chips) in rows {
+            let played = hands_at.get(*depth).copied().unwrap_or(0);
+            println!(
+                "  {:>6.2}% of money   {:>6.2}% of hands   {:>7.0} bb average pot   {depth}",
+                *chips as f64 / staked as f64 * 100.0,
+                played as f64 / hands as f64 * 100.0,
+                if played > 0 {
+                    *chips as f64 / played as f64 / 100.0
+                } else {
+                    0.0
+                },
+            );
+        }
+        assert!(total > 0 && staked > 0);
+    }
+
     #[test]
     fn spot_names_round_trip() {
         for name in ["utg", "btn", "sb-vs-utg", "bb-vs-btn", "co-vs-hj"] {
@@ -623,10 +831,15 @@ mod tests {
         );
     }
 
-    /// A chart for a spot facing a raise that holds only one range would fold
-    /// every three-bet — a leak that costs money quietly rather than crashing.
+    /// Which single-range charts are finished and which are not.
+    ///
+    /// The distinction is not obvious and this had it backwards at first:
+    /// three-bet-or-fold is the equilibrium from every position but the big
+    /// blind, so a lone three-betting range is a complete strategy nearly
+    /// everywhere. The big blind is where a missing calling range really costs
+    /// something, because that is how the big blind mostly defends.
     #[test]
-    fn a_half_exported_chart_is_reported_as_a_gap() {
+    fn only_the_big_blind_needs_a_calling_range() {
         let mut charts = Charts::new();
         charts.insert(
             Spot::from_name("utg").expect("a spot"),
@@ -637,23 +850,52 @@ mod tests {
             "raise or fold is the whole strategy in an unopened pot"
         );
 
-        // Only a calling range: the three-bets go missing.
-        charts.insert(
-            Spot::from_name("btn-vs-co").expect("a spot"),
-            Chart::default().with(Move::Passive, range("22+")),
-        );
-        let gaps = charts.gaps();
-        assert_eq!(gaps.len(), 1, "{gaps:?}");
-        assert!(gaps[0].contains("btn-vs-co"), "{}", gaps[0]);
-        assert!(gaps[0].contains("never raises"), "{}", gaps[0]);
-
-        // Only a raising range, which is what the exports on hand actually
-        // hold: the strategy plays, it just never flat-calls a raise.
+        // A lone three-betting range on the button. This is what the exports
+        // actually hold, and it is finished: there is no calling range in the
+        // solution to be missing.
         charts.insert(
             Spot::from_name("btn-vs-co").expect("a spot"),
             Chart::default().with(Move::Raise, range("QQ+, AKs")),
         );
+        assert!(
+            charts.gaps().is_empty(),
+            "three-bet-or-fold is the strategy outside the big blind: {:?}",
+            charts.gaps()
+        );
+
+        // A lone calling range is a gap anywhere, since the three-bets vanish.
+        charts.insert(
+            Spot::from_name("co-vs-utg").expect("a spot"),
+            Chart::default().with(Move::Passive, range("22+")),
+        );
         let gaps = charts.gaps();
-        assert!(gaps[0].contains("never flats"), "{}", gaps[0]);
+        assert_eq!(gaps.len(), 1, "{gaps:?}");
+        assert!(gaps[0].contains("co-vs-utg"), "{}", gaps[0]);
+
+        // The big blind is the one seat that needs both, because calling is
+        // most of how it defends.
+        charts.insert(
+            Spot::from_name("bb-vs-btn").expect("a spot"),
+            Chart::default().with(Move::Raise, range("QQ+, AKs")),
+        );
+        let gaps = charts.gaps();
+        assert_eq!(gaps.len(), 2, "{gaps:?}");
+        assert!(
+            gaps.iter().any(|gap| gap.starts_with("bb-vs-btn")),
+            "{gaps:?}"
+        );
+
+        // With both, it is finished.
+        charts.insert(
+            Spot::from_name("bb-vs-btn").expect("a spot"),
+            Chart::default()
+                .with(Move::Raise, range("QQ+, AKs"))
+                .with(Move::Passive, range("22+, A2s+, KTo+")),
+        );
+        assert!(
+            !charts.gaps().iter().any(|gap| gap.starts_with("bb-vs-btn")),
+            "{:?}",
+            charts.gaps()
+        );
     }
 }
