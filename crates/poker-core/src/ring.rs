@@ -687,7 +687,401 @@ mod tests {
         Ring::new(seats, 100.0, Ladder::default(), showdown())
     }
 
-    /// Walks a state forward by naming moves, which reads like a hand does.
+    /// Enumerates every distinct betting sequence in the tree, and says how
+    /// many of them are multiway.
+    ///
+    /// # Why this is worth counting
+    ///
+    /// The question came up as "is the spot count including or excluding cold
+    /// spots" — a cold spot being one where two players have already raised and
+    /// a third, who has put nothing in voluntarily, has to decide. Those are the
+    /// spots people worry about, because there are many more of them than there
+    /// are heads-up sequences and because published charts rarely cover them.
+    ///
+    /// The tree does not treat them specially — a cold spot is simply a node —
+    /// so the only way to answer is to walk it and count. Hand classes are left
+    /// out: this counts betting sequences, and each one carries all 169 hands.
+    ///
+    /// Run with:
+    /// `cargo test --release -p poker-core -- --ignored --nocapture betting_sequences`
+    #[test]
+    #[ignore = "an enumeration for reporting; run with --ignored --nocapture"]
+    fn betting_sequences_in_the_tree() {
+        for seats in [6usize, 7] {
+            let game = Ring::for_play(seats, 100.0, Ladder::default());
+            let mut counted = std::collections::BTreeMap::<&str, u64>::new();
+            let mut by_raises = std::collections::BTreeMap::<u8, u64>::new();
+            // How many players are still in. Two is the shape a published
+            // chart assumes: a raiser and one player deciding, everybody else
+            // already folded. Anything above two is a spot no simple chart
+            // covers, and is where the count comes from.
+            let mut by_live = std::collections::BTreeMap::<usize, u64>::new();
+            // Just the spots facing a single raise, split by how many are still
+            // in and whether the actor already put money in voluntarily. A
+            // published chart covers exactly one of these rows: two players
+            // live, the actor not yet invested.
+            let mut facing_open = std::collections::BTreeMap::<(usize, bool), u64>::new();
+            let mut total = 0u64;
+
+            // Breadth-first over betting only. The deal is a chance node with
+            // one branch per hand and it multiplies every count by 169 without
+            // adding a sequence, so it is stepped over rather than walked.
+            let mut frontier = vec![{
+                let mut start = game.initial();
+                start.dealt = true;
+                // Preflop the action starts left of the big blind, not at
+                // seat zero.
+                start.to_act = game.first_to_act() as u8;
+                start
+            }];
+            let mut seen = std::collections::HashSet::new();
+
+            while let Some(state) = frontier.pop() {
+                if game.is_terminal(&state) {
+                    continue;
+                }
+                // Betting sequences only: the hands each seat holds are not
+                // part of what makes a spot distinct.
+                let signature = (
+                    state.committed,
+                    state.live,
+                    state.acted,
+                    state.to_act,
+                    state.raises,
+                    state.aggressor,
+                );
+                if !seen.insert(signature) {
+                    continue;
+                }
+
+                let actor = game.current_player(&state);
+                let voluntary = {
+                    let (small, big) = game.blind_seats();
+                    let posted = if actor == small {
+                        to_chips(0.5)
+                    } else if actor == big {
+                        to_chips(1.0)
+                    } else {
+                        0
+                    };
+                    state.committed[actor] > posted
+                };
+                // How many others have put in more than a blind: this is what
+                // separates a heads-up sequence from a multiway one.
+                let aggressors = (0..seats)
+                    .filter(|&seat| seat != actor && state.is_live(seat))
+                    .filter(|&seat| {
+                        let (small, big) = game.blind_seats();
+                        let posted = if seat == small {
+                            to_chips(0.5)
+                        } else if seat == big {
+                            to_chips(1.0)
+                        } else {
+                            0
+                        };
+                        state.committed[seat] > posted
+                    })
+                    .count();
+
+                let kind = match (state.raises, voluntary, aggressors) {
+                    (0, _, _) => "unopened or limped",
+                    (1, false, _) => "facing one raise",
+                    (_, true, _) => "already in, facing a re-raise",
+                    (_, false, 0..=1) => "facing a re-raise, one aggressor",
+                    // The cold spots: two or more people have raised and this
+                    // seat has put in nothing but a blind.
+                    (_, false, _) => "COLD - two or more aggressors, nothing in",
+                };
+                *counted.entry(kind).or_default() += 1;
+                *by_raises.entry(state.raises).or_default() += 1;
+                *by_live
+                    .entry(state.live_seats().len())
+                    .or_insert(0u64) += 1;
+                if state.raises == 1 {
+                    *facing_open
+                        .entry((state.live_seats().len(), voluntary))
+                        .or_insert(0u64) += 1;
+                }
+                total += 1;
+
+                for action in 0..game.moves(&state).len() {
+                    frontier.push(game.apply(&state, action));
+                }
+            }
+
+            println!("\n{seats}-handed: {total} distinct betting sequences");
+            for (kind, count) in &counted {
+                println!(
+                    "  {:>6.1}%  {count:>7}  {kind}",
+                    *count as f64 / total as f64 * 100.0
+                );
+            }
+            println!("  by raises so far:");
+            for (raises, count) in &by_raises {
+                let name = match raises {
+                    0 => "unopened",
+                    1 => "facing an open",
+                    2 => "facing a 3bet",
+                    3 => "facing a 4bet",
+                    _ => "facing a 5bet or deeper",
+                };
+                println!("    {raises} raises  {count:>7}  {name}");
+            }
+            println!("  by players still in:");
+            for (live, count) in &by_live {
+                println!(
+                    "    {live} live  {count:>7}  {:>5.1}%",
+                    *count as f64 / total as f64 * 100.0
+                );
+            }
+            println!("  facing exactly one raise, in detail:");
+            for ((live, invested), count) in &facing_open {
+                println!(
+                    "    {live} live, actor {:<12} {count:>5}",
+                    if *invested { "already in" } else { "not yet in" },
+                    count = count
+                );
+            }
+            println!("  times 169 hands = {} information sets", total * 169);
+        }
+    }
+
+    /// Checks that every state the walk reaches is one a real hand could reach.
+    ///
+    /// Written after a listing of the tree produced "the big blind opens and
+    /// under the gun decides, having put nothing in" — which cannot happen,
+    /// since the big blind acts last preflop. Either the tree builds states no
+    /// hand can arrive at, or the walk that produced the listing was wrong, and
+    /// the difference matters: one is a bug in the game, the other is a bug in
+    /// a report.
+    #[test]
+    fn every_reachable_state_has_a_consistent_history() {
+        let seats = 6;
+        let game = Ring::for_play(seats, 100.0, Ladder::default());
+
+        let mut frontier = vec![{
+            let mut start = game.initial();
+            start.dealt = true;
+            // Preflop the action starts left of the big blind, not at seat
+            // zero. Leaving this at the default rotated the whole betting
+            // order and silently produced a different game — one where the
+            // blinds acted second and third instead of last.
+            start.to_act = game.first_to_act() as u8;
+            start
+        }];
+        let mut seen = std::collections::HashSet::new();
+        let mut bad: Vec<String> = Vec::new();
+
+        while let Some(state) = frontier.pop() {
+            if game.is_terminal(&state) {
+                continue;
+            }
+            let signature = (
+                state.committed,
+                state.live,
+                state.acted,
+                state.to_act,
+                state.raises,
+                state.aggressor,
+            );
+            if !seen.insert(signature) {
+                continue;
+            }
+
+            if state.raises >= 1 {
+                let (small, big) = game.blind_seats();
+                let blind = |seat: usize| {
+                    if seat == small {
+                        to_chips(0.5)
+                    } else if seat == big {
+                        to_chips(1.0)
+                    } else {
+                        0
+                    }
+                };
+                // Anyone who raised must have acted, and so must everyone who
+                // acts before them in the order. A live seat that has put in
+                // nothing but its blind has plainly not acted, so finding one
+                // that ought to have would mean the state is unreachable.
+                let aggressor = state.aggressor as usize;
+                if aggressor < seats {
+                    let order = |seat: usize| (seat + seats - game.first_to_act()) % seats;
+                    for seat in 0..seats {
+                        let untouched =
+                            state.is_live(seat) && state.committed[seat] <= blind(seat);
+                        let acted_bit = state.acted & (1 << seat) != 0;
+                        if untouched && !acted_bit && order(seat) < order(aggressor) {
+                            bad.push(format!(
+                                "seat {seat} ({}) is live with nothing in and has not acted, \
+                                 yet seat {aggressor} after it has raised: \
+                                 committed {:?} live {:05b} acted {:05b} to_act {} raises {}",
+                                order(seat),
+                                state.committed,
+                                state.live,
+                                state.acted,
+                                state.to_act,
+                                state.raises,
+                            ));
+                        }
+                    }
+                }
+            }
+
+            for action in 0..game.moves(&state).len() {
+                frontier.push(game.apply(&state, action));
+            }
+        }
+
+        assert!(
+            bad.is_empty(),
+            "{} unreachable states, first few:\n{}",
+            bad.len(),
+            bad.iter().take(5).cloned().collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    /// Writes out, in words, every spot in the tree that faces a single raise.
+    ///
+    /// # Why print them rather than count them
+    ///
+    /// A count invites the reasonable objection that it must be wrong: there
+    /// are only five positions you can face an open from, so how can there be
+    /// hundreds of spots? The answer is that a spot is not just a position — it
+    /// is who limped, who called, and how much dead money they left behind —
+    /// and the quickest way to show that is to list them.
+    ///
+    /// # What makes a spot chartable
+    ///
+    /// A published chart covers one shape: exactly one raise, nobody called it,
+    /// nobody limped and folded, and the actor has put in nothing but a blind.
+    /// Players *behind* may still be to act — that is normal and is what
+    /// "BTN vs UTG" means. Counting instead by how many players are still live
+    /// gets this wrong, because the blinds have not folded yet when the button
+    /// decides, and it was wrong here first.
+    ///
+    /// Run with:
+    /// `cargo test --release -p poker-core -- --ignored --nocapture list_spots`
+    #[test]
+    #[ignore = "a listing for reporting; run with --ignored --nocapture"]
+    fn list_spots_facing_an_open() {
+        let seats = 6;
+        let game = Ring::for_play(seats, 100.0, Ladder::default());
+        // Seat zero is the button and the rest follow it round.
+        let name = |seat: usize| ["BTN", "SB", "BB", "UTG", "HJ", "CO"][seat];
+
+        let mut frontier = vec![{
+            let mut start = game.initial();
+            start.dealt = true;
+            // Preflop the action starts left of the big blind, not at seat
+            // zero. Leaving this at the default rotated the whole betting
+            // order and silently produced a different game — one where the
+            // blinds acted second and third instead of last.
+            start.to_act = game.first_to_act() as u8;
+            start
+        }];
+        let mut seen = std::collections::HashSet::new();
+        let mut clean: Vec<String> = Vec::new();
+        let mut messy: Vec<String> = Vec::new();
+
+        while let Some(state) = frontier.pop() {
+            if game.is_terminal(&state) {
+                continue;
+            }
+            let signature = (
+                state.committed,
+                state.live,
+                state.acted,
+                state.to_act,
+                state.raises,
+                state.aggressor,
+            );
+            if !seen.insert(signature) {
+                continue;
+            }
+
+            if state.raises == 1 {
+                let actor = game.current_player(&state);
+                let (small, big) = game.blind_seats();
+                let blind = |seat: usize| {
+                    if seat == small {
+                        to_chips(0.5)
+                    } else if seat == big {
+                        to_chips(1.0)
+                    } else {
+                        0
+                    }
+                };
+                let raiser = state.aggressor as usize;
+                let extra = |seat: usize| state.committed[seat] > blind(seat);
+
+                let folded: Vec<String> = (0..seats)
+                    .filter(|&seat| !state.is_live(seat))
+                    .map(|seat| {
+                        if extra(seat) {
+                            format!("{}(limped)", name(seat))
+                        } else {
+                            name(seat).to_string()
+                        }
+                    })
+                    .collect();
+                let called: Vec<&str> = (0..seats)
+                    .filter(|&seat| {
+                        state.is_live(seat) && seat != actor && seat != raiser && extra(seat)
+                    })
+                    .map(name)
+                    .collect();
+                let behind: Vec<&str> = (0..seats)
+                    .filter(|&seat| {
+                        state.is_live(seat) && seat != actor && seat != raiser && !extra(seat)
+                    })
+                    .map(name)
+                    .collect();
+
+                // Chartable: one raise, nothing called, no dead limp money,
+                // and the actor not yet invested. Players behind are fine.
+                let chartable = !extra(actor)
+                    && called.is_empty()
+                    && (0..seats).all(|seat| state.is_live(seat) || !extra(seat));
+
+                let line = format!(
+                    "{:<4} opens 2.5, {:<4} decides{:<11}  folded: {:<28} called: {:<14} behind: {}",
+                    name(raiser),
+                    name(actor),
+                    if extra(actor) { " (had limped)" } else { "" },
+                    if folded.is_empty() { "-".to_string() } else { folded.join(",") },
+                    if called.is_empty() { "-".to_string() } else { called.join(",") },
+                    if behind.is_empty() { "-".to_string() } else { behind.join(",") },
+                );
+                if chartable {
+                    clean.push(line);
+                } else {
+                    messy.push(line);
+                }
+            }
+
+            for action in 0..game.moves(&state).len() {
+                frontier.push(game.apply(&state, action));
+            }
+        }
+
+        clean.sort();
+        messy.sort();
+        println!(
+            "\n{} spots facing a single raise, 6-handed\n",
+            clean.len() + messy.len()
+        );
+        println!("--- {} a published chart covers ---", clean.len());
+        for line in &clean {
+            println!("  {line}");
+        }
+        println!("\n--- {} it does not; a sample ---", messy.len());
+        for (index, line) in messy.iter().enumerate() {
+            if index % 19 == 0 {
+                println!("  {line}");
+            }
+        }
+    }
+
     fn play(game: &Ring, mut state: State, moves: &[Move]) -> State {
         for wanted in moves {
             let available = game.moves(&state);
