@@ -634,6 +634,15 @@ mod tests {
             decisions: BTreeMap<&'static str, u64>,
             /// How deep the preflop betting has gone in the hand being played.
             deepest: u8,
+            /// Seats that put money in preflop by choice this hand, and seats
+            /// that raised. These are what a poker room's statistics show, and
+            /// a table full of bots is recognisable by them long before anyone
+            /// looks at a decision.
+            voluntary: [bool; 7],
+            raised: [bool; 7],
+            hands_dealt: u64,
+            vpip: u64,
+            pfr: u64,
         }
         type Shared = Rc<RefCell<Census>>;
 
@@ -674,7 +683,22 @@ mod tests {
                     *census.decisions.entry(kind).or_default() += 1;
                     census.deepest = census.deepest.max(view.raises);
                 }
-                self.inner.act(view, rng)
+                let action = self.inner.act(view, rng);
+                if view.street == Street::Preflop {
+                    let mut census = self.census.borrow_mut();
+                    match action {
+                        // Calling a blind is voluntary; posting one is not, and
+                        // the seat that checks its option has not chosen to
+                        // play either.
+                        Action::Call => census.voluntary[view.seat] = true,
+                        Action::RaiseTo(_) => {
+                            census.voluntary[view.seat] = true;
+                            census.raised[view.seat] = true;
+                        }
+                        _ => {}
+                    }
+                }
+                action
             }
         }
 
@@ -724,6 +748,18 @@ mod tests {
             let mut census = census.borrow_mut();
             let name = depth_name(census.deepest);
             census.deepest = 0;
+            // One hand per seat dealt, counted the way a tracker counts it.
+            for seat in 0..7 {
+                census.hands_dealt += 1;
+                if census.voluntary[seat] {
+                    census.vpip += 1;
+                }
+                if census.raised[seat] {
+                    census.pfr += 1;
+                }
+            }
+            census.voluntary = [false; 7];
+            census.raised = [false; 7];
             drop(census);
             *money.entry(name).or_default() +=
                 result.net.iter().filter(|net| **net < 0).map(|net| -net).sum::<i64>();
@@ -767,6 +803,15 @@ mod tests {
                 },
             );
         }
+        // What a poker room's own statistics would show. The club removes
+        // players below 20% VPIP for stalling, so this is not a curiosity — it
+        // is a condition of being allowed to keep playing.
+        println!(
+            "\nVPIP {:.1}%   PFR {:.1}%   over {} hands dealt",
+            census.vpip as f64 / census.hands_dealt as f64 * 100.0,
+            census.pfr as f64 / census.hands_dealt as f64 * 100.0,
+            census.hands_dealt
+        );
         assert!(total > 0 && staked > 0);
     }
 
