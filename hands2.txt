@@ -1,0 +1,72 @@
+
+HAND 1  Ks 4d
+  preflop  board -              pot    7.5  to call   2.0
+           7-handed preflop
+           fold 16%  passive 83%  raise 0%  jam 1%
+           => Call
+  flop     board 6h 5d Jd       pot   15.8  to call   3.1
+           HEURISTIC - postflop pot with more than two players
+           
+           => Fold
+  result   -2.50 bb
+
+HAND 2  Jc 8c
+  preflop  board -              pot    4.0  to call   2.0
+           7-handed preflop
+           fold 12%  passive 87%  raise 0%  jam 1%
+           => Call
+  flop     board Ts Ah Qc       pot    9.3  to call   3.3
+           heads-up flop
+           fold 1%  check/call 89%  bet small 9%  bet large 1%  all in 0%
+           => Call
+  turn     board Ts Ah Qc 8h    pot   16.8  to call   4.2
+           heads-up turn
+           fold 4%  check/call 86%  bet small 3%  bet large 3%  all in 3%
+           => Call
+  river    board Ts Ah Qc 8h 7d pot   76.0  to call  27.0
+           heads-up river
+           fold 2%  check/call 98%
+           => Call
+  result   +31.90 bb
+
+HAND 3  Jc 8d
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 4  Ac 3h
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 5  Qh 5h
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 6  Qh 4h
+  preflop  board -              pot    1.5  to call   1.0
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   -1.00 bb
+
+HAND 7  5s 5c
+  preflop  board -              pot   13.0  to call   2.0
+           7-handed preflop
+           fold 43%  passive 48%  raise 2%  jam 8%
+           => Call
+  flop     board Tc Ad Ks       pot   30.0  to call   7.5
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call
+  turn     board Tc Ad Ks 7d    pot  388.4  to call  57.9
+           HEURISTIC - postflop pot with more than two players
+           
+           => Call

@@ -67,6 +67,48 @@ fn informative(strategy: &[f32]) -> bool {
 /// passes.
 const FLAT: f32 = 0.02;
 
+/// Caps what a guess may stake.
+///
+/// # What this is for
+///
+/// The fallback is not a strategy. It is a set of rules for spots nothing has
+/// solved, and it has no model of the situation it is asked about — most often
+/// a pot with three players in it, which no tree here covers.
+///
+/// Left alone it will happily commit a stack. It called three hundred and
+/// twenty-two big blinds with a pair of fives on a board of ace, king, ten,
+/// three-handed, and the only reason that cost forty blinds rather than
+/// everything is that the session's loss limit stopped it.
+///
+/// So a guess is allowed to be wrong, and not allowed to be ruinous. Checking
+/// is always free and always permitted. Calling is capped at a fraction of what
+/// is behind; past that the hand is given up, which is a bounded loss where the
+/// call is an unbounded one. Raising is left alone: the fallback only raises
+/// with a made hand, and a raise it cannot afford is refused by the table
+/// anyway.
+///
+/// This is a rail, not a strategy. The strategy is a multiway solve, and until
+/// one exists this stops the absence of it from being expensive.
+fn bounded(action: Action, view: &View) -> Action {
+    /// How much of the stack a guess may put in on one call.
+    ///
+    /// A quarter: enough to continue in an ordinary pot, far short of the
+    /// stack-committing calls that make an unmodelled spot dangerous.
+    const MOST: f64 = 0.25;
+
+    match action {
+        Action::Call if view.to_call > 0 => {
+            let ceiling = (view.stack as f64 * MOST) as u64;
+            if view.to_call > ceiling && view.legal.can_fold {
+                Action::Fold
+            } else {
+                action
+            }
+        }
+        other => other,
+    }
+}
+
 /// Turns a solved move into something the table will accept.
 ///
 /// The size comes from the tree rather than being recomputed here, so that a
@@ -830,7 +872,7 @@ impl Agent for BlueprintAgent {
                 *self.reasons.entry(reason).or_insert(0) += 1;
                 source = Source::Fallback { reason };
                 frequencies.clear();
-                self.fallback.act(view, rng)
+                bounded(self.fallback.act(view, rng), view)
             }
         };
 
@@ -866,6 +908,7 @@ mod tests {
     use crate::bench::{duplicate_match, AlwaysCall, AlwaysFold, AlwaysJam};
     use crate::cfr::Solver;
     use crate::pushfold::EquityTable;
+    use crate::betting::LegalActions;
     use crate::table::Table;
     use crate::texture::Textures;
 
@@ -1005,6 +1048,61 @@ mod tests {
             share * 100.0,
             counts.solved,
             counts.solved + counts.fallback
+        );
+    }
+
+    /// A guess may be wrong; it may not be ruinous.
+    ///
+    /// Written after the fallback called three hundred and twenty-two big
+    /// blinds with a pair of fives, three-handed, on a board of ace, king and
+    /// ten. Nothing was broken — no tree covers a three-way pot, so the guess
+    /// was doing its job, and its job had no upper bound on what it could stake.
+    #[test]
+    fn a_guess_may_not_commit_the_stack() {
+        let legal = LegalActions {
+            can_fold: true,
+            can_check: false,
+            call_cost: Some(32_270),
+            raise_to: None,
+        };
+        let hole = crate::card::parse_cards("5s5c").expect("two cards");
+        let ruinous = View {
+            hole: [hole[0], hole[1]],
+            board: &[],
+            street: Street::Turn,
+            position: Position::Middle,
+            seat: 0,
+            players: 7,
+            active: 3,
+            pot: 44_630,
+            to_call: 32_270,
+            stack: 33_000,
+            stacks: &[33_000, 50_000, 50_000],
+            committed: &[1_000, 1_000, 1_000],
+            live: &[true, true, true],
+            street_committed: &[0, 32_270, 32_270],
+            acted: &[false, true, true],
+            raises: 1,
+            settled: None,
+            big_blind: 100,
+            legal: &legal,
+        };
+        assert_eq!(bounded(Action::Call, &ruinous), Action::Fold);
+
+        // An ordinary price is left alone, since folding everything is its own
+        // way of being wrong.
+        let ordinary = View {
+            to_call: 300,
+            ..ruinous
+        };
+        assert_eq!(bounded(Action::Call, &ordinary), Action::Call);
+
+        // Checking is free, so nothing is capped.
+        assert_eq!(bounded(Action::Check, &ruinous), Action::Check);
+        // And a raise is the table's business to refuse, not this.
+        assert_eq!(
+            bounded(Action::RaiseTo(60_000), &ruinous),
+            Action::RaiseTo(60_000)
         );
     }
 
