@@ -344,6 +344,47 @@ mod tests {
         found
     }
 
+    /// The notation a solver exports its preflop ranges in.
+    ///
+    /// Checked against a real cutoff opening range, because that is the form
+    /// the preflop strategy will arrive in: published ranges rather than a
+    /// solve of our own, which reached 845,000 information sets with a quarter
+    /// of them untrained and disagreed with itself about king-queen.
+    #[test]
+    fn a_solver_export_reads_back_as_a_range() {
+        let cutoff = "22+, A2s+, K7s+, Q9s+, J9s+, T8s+, 97s+, 87s, 76s,                       A9o+, KTo+, QTo+, JTo";
+        let range: Range = cutoff.parse().expect("standard notation");
+
+        let has = |hand: &str| {
+            range.weight(hand.parse::<HandClass>().expect("a hand")) > 0.0
+        };
+        // Named directly, or reached by a `+`.
+        assert!(has("AA") && has("22"), "22+ covers every pair");
+        assert!(has("A2s") && has("AKs"), "A2s+ climbs to AKs");
+        assert!(!has("A2o"), "A9o+ starts at nine, not two");
+        assert!(has("A9o") && has("AKo"));
+        assert!(has("JTo") && !has("J9o"), "JTo alone");
+        assert!(has("76s") && !has("65s"));
+        // A `+` on a kicker stops below the high card. There is no need to
+        // check for `AAs`: it is not a hand and will not parse, so the notation
+        // cannot express the mistake in the first place.
+
+        // Weights survive, for hands a solver plays only part of the time.
+        let mixed: Range = "AA, KQo:0.35".parse().expect("weights");
+        assert_eq!(mixed.weight("AA".parse().expect("a hand")), 1.0);
+        assert_eq!(mixed.weight("KQo".parse().expect("a hand")), 0.35);
+
+        // And the whole thing round-trips through its own notation.
+        let again: Range = range.to_string().parse().expect("our own output");
+        for class in HandClass::all() {
+            assert_eq!(
+                again.weight(class),
+                range.weight(class),
+                "{class} did not survive a round trip"
+            );
+        }
+    }
+
     #[test]
     fn a_single_class_parses() {
         assert_eq!(classes("AA"), vec![class("AA")]);
