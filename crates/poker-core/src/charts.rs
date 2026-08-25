@@ -259,8 +259,7 @@ impl Charts {
 
             let text = std::fs::read_to_string(&path)
                 .map_err(|why| format!("{}: {why}", path.display()))?;
-            let range =
-                Range::from_combos(&text).map_err(|why| format!("{}: {why}", path.display()))?;
+            let range = read_range(&text).map_err(|why| format!("{}: {why}", path.display()))?;
 
             let held = charts.get(spot).cloned().unwrap_or_default();
             charts.insert(spot, held.with(action, range));
@@ -318,6 +317,47 @@ impl Charts {
                 }
             })
             .collect()
+    }
+}
+
+/// Reads a range written either way a range gets written.
+///
+/// # Why both
+///
+/// A solver exports one entry per combination — `AcKd: 1,Ah5s: 0.22` — and that
+/// is what the files here normally hold. But a range a person writes by hand is
+/// in the notation people read: `22+, A2s+, KTo+`. Both describe a range, and a
+/// folder of charts is a place where both turn up: exports for the spots
+/// somebody has got round to, and something hand-written standing in for the
+/// spots they have not.
+///
+/// The two are told apart by looking rather than by asking. A combination entry
+/// names two exact cards and always carries a weight after a colon, which no
+/// hand-written term does unless it is a weighted one — and a weighted term
+/// like `AA:0.75` still names a hand class rather than two cards. So a colon
+/// following four characters that parse as two cards means an export, and
+/// anything else is notation.
+///
+/// A hand-written stand-in is worse than an export and should be replaced by
+/// one. It is allowed because the alternative is not "wait for the export", it
+/// is "play no strategy at all in that spot", and a rough range beats the
+/// heuristic that folds most of a big blind.
+fn read_range(text: &str) -> Result<Range, String> {
+    let looks_exported = text
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .take(4)
+        .any(|entry| {
+            entry
+                .split_once(':')
+                .is_some_and(|(cards, _)| cards.trim().len() == 4)
+        });
+
+    if looks_exported {
+        Range::from_combos(text).map_err(|why| why.to_string())
+    } else {
+        text.parse::<Range>().map_err(|why| why.to_string())
     }
 }
 
@@ -624,9 +664,15 @@ mod tests {
         use std::collections::BTreeMap;
         use std::rc::Rc;
 
-        let charts = Charts::load(std::path::Path::new("../../data/charts"))
-            .or_else(|_| Charts::load(std::path::Path::new("data/charts")))
-            .expect("the exported ranges");
+        // Which folder of charts to measure. Set POKER_CHARTS to compare one
+        // set against another — the point of the run is usually "does adding
+        // these ranges move the numbers", and that needs two folders.
+        let named = std::env::var("POKER_CHARTS").unwrap_or_else(|_| "data/charts".to_string());
+        let charts = Charts::load(std::path::Path::new(&format!("../../{named}")))
+            .or_else(|_| Charts::load(std::path::Path::new(&named)))
+            .expect("the ranges named by POKER_CHARTS");
+        println!("
+measuring {named}");
 
         #[derive(Default)]
         struct Census {
@@ -813,6 +859,25 @@ mod tests {
             census.hands_dealt
         );
         assert!(total > 0 && staked > 0);
+    }
+
+    /// A folder of charts may hold exports and hand-written ranges together.
+    #[test]
+    fn both_ways_of_writing_a_range_are_read() {
+        // What a solver exports: two exact cards and a weight.
+        let exported = read_range("AcKd: 1,AcKh: 1,AcKs: 1,Ac5c: 0.5").expect("an export");
+        assert!(exported.weight("AKo".parse().expect("a hand")) > 0.0);
+
+        // What a person writes.
+        let written = read_range("22+, A2s+, KTo+").expect("notation");
+        assert!((written.weight("22".parse().expect("a hand")) - 1.0).abs() < 1e-9);
+        assert!((written.weight("KTo".parse().expect("a hand")) - 1.0).abs() < 1e-9);
+        assert_eq!(written.weight("K9o".parse().expect("a hand")), 0.0);
+
+        // And a weighted hand-written term, which has a colon but names a hand
+        // class rather than two cards, is still notation.
+        let mixed = read_range("AA, KQo:0.35").expect("weighted notation");
+        assert!((mixed.weight("KQo".parse().expect("a hand")) - 0.35).abs() < 1e-9);
     }
 
     #[test]
