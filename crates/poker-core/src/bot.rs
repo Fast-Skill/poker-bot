@@ -412,14 +412,20 @@ impl BlueprintAgent {
     /// it makes it raise them at a price the range was not solved against,
     /// which is a smaller error but a real one.
     ///
-    /// The sizes are the ones the published six-handed solutions use: two and a
-    /// half blinds to open, and a three-bet of three times the raise in
-    /// position or four times out of it, since acting last afterwards is worth
-    /// a smaller price.
+    /// The sizes are the ones the solution these ranges came from was solved
+    /// at, confirmed with its author: two and a half blinds to open, and a
+    /// three-bet to eleven out of position — four and a half times the raise —
+    /// or three times it in position, since acting last afterwards is worth a
+    /// smaller price.
+    ///
+    /// Four times was the first guess and is close enough that its author
+    /// called the difference in value "basically zero". It is set to the real
+    /// figure anyway: a size is free to get right, and a range played at a
+    /// price it was not solved against is wrong in a way nothing reports.
     fn chart_raise(&self, view: &View, spot: charts::Spot) -> Option<u64> {
         const OPEN: f64 = 2.5;
         const IN_POSITION: f64 = 3.0;
-        const OUT_OF_POSITION: f64 = 4.0;
+        const OUT_OF_POSITION: f64 = 4.4;
 
         let (least, most) = view.legal.raise_to?;
         let target = match spot.versus {
