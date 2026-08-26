@@ -1,0 +1,2474 @@
+
+HAND 1  Ks Kd
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           raise 100%
+           => RaiseTo(750)
+  flop     board 4s Js 4d       pot   28.9  to call  12.4
+           heads-up flop
+           fold 0%  check/call 95%  bet small 3%  bet large 1%  all in 1%
+           => Call
+  turn     board 4s Js 4d 3c    pot   41.3  to call   0.0
+           heads-up turn
+           check/call 74%  bet small 24%  bet large 2%  all in 1%
+           => RaiseTo(1362)
+  river    board 4s Js 4d 3c 8s pot   68.5  to call   0.0
+           heads-up river
+           check/call 0%  bet small 3%  bet large 20%  all in 77%
+           => RaiseTo(6650)
+  result   +101.50 bb
+
+HAND 2  5s Ah
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 97%  passive 0%  raise 0%  jam 3%
+           => Fold
+  result   +4.00 bb
+
+HAND 3  3h 9d
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 4  6d 5h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 5  5s Ad
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 78%  raise 22%
+           => Fold
+  result   +0.00 bb
+
+HAND 6  2d Ac
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-hj
+           fold 100%  raise 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 7  4s Jc
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 8  5d 3s
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 9  9d As
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 98%  passive 0%  raise 0%  jam 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 10  Ah 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 11  5c 3d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 12  3d Jh
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 13  9h Th
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           passive 96%  raise 4%
+           => Call
+  flop     board 3s 7h 2h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => RaiseTo(182)
+  turn     board 3s 7h 2h 8d    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 5%  bet large 1%  all in 0%
+           => RaiseTo(302)
+  river    board 3s 7h 2h 8d 3d pot   15.2  to call   0.0
+           heads-up river
+           check/call 15%  bet small 28%  bet large 5%  all in 52%
+           => Check
+  result   +0.00 bb
+
+HAND 14  Tc 9c
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 15  Qs Jc
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 16  2s 7h
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 17  2s 3s
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 18  Jd Kd
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 19  Qs 7c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 20  9d 9h
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 21  Ts 9h
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 22  8s 4s
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 23  9h 8c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 24  9h Qs
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 25  2s 5c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 26  4d Qs
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 27  7s Ks
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 60%  raise 40%
+           => RaiseTo(1000)
+  flop     board 7d 3s 9h       pot   21.0  to call   0.0
+           heads-up flop
+           check/call 2%  bet small 50%  bet large 47%  all in 1%
+           => RaiseTo(693)
+  turn     board 7d 3s 9h Kd    pot   34.9  to call   0.0
+           heads-up turn
+           check/call 80%  bet small 19%  bet large 0%  all in 0%
+           => Check
+  river    board 7d 3s 9h Kd 6c pot   34.9  to call   0.0
+           heads-up river
+           check/call 5%  bet small 40%  bet large 2%  all in 52%
+           => RaiseTo(8307)
+  result   +0.00 bb
+
+HAND 28  8d 6s
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 29  Qd Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  flop     board 3c 2c 5d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 68%  bet small 24%  bet large 7%  all in 1%
+           => Check
+  turn     board 3c 2c 5d 7h    pot    7.3  to call   1.8
+           heads-up turn
+           fold 0%  check/call 94%  bet small 2%  bet large 2%  all in 1%
+           => Call
+  river    board 3c 2c 5d 7h 4d pot    9.1  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 30  2d 9c
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 31  6h 2h
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 32  Jc Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  flop     board Kd 7d Qd       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Kd 7d Qd Ts    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board Kd 7d Qd Ts Kh pot    5.5  to call   0.0
+           heads-up river
+           check/call 81%  bet small 3%  bet large 15%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 33  2c Kd
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 34  6c Jc
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 3%  raise 97%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 35  Ac 4c
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 3%  raise 97%
+           => RaiseTo(750)
+  flop     board 7h 9d 5h       pot   16.5  to call   0.0
+           heads-up flop
+           check/call 72%  bet small 1%  bet large 27%  all in 0%
+           => Check
+  turn     board 7h 9d 5h 2s    pot   16.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 1%  all in 0%
+           => Check
+  river    board 7h 9d 5h 2s 7d pot  109.0  to call  92.5
+           heads-up river
+           fold 98%  check/call 2%
+           => Fold
+  result   -7.50 bb
+
+HAND 36  3c 9h
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 37  Qh 8h
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 38  Td 8d
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 39  7c 6d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +101.50 bb
+
+HAND 40  Jh Ts
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           passive 64%  raise 36%
+           => RaiseTo(1000)
+  preflop  board -              pot  110.5  to call  90.0
+           7-handed preflop
+           fold 100%  passive 0%
+           => Fold
+  result   +10.50 bb
+
+HAND 41  3s 8c
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 42  4s 5c
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 43  2d 5s
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 44  Jh Jc
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 1%  raise 99%
+           => RaiseTo(750)
+  result   +0.00 bb
+
+HAND 45  6s Ks
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 29%  raise 71%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 46  3c 4d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 47  6c Th
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 48  7c Ad
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 49  4s Jc
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 50  7d 3s
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 51  Ks 5c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 52  5d 9h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 53  7c 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 54  7c 4h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 55  4s 5d
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 56  Jh 9h
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 57  4h As
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 78%  raise 22%
+           => Fold
+  result   +0.00 bb
+
+HAND 58  8h 9s
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 59  Jh 8s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 60  Qh 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 61  8d Kh
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 62%  raise 38%
+           => Fold
+  result   +0.00 bb
+
+HAND 62  Ac 8c
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%  raise 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 63  8d 6d
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 64  Kh 6c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 65  8d 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 66  5d Th
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 67  3h 2s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   -2.50 bb
+
+HAND 68  8h 4d
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 69  2h 9h
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 70  7c Qh
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 71  5c 6d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 72  Qh Kd
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 27%  raise 73%
+           => Fold
+  result   +0.00 bb
+
+HAND 73  5s 9c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 74  Tc 4d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 75  2h 6s
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 76  2c 8h
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 77  Qs 2h
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 78  Qd Kc
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 79  3d 7h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 80  Jd 3s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 81  Qh 4c
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 82  8s 7s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 83  6s Qh
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 84  Jh Tc
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 85  Jh Qd
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 88%  passive 10%  raise 0%  jam 1%
+           => Fold
+  result   +4.00 bb
+
+HAND 86  Ts 6c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 87  6c 7c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 91%  raise 9%
+           => Fold
+  result   -2.50 bb
+
+HAND 88  7s Qs
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 99%  raise 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 89  4h 2s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 90  Ts 4c
+  preflop  board -              pot   11.5  to call   7.5
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 91  2h 6c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 92  Ad 8d
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 59%  raise 41%
+           => RaiseTo(750)
+  preflop  board -              pot   24.0  to call   5.0
+           7-handed preflop
+           fold 43%  passive 50%  raise 0%  jam 7%
+           => Call
+  flop     board 9h Qc 2c       pot   29.0  to call   0.0
+           heads-up flop
+           check/call 94%  bet small 1%  bet large 5%  all in 0%
+           => Check
+  flop     board 9h Qc 2c       pot   50.8  to call  21.8
+           heads-up flop
+           fold 91%  check/call 2%  bet small 2%  bet large 2%  all in 2%
+           => Fold
+  result   +16.50 bb
+
+HAND 93  Jd Qh
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 94  9c 9d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 95  3s 8s
+  preflop  board -              pot   11.5  to call   6.5
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 96  5s Kh
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 97  Tc Qd
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 98  Ah 4d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 99  Ah 8s
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 72%  raise 28%
+           => Fold
+  result   +0.00 bb
+
+HAND 100  9c 6h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 101  2c Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 102  2s Ks
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%  raise 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 103  2d Jc
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 104  7h 2c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 105  Kd 5c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 106  6h 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 107  As Qh
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 108  As Jc
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-btn
+           raise 100%
+           => RaiseTo(1000)
+  flop     board Qh 5h 7h       pot   21.0  to call   0.0
+           heads-up flop
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Qh 5h 7h 9h    pot   21.0  to call   0.0
+           heads-up turn
+           check/call 53%  bet small 42%  bet large 4%  all in 0%
+           => RaiseTo(693)
+  river    board Qh 5h 7h 9h 8s pot   34.9  to call   0.0
+           heads-up river
+           check/call 48%  bet small 41%  bet large 2%  all in 10%
+           => Check
+  river    board Qh 5h 7h 9h 8s pot  117.9  to call  83.1
+           heads-up river
+           fold 100%  check/call 0%
+           => Fold
+  result   +17.93 bb
+
+HAND 109  Ad Ac
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           raise 100%
+           => RaiseTo(750)
+  preflop  board -              pot  109.0  to call  92.5
+           7-handed preflop
+           fold 0%  passive 100%
+           => Call
+  result   +101.50 bb
+
+HAND 110  Kh Qh
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 1%  passive 95%  raise 0%  jam 5%
+           => Call
+  flop     board 9s Ts Th       pot   21.0  to call   0.0
+           heads-up flop
+           check/call 97%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board 9s Ts Th 9d    pot   27.9  to call   6.9
+           heads-up turn
+           fold 0%  check/call 98%  bet small 2%  bet large 0%  all in 0%
+           => Call
+  river    board 9s Ts Th 9d Jh pot   34.9  to call   0.0
+           heads-up river
+           check/call 0%  bet small 0%  bet large 85%  all in 14%
+           => RaiseTo(2615)
+  result   +0.00 bb
+
+HAND 111  4h 5h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 80%  raise 20%
+           => Fold
+  result   +0.00 bb
+
+HAND 112  7c Jc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 113  9h 7s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 114  Qc As
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           passive 100%  raise 0%
+           => Call
+  flop     board 5d Qs 9s       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 4%  bet large 2%  all in 3%
+           => Check
+  turn     board 5d Qs 9s 9c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 84%  bet small 8%  bet large 8%  all in 1%
+           => RaiseTo(182)
+  river    board 5d Qs 9s 9c 6c pot    9.1  to call   0.0
+           heads-up river
+           check/call 70%  bet small 14%  bet large 2%  all in 14%
+           => Check
+  result   +0.00 bb
+
+HAND 115  3s 3d
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 116  8h 3c
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 117  Jc Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  flop     board Jh Ac 4s       pot    7.3  to call   1.8
+           heads-up flop
+           fold 0%  check/call 12%  bet small 71%  bet large 6%  all in 11%
+           => Call
+  turn     board Jh Ac 4s 6s    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 15%  bet small 40%  bet large 44%  all in 1%
+           => Check
+  river    board Jh Ac 4s 6s 2d pot    9.1  to call   0.0
+           heads-up river
+           check/call 0%  bet small 1%  bet large 92%  all in 7%
+           => RaiseTo(686)
+  result   +0.00 bb
+
+HAND 118  Jh 3c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +101.00 bb
+
+HAND 119  7s 7h
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 120  Jc Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  flop     board Qd 7h Td       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 68%  bet small 24%  bet large 7%  all in 1%
+           => Check
+  turn     board Qd 7h Td Qs    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 55%  bet small 13%  bet large 27%  all in 5%
+           => Check
+  river    board Qd 7h Td Qs 4c pot    5.5  to call   0.0
+           heads-up river
+           check/call 0%  bet small 5%  bet large 19%  all in 76%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 121  8d 5h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 122  5h 6c
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 123  5h 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 124  Jc 5c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 125  3c 7s
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 126  As 4h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +17.27 bb
+
+HAND 127  Jh 8h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +44.08 bb
+
+HAND 128  3s 7s
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 129  9d Td
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 130  5d 5c
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  flop     board 4c 3d 4d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 4c 3d 4d Kd    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4c 3d 4d Kd 3h pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +3.00 bb
+
+HAND 131  4s Ts
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 132  9d Ah
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 17%  raise 83%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 98%  passive 0%  raise 0%  jam 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 133  Jc 5h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +3.00 bb
+
+HAND 134  Ah Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 135  Kd 8h
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 32%  raise 68%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 136  2c 8s
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 137  Kc Jd
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 42%  passive 57%  raise 0%  jam 1%
+           => Call
+  flop     board 8h 7h 2h       pot   36.8  to call  15.8
+           heads-up flop
+           fold 34%  check/call 60%  bet small 6%  bet large 0%  all in 0%
+           => Call
+  turn     board 8h 7h 2h 8c    pot   69.8  to call  17.3
+           heads-up turn
+           fold 0%  check/call 97%  bet small 1%  all in 1%
+           => Call
+  river    board 8h 7h 2h 8c Jc pot   87.2  to call   0.0
+           heads-up river
+           check/call 0%  bet small 1%  all in 99%
+           => RaiseTo(5692)
+  result   +0.00 bb
+
+HAND 138  5c Jd
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 139  Ts 7h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 140  7h 5d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 141  4h 5c
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 142  3s As
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   +4.00 bb
+
+HAND 143  6h Jh
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 90%  passive 7%  raise 0%  jam 3%
+           => Fold
+  result   -2.50 bb
+
+HAND 144  6h Qd
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 145  3c Qh
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 146  8d 3d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 147  Td 8d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 148  Tc Qs
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           passive 54%  raise 46%
+           => Call
+  flop     board 3d 2h 6c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 2%  all in 0%
+           => Check
+  turn     board 3d 2h 6c 3h    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => Check
+  river    board 3d 2h 6c 3h 6s pot    5.5  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  river    board 3d 2h 6c 3h 6s pot    9.6  to call   4.1
+           heads-up river
+           fold 95%  check/call 3%  bet small 0%  bet large 1%  all in 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 149  2d Kc
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 150  Kh Jh
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  flop     board Ts Ah 9c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 6%  bet large 1%  all in 0%
+           => Check
+  turn     board Ts Ah 9c 7d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Ts Ah 9c 7d 6c pot    5.5  to call   0.0
+           heads-up river
+           check/call 87%  bet small 1%  bet large 8%  all in 4%
+           => Check
+  result   -2.50 bb
+
+HAND 151  9h 3s
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 152  Qh 4h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 153  8h Ks
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 154  8d 9d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 155  5h 8h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           fold 0%  passive 100%
+           => Call
+  flop     board 6c Ah 3c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board 6c Ah 3c 3h    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => Check
+  river    board 6c Ah 3c 3h 2s pot    5.5  to call   0.0
+           heads-up river
+           check/call 3%  bet small 86%  bet large 4%  all in 7%
+           => RaiseTo(182)
+  result   +4.82 bb
+
+HAND 156  5s 8s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 157  8d 5d
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 158  Ts 3d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 159  4h 8h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 160  Td Th
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 0%  passive 80%  raise 19%  jam 1%
+           => RaiseTo(900)
+  result   +0.00 bb
+
+HAND 161  9s Ks
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 80%  passive 17%  raise 0%  jam 3%
+           => Fold
+  result   +0.00 bb
+
+HAND 162  3c 7d
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 163  2h Tc
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 164  2s 8s
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 165  5c 7d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 166  Th 2h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 167  9h Qd
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 168  Ts Qs
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 169  Kh 5s
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 170  8d Jd
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 171  9s Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 172  Jh 3h
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 173  2h 7d
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 174  8d 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 175  6s 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 176  2d 4h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 177  Ad 8c
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   -100.00 bb
+
+HAND 178  Qh 5h
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 179  Td Jc
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +38.50 bb
+
+HAND 180  5c 7c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 181  9d 3d
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 182  2h Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   -19.88 bb
+
+HAND 183  Kc 8h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 184  5d Jc
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 185  5h Jd
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 186  Js 4c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   -21.74 bb
+
+HAND 187  Jd 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   -4.32 bb
+
+HAND 188  4d 5h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 189  Td 2h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +3.00 bb
+
+HAND 190  8s 5d
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 191  8c 6s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 192  3c 2s
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 193  Tc 7s
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +11.00 bb
+
+HAND 194  Kc 9h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   -2.50 bb
+
+HAND 195  6s Ah
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 196  3c 2c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 197  4d 8h
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 198  2c 4s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 199  7c As
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 200  9d 5h
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 201  6h 2s
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 202  Ad Ts
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 203  3c Ah
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 204  Kh 8s
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 205  Qd Tc
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 206  8d Jh
+  preflop  board -              pot   11.5  to call   7.5
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 207  2s Jd
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 208  5d 7d
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 209  Jd Jh
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 210  9h Qc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 211  4s Ad
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 1%  raise 99%
+           => RaiseTo(750)
+  flop     board 9d 4h 8h       pot   15.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board 9d 4h 8h 9s    pot   15.0  to call   0.0
+           heads-up turn
+           check/call 26%  bet small 73%  bet large 1%  all in 0%
+           => RaiseTo(495)
+  river    board 9d 4h 8h 9s As pot   24.9  to call   0.0
+           heads-up river
+           check/call 0%  bet small 0%  bet large 91%  all in 8%
+           => RaiseTo(1868)
+  result   +0.00 bb
+
+HAND 212  2c 2d
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           raise 100%
+           => RaiseTo(250)
+  flop     board 6h 5c Qd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 6h 5c Qd Jh    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 6h 5c Qd Jh    pot    8.8  to call   3.8
+           heads-up turn
+           fold 87%  check/call 1%  bet small 3%  bet large 9%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 213  5s 3s
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 214  3c Ts
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 215  Th As
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 216  Kh 8d
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 217  Ts Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   13.5  to call   7.5
+           7-handed preflop
+           fold 35%  passive 63%  raise 0%  jam 2%
+           => Call
+  flop     board Jd 7s 2c       pot   21.0  to call   0.0
+           heads-up flop
+           check/call 1%  bet small 13%  bet large 85%  all in 1%
+           => RaiseTo(1575)
+  turn     board Jd 7s 2c 4h    pot   52.5  to call   0.0
+           heads-up turn
+           check/call 13%  bet small 83%  bet large 3%  all in 1%
+           => RaiseTo(1733)
+  river    board Jd 7s 2c 4h 3d pot   87.2  to call   0.0
+           heads-up river
+           check/call 0%  bet small 1%  all in 99%
+           => RaiseTo(5692)
+  result   +0.00 bb
+
+HAND 218  Kh 8c
+  preflop  board -              pot    3.5  to call   1.5
+           chart bb-vs-sb
+           fold 62%  raise 38%
+           => Fold
+  result   +0.00 bb
+
+HAND 219  Ac 7d
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 220  As 2c
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 83%  raise 17%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 221  Kc 3c
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  flop     board 7h Qc 8d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 16%  bet small 28%  bet large 56%  all in 0%
+           => RaiseTo(413)
+  result   +0.00 bb
+
+HAND 222  Qc Jh
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 223  8h Th
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 224  Kd As
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 225  2s Qc
+  preflop  board -              pot   11.5  to call   6.5
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 226  Qd 8h
+  preflop  board -              pot   11.5  to call   7.0
+           chart cold
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 227  5s Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 228  3c 6d
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 229  Qs 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 230  4h 3d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +3.00 bb
+
+HAND 231  Ts 7d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 232  Qs Qc
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           raise 100%
+           => RaiseTo(1000)
+  flop     board 2c 6s Jh       pot   21.0  to call   0.0
+           heads-up flop
+           check/call 84%  bet small 13%  bet large 3%  all in 1%
+           => RaiseTo(693)
+  turn     board 2c 6s Jh Tc    pot   34.9  to call   0.0
+           heads-up turn
+           check/call 82%  bet small 17%  bet large 1%  all in 1%
+           => Check
+  turn     board 2c 6s Jh Tc    pot   46.4  to call  11.5
+           heads-up turn
+           fold 0%  check/call 94%  bet small 5%  bet large 1%  all in 0%
+           => RaiseTo(3059)
+  river    board 2c 6s Jh Tc 9c pot   96.0  to call   0.0
+           heads-up river
+           check/call 93%  bet small 2%  all in 5%
+           => Check
+  river    board 2c 6s Jh Tc 9c pot  148.5  to call  52.5
+           heads-up river
+           fold 0%  check/call 100%
+           => Call
+  result   +0.00 bb
+
+HAND 233  9s Kh
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 234  8c 3d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 235  As Ad
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 0%  raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 0%  passive 0%  raise 3%  jam 97%
+           => RaiseTo(10000)
+  result   +0.00 bb
+
+HAND 236  7c 9h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 237  4c Qs
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 238  7s Kd
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 239  Jd Qc
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 240  Qs 6h
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 241  As 5s
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  flop     board 6h 3h Ts       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 67%  bet small 32%  bet large 1%  all in 0%
+           => Check
+  turn     board 6h 3h Ts 7d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 1%  all in 0%
+           => Check
+  river    board 6h 3h Ts 7d 3d pot    5.5  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 242  3d Jd
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   -2.50 bb
+
+HAND 243  8h 2d
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 244  6d Ts
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 245  Kc 6d
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 246  3c 6c
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 247  2c 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 248  Ad 6c
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 85%  raise 15%
+           => Fold
+  result   +0.00 bb
+
+HAND 249  Th Ad
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 250  As Jh
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 251  2d 6d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 252  7d Jh
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 253  Kc 5h
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 254  Tc Qh
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 255  Qc Kd
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           raise 100%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 256  5d Ts
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +101.00 bb
+
+HAND 257  Qd Kd
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 96%  passive 1%  raise 2%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 258  9d 9s
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 0%  passive 96%  raise 0%  jam 3%
+           => Call
+  flop     board 7s 9c Js       pot   16.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 7%  bet large 0%  all in 0%
+           => Check
+  turn     board 7s 9c Js Tc    pot   16.5  to call   0.0
+           heads-up turn
+           check/call 26%  bet small 71%  bet large 2%  all in 1%
+           => Check
+  turn     board 7s 9c Js Tc    pot   21.9  to call   5.5
+           heads-up turn
+           fold 0%  check/call 97%  bet small 1%  bet large 1%  all in 1%
+           => Call
+  river    board 7s 9c Js Tc 5d pot   27.4  to call   0.0
+           heads-up river
+           check/call 86%  bet small 6%  bet large 2%  all in 7%
+           => Check
+  river    board 7s 9c Js Tc 5d pot  114.5  to call  87.0
+           heads-up river
+           fold 2%  check/call 98%
+           => Call
+  result   +101.50 bb
+
+HAND 259  As Ks
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           raise 100%
+           => RaiseTo(1000)
+  result   -2.50 bb
+
+HAND 260  Jc As
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           fold 83%  raise 17%
+           => RaiseTo(1000)
+  result   +0.00 bb
+
+HAND 261  9s Th
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 262  As 6d
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 85%  raise 15%
+           => Fold
+  result   +0.00 bb
+
+HAND 263  2d Th
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 264  As Js
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           raise 100%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 1%  passive 92%  raise 0%  jam 7%
+           => Call
+  flop     board 6d 3d 6c       pot   16.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 5%  bet large 2%  all in 0%
+           => Check
+  flop     board 6d 3d 6c       pot   28.9  to call  12.4
+           heads-up flop
+           fold 0%  check/call 86%  bet small 12%  bet large 1%  all in 0%
+           => Call
+  turn     board 6d 3d 6c 4d    pot   41.3  to call   0.0
+           heads-up turn
+           check/call 73%  bet small 27%  bet large 1%  all in 0%
+           => Check
+  river    board 6d 3d 6c 4d 8s pot   41.3  to call   0.0
+           heads-up river
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board 6d 3d 6c 4d 8s pot   72.2  to call  30.9
+           heads-up river
+           fold 4%  check/call 93%  bet small 0%  all in 2%
+           => Call
+  result   +52.33 bb
+
+HAND 265  2c 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 266  Td As
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-hj
+           fold 0%  passive 91%  raise 9%
+           => Call
+  flop     board Ks 5c Tc       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board Ks 5c Tc 9c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board Ks 5c Tc 9c 6d pot    5.5  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 267  9c 4s
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 268  Kh Qs
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-co
+           fold 1%  raise 99%
+           => RaiseTo(750)
+  flop     board 3s 4s Ts       pot   28.9  to call  12.4
+           heads-up flop
+           fold 0%  check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Call
+  turn     board 3s 4s Ts Jh    pot   54.9  to call  13.6
+           HEURISTIC - no price the solve knows is near this one
+           
+           => Fold
+  result   -19.88 bb
+
+HAND 269  9d 2c
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 270  8h 6h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 271  Th 4c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 272  2c 9c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 273  3s Ks
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-hj
+           fold 1%  passive 29%  raise 70%
+           => Call
+  flop     board Qd Ah Ts       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 84%  bet small 15%  bet large 1%  all in 0%
+           => Check
+  turn     board Qd Ah Ts 6d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 92%  bet small 6%  bet large 2%  all in 0%
+           => Check
+  turn     board Qd Ah Ts 6d    pot    9.6  to call   4.1
+           heads-up turn
+           fold 92%  check/call 0%  bet small 2%  bet large 5%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 274  6s 5h
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 275  2c 2h
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 276  8d 7d
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%  raise 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 277  5d Kd
+  preflop  board -              pot    4.0  to call   2.5
+           chart hj-vs-utg
+           fold 49%  raise 51%
+           => Fold
+  result   +0.00 bb
+
+HAND 278  Qs 5d
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 279  9s Kc
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 280  Qh 3h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 98%  raise 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 281  9c 4d
+  preflop  board -              pot    1.5  to call   0.5
+           chart sb
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 282  4d 8d
+  preflop  board -              pot    4.0  to call   2.5
+           chart btn-vs-utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 283  4c Tc
+  preflop  board -              pot    1.5  to call   1.0
+           chart co
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 284  Ad 8h
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 72%  raise 28%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   5.0
+           7-handed preflop
+           fold 97%  passive 0%  raise 0%  jam 2%
+           => Fold
+  result   +4.00 bb
+
+HAND 285  Ah 4h
+  preflop  board -              pot    4.0  to call   2.5
+           7-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 286  4s Qs
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 287  3h 9h
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 288  6h 4c
+  preflop  board -              pot    4.0  to call   2.0
+           chart sb-vs-btn
+           fold 100%
+           => Fold
+  result   +1.50 bb
+
+HAND 289  Kd Ac
+  preflop  board -              pot    1.5  to call   1.0
+           chart btn
+           raise 100%
+           => RaiseTo(250)
+  result   +1.50 bb
+
+HAND 290  5d Td
+  preflop  board -              pot    4.0  to call   2.5
+           chart co-vs-hj
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 291  Js 7s
+  preflop  board -              pot    1.5  to call   1.0
+           chart hj
+           fold 100%
+           => Fold
+  result   -2.50 bb
+
+HAND 292  9d 7h
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +101.00 bb
+
+HAND 293  9c 6c
+  preflop  board -              pot    1.5  to call   1.0
+           chart utg
+           fold 100%
+           => Fold
+  result   +0.00 bb
+
+HAND 294  4c Qc
+  preflop  board -              pot    4.0  to call   1.5
+           chart bb-vs-utg
+           fold 100%  raise 0%
+           => Fold
+  result   +0.00 bb

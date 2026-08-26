@@ -619,6 +619,58 @@ fn assign_buckets(equity: &[f64], buckets: usize, out: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
+
+    /// Prints where particular hands land in the strength groups on a board.
+    ///
+    /// # Why this exists
+    ///
+    /// A postflop strategy that looks wrong has two possible causes and they
+    /// want opposite fixes. Either the solve plays the group badly, or the hand
+    /// is in the wrong group and the solve is playing a different hand than the
+    /// one on the table. Reading the strategy cannot tell them apart; this can.
+    ///
+    /// Written to check a hand that looked like a leak: king-seven suited on
+    /// seven-three-nine, which turns a king for two pair and was being checked
+    /// eighty per cent of the time.
+    ///
+    /// Run with:
+    /// `cargo test --release -p poker-core -- --ignored --nocapture strength_of_hands`
+    #[test]
+    #[ignore = "a probe for reporting; run with --ignored --nocapture"]
+    fn strength_of_hands_on_a_board() {
+        let buckets = 48;
+        let mut reader = Reader::new(buckets);
+
+        for (label, board, hands) in [
+            (
+                "flop 7d 3s 9h",
+                "7d3s9h",
+                vec!["Ks7s", "9s9c", "AhAd", "7h7c", "KdQd", "AcTc", "5c4c"],
+            ),
+            (
+                "turn 7d 3s 9h Kd  (K7s is now two pair)",
+                "7d3s9hKd",
+                vec!["Ks7s", "9s9c", "AhAd", "7h7c", "KcQc", "AcTc", "5c4c"],
+            ),
+        ] {
+            let board = crate::card::parse_cards(board).expect("a board");
+            println!("\n{label}  — groups run 0 (worst) to {}", buckets - 1);
+            let mut rows: Vec<(u8, &str)> = Vec::new();
+            for hand in hands {
+                let cards = crate::card::parse_cards(hand).expect("two cards");
+                match reader.strength(&board, [cards[0], cards[1]]) {
+                    Some(group) => rows.push((group, hand)),
+                    None => println!("  {hand:<6} could not be read"),
+                }
+            }
+            rows.sort_by_key(|(group, _)| std::cmp::Reverse(*group));
+            for (group, hand) in rows {
+                println!("  {hand:<6} group {group:>2}");
+            }
+        }
+    }
+
+
     use super::*;
     use crate::card::parse_cards;
 
