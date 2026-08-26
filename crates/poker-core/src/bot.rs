@@ -1013,7 +1013,20 @@ impl Agent for BlueprintAgent {
                     },
                     source: Source::Blueprint {
                         key,
-                        spot: format!("heads-up {:?}", view.street).to_lowercase(),
+                        // Named for how many are in the pot, not just the
+                        // street. This said "heads-up" whatever the pot was,
+                        // which was true until a three-way solve existed and
+                        // then quietly mislabelled every multiway decision in
+                        // the hand history somebody is meant to review.
+                        spot: format!(
+                            "{} {:?}",
+                            match view.active {
+                                2 => "heads-up".to_string(),
+                                more => format!("{more}-way"),
+                            },
+                            view.street
+                        )
+                        .to_lowercase(),
                     },
                     action,
                     frequencies,

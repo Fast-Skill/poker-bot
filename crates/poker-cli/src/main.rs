@@ -74,6 +74,7 @@ fn main() -> ExitCode {
         Some("grab") => grab(&args[1..]),
         Some("sit") => sit(&args[1..]),
         Some("ranges") => ranges(&args[1..]),
+        Some("sample") => sample(&args[1..]),
         Some("ringbench") => ringbench(&args[1..]),
         Some("replay") => replay(&args[1..]),
         Some("live") => live_cmd(&args[1..]),
@@ -1766,6 +1767,107 @@ fn ranges(args: &[String]) -> Result<(), String> {
 /// This measures the two strategies against *each other*, which is the useful
 /// question here: the club's players are the real opposition, but the charts
 /// cannot be worse than the solve against them and simultaneously better than
+/// Plays hands against itself and writes them out for a person to read.
+///
+/// # Why this exists
+///
+/// The agreed first benchmark is decision quality judged by a human reading
+/// hands, not a win rate — a hundred hands of win rate says nothing, while a
+/// hundred readable decisions say a hundred things. `live --review` produces
+/// exactly that file, but only from a real session against a real client.
+///
+/// This produces the same file from the bot playing itself, which is worth
+/// having for two reasons: it can be generated in seconds rather than hours,
+/// and it exercises spots a short live session might never reach. What it
+/// cannot show is how the bot handles a real opponent, so it is a way to review
+/// the *strategy* rather than the bot.
+fn sample(args: &[String]) -> Result<(), String> {
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["hands", "seats", "out", "seed", "blueprint", "ring", "charts"])?;
+
+    let seats = flags.number("seats", 3.0)? as usize;
+    if !(2..=poker_core::wide::MAX_PLAYERS).contains(&seats) {
+        return Err(format!("--seats must be 2 to {}", poker_core::wide::MAX_PLAYERS));
+    }
+    let hands = flags.number("hands", 30.0)? as u64;
+    let seed = flags.number("seed", 1.0)? as u64;
+    let out = flags.text("out", "sample-hands.txt");
+    let blueprint_path = flags.text("blueprint", "data/preflop-100bb.bin");
+    let ring_dir = flags.text("ring", "data");
+    let charts_dir = flags.text("charts", CHARTS_DIR);
+
+    let blueprint = open(&blueprint_path)?;
+    let charts = Charts::load(std::path::Path::new(&charts_dir)).unwrap_or_default();
+
+    let build = |name: &str| -> BlueprintAgent {
+        let mut agent = BlueprintAgent::new(name, blueprint.clone(), Sizing::default());
+        for count in 3..=poker_core::wide::MAX_PLAYERS {
+            if let Ok(solved) = open(&format!("{ring_dir}/ring{count}-100bb.bin")) {
+                agent = agent.with_ring(solved, Ring::for_play(count, 100.0, Ladder::default()));
+            }
+        }
+        let (with_postflop, _) = load_postflop(agent, POSTFLOP_DIR);
+        let (with_multiway, _) = load_postflop(with_postflop, POSTFLOP3_DIR);
+        with_multiway.with_charts(charts.clone())
+    };
+
+    let _ = std::fs::remove_file(&out);
+    let review = live::Shared::new(live::Review::new(std::path::PathBuf::from(&out)));
+
+    // Only one seat is watched. Watching all of them would interleave three
+    // players' decisions inside each hand, which is not a hand history anyone
+    // can read.
+    let mut bots: Vec<BlueprintAgent> = (0..seats)
+        .map(|seat| {
+            let agent = build(&format!("seat {seat}"));
+            if seat == 0 {
+                agent.watch(Box::new(review.clone()))
+            } else {
+                agent
+            }
+        })
+        .collect();
+
+    let big_blind = 100u64;
+    let table = Table::new(big_blind, 100 * big_blind);
+    let mut rng = Rng::new(seed);
+    let mut deck = Deck::fresh();
+
+    for _ in 0..hands {
+        deck.shuffle(&mut rng);
+        let (before, _, _) = review.tally();
+        let result = {
+            let mut playing: Vec<&mut dyn Agent> =
+                bots.iter_mut().map(|bot| bot as &mut dyn Agent).collect();
+            table.play_hand(&mut playing, deck.hand_cards(seats), &mut rng)
+        };
+        // Only hands the watched seat actually acted in get a result line.
+        // Writing one for every hand appended results to the previous hand
+        // whenever the watched seat folded its blind without a decision, which
+        // read as one hand having two outcomes.
+        let (after, _, _) = review.tally();
+        if after > before {
+            review.note_result(result.net[0] as f64 / bridge::CHIPS_PER_BB);
+        }
+        // The watched seat rotates round the table with the button, so the
+        // history covers every position rather than one.
+        bots.rotate_left(1);
+    }
+
+    let (written, decisions, solved) = review.tally();
+    println!("wrote {out}");
+    println!("  {written} hands, {decisions} decisions");
+    println!(
+        "  {solved} of them from a solve or a chart ({:.0}%)",
+        if decisions > 0 {
+            solved as f64 / decisions as f64 * 100.0
+        } else {
+            0.0
+        }
+    );
+    Ok(())
+}
+
 /// it head to head.
 fn ringbench(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args)?;
