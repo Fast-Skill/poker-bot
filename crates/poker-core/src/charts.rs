@@ -829,6 +829,14 @@ measuring {named}");
             })
             .collect();
 
+        // How many seats to deal. The charts are six-handed and the club deals
+        // seven, so the two are worth measuring separately: an extra seat means
+        // one more player folding round, which drags every rate down without
+        // any range being wrong.
+        let seats: usize = std::env::var("POKER_SEATS")
+            .ok()
+            .and_then(|named| named.parse().ok())
+            .unwrap_or(7);
         let table = Table::new(100, 10_000);
         let mut rng = Rng::new(99);
         let mut deck = Deck::fresh();
@@ -851,17 +859,18 @@ measuring {named}");
         for _ in 0..hands {
             deck.shuffle(&mut rng);
             let result = {
-                let mut seats: Vec<&mut dyn Agent> = agents
+                let mut playing: Vec<&mut dyn Agent> = agents
                     .iter_mut()
+                    .take(seats)
                     .map(|agent| agent as &mut dyn Agent)
                     .collect();
-                table.play_hand(&mut seats, deck.hand_cards(7), &mut rng)
+                table.play_hand(&mut playing, deck.hand_cards(seats), &mut rng)
             };
             let mut census = census.borrow_mut();
             let name = depth_name(census.deepest);
             census.deepest = 0;
             // One hand per seat dealt, counted the way a tracker counts it.
-            for seat in 0..7 {
+            for seat in 0..seats {
                 census.hands_dealt += 1;
                 if census.voluntary[seat] {
                     census.vpip += 1;
