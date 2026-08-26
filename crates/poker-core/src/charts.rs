@@ -100,26 +100,62 @@ pub struct Spot {
     pub seat: Seat,
     /// The position that raised, if this is a chart for facing one.
     pub versus: Option<Seat>,
+    /// Coming in cold: two players have already raised and this seat has put
+    /// in nothing but a blind.
+    ///
+    /// # Why one chart for all of them
+    ///
+    /// There are hundreds of these — every combination of who opened, who
+    /// three-bet, and who is now looking at it — and no published set covers
+    /// them. But the correct strategy barely varies: facing a raise and a
+    /// re-raise with nothing invested, almost everything folds, and playing
+    /// only the very top of the deck gives up little against playing each spot
+    /// exactly. That is the client's own judgement of the cost, and it is the
+    /// difference between one file and several hundred exports.
+    ///
+    /// So `seat` and `versus` are ignored when this is set, and every cold spot
+    /// shares one range.
+    pub cold: bool,
 }
 
 impl Spot {
-    /// The file stem a spot's charts are named with: `utg`, `btn-vs-co`.
+    /// The file stem a spot's charts are named with: `utg`, `btn-vs-co`,
+    /// `cold`.
     pub fn name(self) -> String {
+        if self.cold {
+            return "cold".to_string();
+        }
         match self.versus {
             Some(versus) => format!("{}-vs-{}", self.seat.name(), versus.name()),
             None => self.seat.name().to_string(),
         }
     }
 
+    /// A cold spot, which every position shares.
+    ///
+    /// The seat is recorded but never read; see [`Spot::cold`].
+    pub fn cold_spot(seat: Seat) -> Spot {
+        Spot {
+            seat,
+            versus: None,
+            cold: true,
+        }
+    }
+
     pub fn from_name(name: &str) -> Option<Spot> {
+        if name == "cold" {
+            return Some(Spot::cold_spot(Seat::Utg));
+        }
         match name.split_once("-vs-") {
             Some((seat, versus)) => Some(Spot {
                 seat: Seat::from_name(seat)?,
                 versus: Some(Seat::from_name(versus)?),
+                cold: false,
             }),
             None => Some(Spot {
                 seat: Seat::from_name(name)?,
                 versus: None,
+                cold: false,
             }),
         }
     }
@@ -298,6 +334,10 @@ impl Charts {
         self.spots
             .iter()
             .filter(|(name, chart)| {
+                // A cold chart is one tight range and is finished as it is.
+                if name.as_str() == "cold" {
+                    return false;
+                }
                 let facing = name.contains("-vs-");
                 let defending = name.starts_with("bb-vs-");
                 let calls = chart.actions().any(|action| action == Move::Passive);
@@ -419,7 +459,11 @@ pub fn spot_of(view: &View) -> Option<Spot> {
                 _ => 0,
             };
             let limped = (0..view.players).any(|at| view.committed[at] > posted(at));
-            (!limped).then_some(Spot { seat, versus: None })
+            (!limped).then_some(Spot {
+                seat,
+                versus: None,
+                cold: false,
+            })
         }
         1 => {
             // The raiser is whoever has put in the most. Reading it off the
@@ -433,9 +477,21 @@ pub fn spot_of(view: &View) -> Option<Spot> {
             (versus != seat).then_some(Spot {
                 seat,
                 versus: Some(versus),
+                cold: false,
             })
         }
-        _ => None,
+        // Two or more raises. If this seat has put in nothing but a blind it is
+        // coming in cold, and one chart covers every such spot. If it is
+        // already invested the spot is its own — the opener answering a
+        // three-bet, say — and nothing here covers that yet.
+        _ => {
+            let posted = match view.seat {
+                1 => view.big_blind / 2,
+                2 => view.big_blind,
+                _ => 0,
+            };
+            (view.committed[view.seat] <= posted).then_some(Spot::cold_spot(seat))
+        }
     }
 }
 
@@ -686,6 +742,13 @@ measuring {named}");
             /// looks at a decision.
             voluntary: [bool; 7],
             raised: [bool; 7],
+            /// Who raised this hand, in order, by position. The first is the
+            /// opener and the second is the three-bettor, which together name
+            /// the spot the opener then has to answer.
+            raisers: Vec<Seat>,
+            /// Three-bet pots by which pair of positions made them, and how
+            /// much money went through each.
+            pairs: BTreeMap<String, (u64, i64)>,
             hands_dealt: u64,
             vpip: u64,
             pfr: u64,
@@ -740,6 +803,9 @@ measuring {named}");
                         Action::RaiseTo(_) => {
                             census.voluntary[view.seat] = true;
                             census.raised[view.seat] = true;
+                            if let Some(seat) = seat_position(view.seat, view.players) {
+                                census.raisers.push(seat);
+                            }
                         }
                         _ => {}
                     }
@@ -804,6 +870,21 @@ measuring {named}");
                     census.pfr += 1;
                 }
             }
+            // Which pair of positions built this three-bet pot, if it is one.
+            if census.raisers.len() >= 2 {
+                let (opener, three_better) = (census.raisers[0], census.raisers[1]);
+                let name = format!("{}-vs-{}", opener.name(), three_better.name());
+                let staked: i64 = result
+                    .net
+                    .iter()
+                    .filter(|net| **net < 0)
+                    .map(|net| -net)
+                    .sum();
+                let row = census.pairs.entry(name).or_insert((0, 0));
+                row.0 += 1;
+                row.1 += staked;
+            }
+            census.raisers.clear();
             census.voluntary = [false; 7];
             census.raised = [false; 7];
             drop(census);
@@ -849,6 +930,25 @@ measuring {named}");
                 },
             );
         }
+        // Which "you opened and got three-bet" spots actually happen, and
+        // how much rides on each. Charting all fifteen pairs is thirty exports;
+        // this says which of them are worth the clicking.
+        let mut rows: Vec<_> = census.pairs.iter().collect();
+        rows.sort_by_key(|(_, (_, money))| std::cmp::Reverse(*money));
+        let total_money: i64 = census.pairs.values().map(|(_, money)| money).sum();
+        let total_hands: u64 = census.pairs.values().map(|(hands, _)| hands).sum();
+        println!("\nthree-bet pots by who opened and who three-bet:\n");
+        let mut running = 0i64;
+        for (name, (hands, money)) in rows {
+            running += money;
+            println!(
+                "  {name:<12} {:>5.1}% of 3bet-pot money  ({:>5.1}% running)  {hands} hands",
+                *money as f64 / total_money as f64 * 100.0,
+                running as f64 / total_money as f64 * 100.0,
+            );
+        }
+        println!("  {total_hands} three-bet pots in all");
+
         // What a poker room's own statistics would show. The club removes
         // players below 20% VPIP for stalling, so this is not a curiosity — it
         // is a condition of being allowed to keep playing.

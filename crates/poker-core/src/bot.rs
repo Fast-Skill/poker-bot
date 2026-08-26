@@ -1389,8 +1389,29 @@ mod tests {
         // Five-handed: the published six-handed ranges are far too tight.
         assert!(charts::spot_of(&View { players: 5, ..base }).is_none());
 
-        // Past a single raise the tree is deeper than any chart here.
-        assert!(charts::spot_of(&View { raises: 2, ..base }).is_none());
+        // Past a single raise, with nothing of its own in the pot, this is a
+        // cold spot — one chart covers all of them.
+        assert_eq!(
+            charts::spot_of(&View { raises: 2, ..base }).map(|spot| spot.name()),
+            Some("cold".to_string())
+        );
+
+        // But a seat that has already put money in is not coming in cold. That
+        // is the opener answering a three-bet, which is its own spot and has no
+        // chart — and playing it as a cold spot would fold almost everything
+        // the opener is holding.
+        let invested = [0, 50, 100, 900, 0, 0, 0];
+        assert!(
+            charts::spot_of(&View {
+                raises: 2,
+                seat: 3,
+                committed: &invested,
+                street_committed: &invested,
+                ..base
+            })
+            .is_none(),
+            "already in the pot, so not a cold spot"
+        );
 
         // A limp in front is not an unopened pot, and no chart covers it.
         let limped = [0, 50, 100, 0, 0, 100, 0];

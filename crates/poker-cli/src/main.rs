@@ -3082,8 +3082,19 @@ mod tests {
     /// which is a silent misplay rather than an error.
     #[test]
     fn only_a_postflop_label_reads_as_a_postflop_rung() {
-        assert_eq!(postflop_label("postflop/spr4/b48"), Some((4.0, 48)));
-        assert_eq!(postflop_label("postflop/spr1.5/b20"), Some((1.5, 20)));
+        assert_eq!(postflop_label("postflop/spr4/b48"), Some((2, 4.0, 48)));
+        assert_eq!(postflop_label("postflop/spr1.5/b20"), Some((2, 1.5, 20)));
+
+        // A multiway solve names its seat count, and that count has to survive
+        // the round trip: loaded as heads-up it would answer every lookup with
+        // a strategy for a different situation.
+        assert_eq!(postflop_label("postflop3/spr3/b48"), Some((3, 3.0, 48)));
+        assert_eq!(
+            postflop_label("postflop9/spr3/b48"),
+            None,
+            "wider than any tree modelled"
+        );
+        assert_eq!(postflop_label("postflopx/spr3/b48"), None);
 
         for wrong in [
             "preflop/100bb",
