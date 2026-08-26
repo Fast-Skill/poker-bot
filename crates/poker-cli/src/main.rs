@@ -1769,13 +1769,32 @@ fn ranges(args: &[String]) -> Result<(), String> {
 /// it head to head.
 fn ringbench(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["hands", "seats", "stack", "seed", "blueprint", "ring", "charts"])?;
+    flags.reject_unknown(&[
+        "hands", "seats", "stack", "seed", "blueprint", "ring", "charts", "compare",
+    ])?;
 
-    let seats = flags.number("seats", 7.0)? as usize;
-    if !(charts_min()..=poker_core::wide::MAX_PLAYERS).contains(&seats) {
+    // What the two sides differ by. Charts answer "are published preflop ranges
+    // better than the preflop solve"; postflop answers "is the multiway solve
+    // better than the heuristic it replaces", which is a different question and
+    // needs a smaller table to ask at.
+    let comparing = flags.text("compare", "charts");
+    if !["charts", "postflop"].contains(&comparing.as_str()) {
         return Err(format!(
-            "--seats must be between {} and {}; charts do not apply below that",
-            charts_min(),
+            "--compare {comparing:?} is not something to compare; try charts or postflop"
+        ));
+    }
+    let fewest = if comparing == "charts" {
+        charts_min()
+    } else {
+        // Three is the point of the multiway solve. Below that the heads-up
+        // ladder already covers it.
+        3
+    };
+
+    let seats = flags.number("seats", if comparing == "charts" { 7.0 } else { 3.0 })? as usize;
+    if !(fewest..=poker_core::wide::MAX_PLAYERS).contains(&seats) {
+        return Err(format!(
+            "--seats must be between {fewest} and {}",
             poker_core::wide::MAX_PLAYERS
         ));
     }
@@ -1787,22 +1806,39 @@ fn ringbench(args: &[String]) -> Result<(), String> {
     let charts_dir = flags.text("charts", CHARTS_DIR);
 
     let blueprint = open(&blueprint_path)?;
-    let charts = Charts::load(std::path::Path::new(&charts_dir))?;
-    if charts.is_empty() {
-        return Err(format!("no charts in {charts_dir}; nothing to compare"));
-    }
+    let charts = if comparing == "charts" {
+        let held = Charts::load(std::path::Path::new(&charts_dir))?;
+        if held.is_empty() {
+            return Err(format!("no charts in {charts_dir}; nothing to compare"));
+        }
+        held
+    } else {
+        Charts::new()
+    };
 
-    let build = |name: &str, charted: bool| -> BlueprintAgent {
+    // `equipped` is the side under test: it gets whatever is being compared,
+    // and the other side goes without. Everything else is identical, which is
+    // what makes the difference attributable.
+    let build = |name: &str, equipped: bool| -> BlueprintAgent {
         let mut agent = BlueprintAgent::new(name, blueprint.clone(), Sizing::default());
         for count in 3..=poker_core::wide::MAX_PLAYERS {
             if let Ok(solved) = open(&format!("{ring_dir}/ring{count}-100bb.bin")) {
                 agent = agent.with_ring(solved, Ring::for_play(count, 100.0, Ladder::default()));
             }
         }
+        // The heads-up ladder goes to both sides either way: it is not what is
+        // being compared, and taking it from one side would measure that
+        // instead.
         let (with_postflop, _) = load_postflop(agent, POSTFLOP_DIR);
         agent = with_postflop;
-        if charted {
-            agent = agent.with_charts(charts.clone());
+
+        if equipped {
+            if comparing == "charts" {
+                agent = agent.with_charts(charts.clone());
+            } else {
+                let (with_multiway, _) = load_postflop(agent, POSTFLOP3_DIR);
+                agent = with_multiway;
+            }
         }
         agent
     };
@@ -1810,18 +1846,25 @@ fn ringbench(args: &[String]) -> Result<(), String> {
     // Interleaved, so neither strategy is always the one acting first.
     let mut bots: Vec<BlueprintAgent> = (0..seats)
         .map(|seat| {
-            let charted = seat % 2 == 0;
-            build(
-                &format!("{} {seat}", if charted { "chart" } else { "solve" }),
-                charted,
-            )
+            let equipped = seat % 2 == 0;
+            let name = match (comparing.as_str(), equipped) {
+                ("charts", true) => "chart",
+                ("charts", false) => "solve",
+                (_, true) => "3way",
+                (_, false) => "heur",
+            };
+            build(&format!("{name} {seat}"), equipped)
         })
         .collect();
 
     let big_blind = 100u64;
     let table = Table::new(big_blind, (stack_bb * big_blind as f64).round() as u64);
     println!("{seats}-handed, {hands} hands, {table}");
-    println!("charts   : {} spots from {charts_dir}\n", charts.spots().count());
+    if comparing == "charts" {
+        println!("charts   : {} spots from {charts_dir}\n", charts.spots().count());
+    } else {
+        println!("testing  : the three-way postflop ladder against the heuristic\n");
+    }
 
     let mut rng = Rng::new(seed);
     // Rotated, so every bot plays every seat's cards. Plain ring play was
@@ -1867,20 +1910,26 @@ fn ringbench(args: &[String]) -> Result<(), String> {
     let floor = spread(true).max(spread(false));
 
     let (charted, solved) = (mean(true), mean(false));
+    let (with, without) = if comparing == "charts" {
+        ("charts ", "solve  ")
+    } else {
+        ("3-way  ", "heurist")
+    };
     println!(
-        "charts   {charted:+.1} bb/100 averaged over {} seats",
+        "{with}  {charted:+.1} bb/100 averaged over {} seats",
         (seats + 1) / 2
     );
-    println!("solve    {solved:+.1} bb/100 averaged over {} seats", seats / 2);
+    println!("{without}  {solved:+.1} bb/100 averaged over {} seats", seats / 2);
     println!("noise    {floor:.1} bb/100 between seats running the SAME strategy");
 
     let gap = (charted - solved).abs();
     println!(
         "\ndifference {gap:.1} bb/100 in favour of {}",
-        if charted > solved {
-            "the published charts"
-        } else {
-            "the solve"
+        match (comparing.as_str(), charted > solved) {
+            ("charts", true) => "the published charts",
+            ("charts", false) => "the solve",
+            (_, true) => "the three-way solve",
+            (_, false) => "the heuristic",
         }
     );
     println!(
@@ -2232,7 +2281,10 @@ fn postflop_chart(args: &[String]) -> Result<(), String> {
     ] {
         for street in [Street::Flop, Street::Turn, Street::River] {
             let spot = |strength: u8| Spot {
-                live: 2,
+                // Everyone still in, which is the line the solve spends most of
+                // its time on. Hardcoding two here read a three-way blueprint
+                // at keys that only occur after somebody folds.
+                live: players as u8,
                 street,
                 player,
                 strength,
