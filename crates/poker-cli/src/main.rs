@@ -1201,7 +1201,7 @@ fn live_cmd(args: &[String]) -> Result<(), String> {
     use std::path::PathBuf;
 
     let flags = Flags::parse(args)?;
-    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns", "record", "review"])?;
+    flags.reject_unknown(&["process", "act", "seconds", "stop-loss", "kill-switch", "blueprint", "keep-unread", "ring", "explain", "keep-turns", "record", "review", "charts"])?;
     let process = flags.text("process", "ClubGG");
     let act = flags.text("act", "off");
     let seconds: u64 = flags.text("seconds", "60").parse().map_err(|_| "--seconds wants a number")?;
@@ -2556,14 +2556,20 @@ fn postflop_label(label: &str) -> Option<(usize, f64, usize)> {
     (spr > 0.0 && buckets >= 2).then_some((players, spr, buckets))
 }
 
-/// A line describing what postflop coverage an agent has.
+/// A line describing what heads-up postflop coverage an agent has.
+///
+/// Says nothing about multiway. It used to end "multiway uses the heuristic",
+/// which was true until a three-way ladder existed and then sat directly above
+/// the line announcing one — a banner contradicting itself is worse than a
+/// banner saying less, since the whole reason this is printed is that a solve
+/// silently failing to load once went unnoticed for a session.
 fn postflop_summary(depths: &[f64]) -> String {
     if depths.is_empty() {
         return "postflop: none solved - the heuristic plays every flop".into();
     }
     let listed: Vec<String> = depths.iter().map(|spr| format!("{spr}")).collect();
     format!(
-        "postflop: heads-up at {} times the pot; multiway uses the heuristic",
+        "postflop: heads-up at {} times the pot",
         listed.join("/")
     )
 }

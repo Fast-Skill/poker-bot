@@ -257,6 +257,14 @@ pub struct Review {
     decisions: u64,
     /// Decisions that came from a solve rather than the fallback.
     solved: u64,
+    /// The last decision written, to recognise the same one arriving again.
+    ///
+    /// The bot is asked what it would do every time it looks at the table, and
+    /// while a turn is unresolved that is the same spot over and over. Watching
+    /// without acting never resolves anything, so a fifteen-minute watch wrote
+    /// one decision ten times — in the file whose whole purpose is being read by
+    /// a person.
+    last: Option<String>,
 }
 
 impl Review {
@@ -267,6 +275,7 @@ impl Review {
             hands: 0,
             decisions: 0,
             solved: 0,
+            last: None,
         }
     }
 
@@ -304,6 +313,25 @@ impl Review {
 
 impl Observer for Review {
     fn on_decision(&mut self, record: &DecisionRecord) {
+        // The same spot, decided again, is not a second decision. Compared on
+        // what a reader would use to tell two decisions apart rather than on
+        // the whole record: the frequencies are sampled and the action drawn
+        // from them, so an identical spot can legitimately produce a different
+        // action, and writing both would be reporting a decision that was never
+        // played.
+        let fingerprint = format!(
+            "{:?}{:?}{:?}{}{}",
+            record.perception.hole,
+            record.perception.board,
+            record.perception.street,
+            record.perception.pot,
+            record.perception.to_call,
+        );
+        if self.last.as_deref() == Some(fingerprint.as_str()) {
+            return;
+        }
+        self.last = Some(fingerprint);
+
         let cards = |of: &[Card]| {
             of.iter()
                 .map(|card| card.to_string())

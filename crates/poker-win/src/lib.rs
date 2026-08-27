@@ -137,7 +137,15 @@ extern "system" {
     fn SetCursorPos(x: i32, y: i32) -> Bool;
     fn GetCursorPos(point: *mut Point) -> Bool;
     fn SendInput(count: u32, inputs: *const Input, size: i32) -> u32;
+    fn PrintWindow(window: Handle, dc: Handle, flags: u32) -> Bool;
 }
+
+/// Asks a window to draw all of itself, not only the parts Windows would
+/// normally redraw.
+///
+/// Without this flag `PrintWindow` returns nothing useful for the many clients
+/// that render through DirectX or a browser engine — which is most of them now.
+const PW_RENDERFULLCONTENT: u32 = 0x0000_0002;
 
 #[link(name = "gdi32")]
 extern "system" {
@@ -281,6 +289,23 @@ impl Window {
     /// Captures the window as raw RGB, row-major, three bytes per pixel.
     ///
     /// Returns `None` if the window has no area or the OS refuses the copy.
+    /// A picture of the window's own content.
+    ///
+    /// # Why not simply copy that part of the screen
+    ///
+    /// That is what this used to do, and it copies whatever is *on* the screen
+    /// at the window's rectangle — including anything sitting on top of it.
+    /// A fifteen-minute watch produced three hundred and eighty-six frames of
+    /// zero seats and twenty-five of a table, because the poker client spent
+    /// most of the session behind an editor. The bot was reading the editor.
+    ///
+    /// `PrintWindow` asks the window to draw itself instead, so an obscured
+    /// table still reads. That is the difference between a bot that needs the
+    /// whole screen to itself and one that can run while the machine is used
+    /// for something else.
+    ///
+    /// The screen copy is kept as a fallback: `PrintWindow` fails on some
+    /// windows, and a picture of the right rectangle is better than none.
     pub fn capture(&self) -> Option<Capture> {
         let (width, height) = self.size();
         if width == 0 || height == 0 {
@@ -302,8 +327,13 @@ impl Window {
 
             if !memory.is_null() && !bitmap.is_null() {
                 let previous = SelectObject(memory, bitmap);
-                let (x, y) = self.position();
-                if BitBlt(memory, 0, 0, w, h, screen, x, y, SRCCOPY) != 0 {
+                // The window's own content first; the screen underneath it only
+                // if that fails.
+                let drawn = PrintWindow(self.handle, memory, PW_RENDERFULLCONTENT) != 0 || {
+                    let (x, y) = self.position();
+                    BitBlt(memory, 0, 0, w, h, screen, x, y, SRCCOPY) != 0
+                };
+                if drawn {
                     let mut info = BitmapInfo {
                         header: BitmapInfoHeader {
                             size: std::mem::size_of::<BitmapInfoHeader>() as u32,

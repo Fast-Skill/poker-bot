@@ -1,0 +1,4023 @@
+
+HAND 1  Ks Kd
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 11%  raise 83%  jam 6%
+           => RaiseTo(250)
+  flop     board Ah Jc 3d       pot    7.5  to call   0.0
+           3-way flop
+           check/call 2%  bet small 37%  bet large 61%  all in 0%
+           => RaiseTo(563)
+  turn     board Ah Jc 3d 9h    pot   24.9  to call   6.2
+           heads-up turn
+           fold 0%  check/call 15%  bet small 82%  bet large 1%  all in 2%
+           => RaiseTo(1647)
+  river    board Ah Jc 3d 9h 6s pot  127.1  to call  75.4
+           heads-up river
+           fold 0%  check/call 100%
+           => Call
+  result   +102.50 bb
+
+HAND 2  7c Kc
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 96%  jam 2%
+           => RaiseTo(250)
+  flop     board 9c 7s 2d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 9c 7s 2d 5s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 9c 7s 2d 5s 6s pot    5.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 3  As 2d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 81%  raise 19%  jam 1%
+           => Call
+  flop     board 4c Ks Ah       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  flop     board 4c Ks Ah       pot    3.0  to call   1.0
+           heads-up flop
+           fold 0%  check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Call
+  turn     board 4c Ks Ah Td    pot    4.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  river    board 4c Ks Ah Td 5s pot    4.0  to call   0.0
+           heads-up river
+           check/call 75%  bet small 23%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 4  Kc Qh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 6h 5s 8h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 7%  bet small 90%  bet large 2%  all in 0%
+           => RaiseTo(182)
+  flop     board 6h 5s 8h       pot   12.2  to call   3.0
+           heads-up flop
+           fold 4%  check/call 40%  bet small 45%  bet large 10%  all in 0%
+           => RaiseTo(985)
+  turn     board 6h 5s 8h 8s    pot   25.2  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 6h 5s 8h 8s 8d pot   44.1  to call  18.9
+           heads-up river
+           fold 2%  check/call 96%  bet small 0%  bet large 1%  all in 1%
+           => Call
+  result   -31.25 bb
+
+HAND 5  2h Ah
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 95%  raise 1%  jam 3%
+           => Call
+  flop     board 7s 3d 4c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 7s 3d 4c Ts    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 92%  bet small 6%  bet large 2%  all in 0%
+           => Check
+  river    board 7s 3d 4c Ts 3s pot    5.5  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +3.00 bb
+
+HAND 6  Qd 2h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 2d Qh 6s       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 4%  bet large 2%  all in 3%
+           => Check
+  turn     board 2d Qh 6s Ts    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 81%  bet small 8%  bet large 4%  all in 7%
+           => Check
+  river    board 2d Qh 6s Ts 4s pot    2.0  to call   0.0
+           heads-up river
+           check/call 59%  bet small 25%  bet large 5%  all in 11%
+           => Check
+  result   +0.00 bb
+
+HAND 7  3c 3h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 94%  passive 1%  raise 5%  jam 1%
+           => RaiseTo(250)
+  flop     board Kd 6c Ad       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 9%  bet large 1%  all in 0%
+           => Check
+  turn     board Kd 6c Ad 6s    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Kd 6c Ad 6s 9d pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +3.00 bb
+
+HAND 8  7d Jd
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 29%  raise 69%  jam 2%
+           => RaiseTo(250)
+  flop     board 6h 3c 7h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 6h 3c 7h Th    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 6h 3c 7h Th Ah pot    5.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 9  7c Th
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 3d 3h 6h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 3d 3h 6h Jd    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 94%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board 3d 3h 6h Jd    pot    3.0  to call   1.0
+           heads-up turn
+           fold 96%  check/call 1%  bet small 1%  bet large 2%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 10  8s Tc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 11  Qs 2d
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 3c 8h Jc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 63%  bet small 33%  bet large 5%  all in 0%
+           => Check
+  turn     board 3c 8h Jc Td    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 5%  bet small 77%  bet large 18%  all in 0%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 12  7s 8c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 3h Jc Th       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  turn     board 3h Jc Th Tc    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 3%  bet large 3%  all in 0%
+           => Check
+  river    board 3h Jc Th Tc 8d pot    2.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  river    board 3h Jc Th Tc 8d pot    3.5  to call   1.5
+           heads-up river
+           fold 42%  check/call 55%  bet small 0%  bet large 0%  all in 2%
+           => Call
+  result   +0.00 bb
+
+HAND 13  3h 6h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 14  4d 4c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 89%  raise 6%  jam 5%
+           => Call
+  flop     board 2s Jd Qd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 6%  bet large 1%  all in 0%
+           => Check
+  turn     board 2s Jd Qd 4s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 12%  bet small 73%  bet large 12%  all in 4%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 15  Kh 4s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 67%  raise 32%  jam 1%
+           => Call
+  flop     board 6h Qc Qd       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 6h Qc Qd 9d    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 92%  bet small 5%  bet large 3%  all in 0%
+           => Check
+  river    board 6h Qc Qd 9d Jd pot    2.0  to call   0.0
+           heads-up river
+           check/call 93%  bet small 3%  bet large 1%  all in 3%
+           => Check
+  result   +0.00 bb
+
+HAND 16  7h 6d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 17  Qh 9c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 76%  passive 23%  raise 0%  jam 1%
+           => Fold
+  result   -2.50 bb
+
+HAND 18  5c 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 19  Jh Ks
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 0%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board Ah 6c As       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Ah 6c As Jd    pot    6.7  to call   1.6
+           heads-up turn
+           fold 0%  check/call 96%  bet small 2%  bet large 1%  all in 1%
+           => Call
+  river    board Ah 6c As Jd Js pot    8.3  to call   0.0
+           heads-up river
+           check/call 1%  bet small 2%  bet large 95%  all in 2%
+           => RaiseTo(623)
+  result   +0.00 bb
+
+HAND 20  2h 9c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 60%  passive 39%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 21  5s 4c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 22  Qs 8d
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 2s Tc 8c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  flop     board 2s Tc 8c       pot    7.3  to call   1.8
+           heads-up flop
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Call
+  turn     board 2s Tc 8c Ks    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 3%  bet large 5%  all in 0%
+           => Check
+  turn     board 2s Tc 8c Ks    pot   12.2  to call   3.0
+           heads-up turn
+           fold 1%  check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Call
+  river    board 2s Tc 8c Ks Jc pot   15.2  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 2s Tc 8c Ks Jc pot   26.6  to call  11.4
+           heads-up river
+           fold 2%  check/call 94%  bet small 0%  bet large 1%  all in 3%
+           => Call
+  result   +19.23 bb
+
+HAND 23  4s Qd
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 2%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 5d 6c 2d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 81%  bet small 18%  bet large 1%  all in 0%
+           => RaiseTo(165)
+  turn     board 5d 6c 2d Kd    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board 5d 6c 2d Kd Qc pot    8.3  to call   0.0
+           heads-up river
+           check/call 68%  bet small 31%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 24  3s 4d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 25  Qd 4c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Kd 9h 5d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 7%  bet small 90%  bet large 2%  all in 0%
+           => RaiseTo(375)
+  flop     board Kd 9h 5d       pot   16.6  to call   4.1
+           heads-up flop
+           fold 4%  check/call 40%  bet small 45%  bet large 10%  all in 0%
+           => RaiseTo(1473)
+  turn     board Kd 9h 5d 6c    pot   34.5  to call   0.0
+           heads-up turn
+           check/call 11%  bet small 88%  bet large 1%  all in 0%
+           => RaiseTo(1137)
+  river    board Kd 9h 5d 6c 3h pot   57.2  to call   0.0
+           heads-up river
+           check/call 89%  bet small 0%  bet large 4%  all in 7%
+           => Check
+  result   +0.00 bb
+
+HAND 26  Ad Td
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 8%  raise 91%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 35%  raise 62%  jam 2%
+           => RaiseTo(900)
+  result   +0.00 bb
+
+HAND 27  Tc 2s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 28  Th 7d
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Kc 4s 3s       pot    6.7  to call   1.6
+           heads-up flop
+           fold 43%  check/call 51%  bet small 1%  bet large 5%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 29  2s 9s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 3%  passive 96%  raise 0%  jam 2%
+           => Call
+  flop     board Qs Th Ac       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Qs Th Ac Qh    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => Check
+  river    board Qs Th Ac Qh 7s pot    2.0  to call   0.0
+           heads-up river
+           check/call 82%  bet small 11%  bet large 3%  all in 4%
+           => Check
+  river    board Qs Th Ac Qh 7s pot    3.5  to call   1.5
+           heads-up river
+           fold 97%  check/call 0%  bet small 0%  bet large 1%  all in 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 30  6d Jd
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 31  3c 6c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 4h 8c 6d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 4h 8c 6d 2c    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 4h 8c 6d 2c 2d pot    2.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 32  Kd 3d
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 86%  passive 12%  raise 1%  jam 2%
+           => Call
+  flop     board As 7s Qs       pot    7.5  to call   0.0
+           3-way flop
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  flop     board As 7s Qs       pot   10.0  to call   2.5
+           3-way flop
+           fold 98%  check/call 0%  bet small 0%  bet large 1%  all in 1%
+           => Fold
+  result   +5.00 bb
+
+HAND 33  3h Td
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 34  Kd 7h
+  preflop  board -              pot  101.0  to call  99.0
+           3-handed preflop
+           fold 99%  passive 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 35  Jc 8s
+  preflop  board -              pot    2.5  to call   0.5
+           3-handed preflop
+           fold 15%  passive 84%  raise 0%  jam 1%
+           => Call
+  flop     board Qd Tc Qc       pot    3.0  to call   0.0
+           3-way flop
+           check/call 90%  bet small 8%  bet large 1%  all in 0%
+           => Check
+  turn     board Qd Tc Qc 6h    pot    3.0  to call   0.0
+           3-way turn
+           check/call 97%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  river    board Qd Tc Qc 6h 9s pot    3.0  to call   0.0
+           3-way river
+           check/call 69%  bet small 11%  bet large 9%  all in 11%
+           => Check
+  result   -1.00 bb
+
+HAND 36  8c Jc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 81%  passive 17%  raise 1%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 37  Kc 4h
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 7h 6c Qs       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 11%  bet small 63%  bet large 26%  all in 0%
+           => RaiseTo(165)
+  flop     board 7h 6c Qs       pot   14.5  to call   6.2
+           heads-up flop
+           fold 84%  check/call 1%  bet small 12%  bet large 3%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 38  5s 7s
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 96%  passive 2%  raise 0%  jam 2%
+           => Fold
+  result   +4.82 bb
+
+HAND 39  Ah 8h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board 3s 6c Tc       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 67%  bet small 32%  bet large 1%  all in 0%
+           => Check
+  turn     board 3s 6c Tc 2c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 88%  bet small 3%  bet large 8%  all in 0%
+           => Check
+  river    board 3s 6c Tc 2c As pot    7.3  to call   1.8
+           heads-up river
+           fold 0%  check/call 97%  bet small 0%  bet large 1%  all in 1%
+           => Call
+  result   -4.32 bb
+
+HAND 40  Jh 5c
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 6h Th Jd       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => RaiseTo(182)
+  turn     board 6h Th Jd Kh    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 66%  bet small 32%  bet large 2%  all in 0%
+           => Check
+  river    board 6h Th Jd Kh 8s pot    9.1  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   -4.32 bb
+
+HAND 41  2s Kh
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 1%  jam 1%
+           => Call
+  flop     board Kd 8d 3h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Kd 8d 3h Ad    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Kd 8d 3h Ad    pot    3.0  to call   1.0
+           heads-up turn
+           fold 1%  check/call 95%  bet small 2%  bet large 2%  all in 0%
+           => Call
+  river    board Kd 8d 3h Ad 9h pot    4.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 0%  all in 1%
+           => Check
+  river    board Kd 8d 3h Ad 9h pot    5.3  to call   1.3
+           heads-up river
+           fold 6%  check/call 90%  bet small 0%  bet large 1%  all in 2%
+           => Call
+  result   +0.00 bb
+
+HAND 42  9c 7h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 43  2c 6c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 5s 2d Kh       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 5s 2d Kh Ts    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 5s 2d Kh Ts Qd pot    2.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 44  Ac 3c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 11%  raise 88%  jam 1%
+           => RaiseTo(250)
+  preflop  board -              pot  102.5  to call  97.5
+           3-handed preflop
+           fold 98%  passive 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 45  6c 3s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 46  6c Kh
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -4.32 bb
+
+HAND 47  Tc 9s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 48  Ac Ah
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 0%  raise 72%  jam 28%
+           => RaiseTo(900)
+  result   -2.50 bb
+
+HAND 49  5c 2d
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +19.22 bb
+
+HAND 50  5s 7s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 51  5h Td
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 52  4c 4s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 4%  passive 1%  raise 94%  jam 1%
+           => RaiseTo(250)
+  flop     board Jd Qd 5d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 6%  bet small 86%  bet large 7%  all in 0%
+           => RaiseTo(182)
+  turn     board Jd Qd 5d 7h    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Jd Qd 5d 7h Kh pot    9.1  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +4.82 bb
+
+HAND 53  Kc 4h
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 6d 3d Ac       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 72%  bet small 25%  bet large 3%  all in 0%
+           => RaiseTo(165)
+  turn     board 6d 3d Ac Jc    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 6d 3d Ac Jc 8c pot    8.3  to call   0.0
+           heads-up river
+           check/call 92%  bet small 0%  bet large 3%  all in 5%
+           => Check
+  result   +0.00 bb
+
+HAND 54  8d 3h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 5%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 55  Td 3s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 56  3c Ts
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 2%
+           => Check
+  flop     board Ad 2s 3s       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 5%  bet large 1%  all in 0%
+           => Check
+  turn     board Ad 2s 3s Th    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 6%  bet small 53%  bet large 40%  all in 1%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 57  4c 8h
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +4.82 bb
+
+HAND 58  2s 3h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 59  8h 4h
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 4d Qc Ts       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 6%  bet large 1%  all in 0%
+           => Check
+  turn     board 4d Qc Ts Ah    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4d Qc Ts Ah 9c pot    2.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 60  3s Tc
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board Qh 8d 6h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  turn     board Qh 8d 6h 4s    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 80%  bet small 9%  bet large 10%  all in 0%
+           => Check
+  turn     board Qh 8d 6h 4s    pot    3.5  to call   1.5
+           heads-up turn
+           fold 97%  check/call 0%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 61  As 8h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 9d 2h 3s       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 9%  bet large 1%  all in 0%
+           => RaiseTo(182)
+  result   +3.00 bb
+
+HAND 62  7h Jh
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 29%  raise 69%  jam 2%
+           => RaiseTo(250)
+  flop     board 9h Kc 8d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 9%  bet large 1%  all in 0%
+           => RaiseTo(165)
+  turn     board 9h Kc 8d Kh    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 9h Kc 8d Kh 7c pot    8.3  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 63  2c 7h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 64  Ac 3s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 16%  passive 28%  raise 55%  jam 0%
+           => Call
+  flop     board 4s 8h 8d       pot    3.0  to call   0.0
+           3-way flop
+           check/call 95%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board 4s 8h 8d Js    pot    5.2  to call   2.2
+           heads-up turn
+           fold 5%  check/call 91%  bet small 1%  bet large 1%  all in 1%
+           => Fold
+  result   -1.00 bb
+
+HAND 65  9s Kd
+  preflop  board -              pot    6.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 1%  jam 2%
+           => Call
+  flop     board Kh Jd 2s       pot    7.5  to call   0.0
+           3-way flop
+           check/call 45%  bet small 47%  bet large 6%  all in 1%
+           => RaiseTo(248)
+  flop     board Kh Jd 2s       pot   16.6  to call   4.1
+           heads-up flop
+           fold 0%  check/call 8%  bet small 90%  bet large 1%  all in 1%
+           => RaiseTo(1341)
+  flop     board Kh Jd 2s       pot  118.4  to call  84.1
+           heads-up flop
+           fold 3%  check/call 97%
+           => Call
+  result   +102.50 bb
+
+HAND 66  9c Ks
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 1%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board 7c Ah Ac       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board 7c Ah Ac 2d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 88%  bet small 11%  bet large 1%  all in 0%
+           => Check
+  turn     board 7c Ah Ac 2d    pot    6.7  to call   1.6
+           heads-up turn
+           fold 1%  check/call 96%  bet small 1%  bet large 2%  all in 0%
+           => Call
+  river    board 7c Ah Ac 2d Qc pot    8.3  to call   0.0
+           heads-up river
+           check/call 95%  bet small 3%  bet large 0%  all in 1%
+           => Check
+  river    board 7c Ah Ac 2d Qc pot   14.5  to call   6.2
+           heads-up river
+           fold 4%  check/call 94%  bet small 0%  bet large 0%  all in 1%
+           => Call
+  result   +0.00 bb
+
+HAND 67  9h Qh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 4%  passive 21%  raise 74%  jam 1%
+           => RaiseTo(250)
+  flop     board 3s Qc 4c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 94%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  turn     board 3s Qc 4c 3d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board 3s Qc 4c 3d 8h pot    5.5  to call   0.0
+           heads-up river
+           check/call 57%  bet small 7%  bet large 35%  all in 2%
+           => RaiseTo(182)
+  result   +3.00 bb
+
+HAND 68  8s 8d
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 67%  raise 23%  jam 9%
+           => RaiseTo(900)
+  flop     board Js Tc 8h       pot   31.5  to call  13.5
+           heads-up flop
+           fold 0%  check/call 95%  bet small 3%  bet large 1%  all in 1%
+           => Call
+  turn     board Js Tc 8h 5d    pot   59.9  to call  14.8
+           HEURISTIC - no price the solve knows is near this one
+           
+           => Call
+  river    board Js Tc 8h 5d Ts pot   99.3  to call  24.6
+           heads-up river
+           fold 0%  check/call 0%  all in 100%
+           => RaiseTo(6265)
+  result   +0.00 bb
+
+HAND 69  2d Th
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 1%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 9d Jh 6h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 7%  bet large 2%  all in 0%
+           => Check
+  turn     board 9d Jh 6h 8d    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 3%  bet large 3%  all in 0%
+           => Check
+  turn     board 9d Jh 6h 8d    pot    3.0  to call   1.0
+           heads-up turn
+           fold 97%  check/call 0%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 70  2c 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 71  7h 2d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 72  Th 7d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 73  Jc 5c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 96%  raise 1%  jam 3%
+           => Call
+  flop     board 4h 2d 8c       pot    6.7  to call   1.6
+           heads-up flop
+           fold 11%  check/call 85%  bet small 1%  bet large 2%  all in 0%
+           => Call
+  turn     board 4h 2d 8c 6c    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4h 2d 8c 6c 8h pot    8.3  to call   0.0
+           heads-up river
+           check/call 3%  bet small 2%  bet large 25%  all in 71%
+           => RaiseTo(623)
+  result   +0.00 bb
+
+HAND 74  Jc 8s
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -7.34 bb
+
+HAND 75  2c 8c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 76  Kc 4c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 3%  raise 95%  jam 2%
+           => RaiseTo(10000)
+  result   +0.00 bb
+
+HAND 77  2d Th
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +4.82 bb
+
+HAND 78  9h 4h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 79  Ac Qs
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 14%  raise 84%  jam 2%
+           => RaiseTo(900)
+  preflop  board -              pot  109.5  to call  91.0
+           3-handed preflop
+           fold 93%  passive 7%
+           => Fold
+  result   +9.50 bb
+
+HAND 80  Tc 4d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 1%  passive 97%  raise 0%  jam 1%
+           => Call
+  flop     board 5c 2d Qc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 88%  bet small 10%  bet large 2%  all in 0%
+           => Check
+  turn     board 5c 2d Qc Th    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 5c 2d Qc Th    pot    6.7  to call   1.6
+           heads-up turn
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Call
+  river    board 5c 2d Qc Th 7h pot    8.3  to call   0.0
+           heads-up river
+           check/call 23%  bet small 76%  bet large 0%  all in 1%
+           => Check
+  river    board 5c 2d Qc Th 7h pot   14.5  to call   6.2
+           heads-up river
+           fold 1%  check/call 96%  bet small 0%  bet large 1%  all in 2%
+           => Call
+  result   +0.00 bb
+
+HAND 81  Ah 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 2%  passive 4%  raise 92%  jam 1%
+           => RaiseTo(250)
+  flop     board Ks 3s Qd       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 60%  bet small 34%  bet large 6%  all in 0%
+           => Check
+  turn     board Ks 3s Qd Qh    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Ks 3s Qd Qh 2s pot  103.0  to call  97.5
+           heads-up river
+           fold 95%  check/call 5%
+           => Fold
+  result   -2.50 bb
+
+HAND 82  Kd 2d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 27%  raise 70%  jam 3%
+           => RaiseTo(250)
+  flop     board 5h 4h 9d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 11%  bet small 63%  bet large 26%  all in 0%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 83  7d 3h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 97%  passive 3%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 84  5h Ah
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 1%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board 8h 5s Td       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 8h 5s Td 8c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 8h 5s Td 8c 3d pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.25 bb
+
+HAND 85  9c Ac
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 97%  jam 3%
+           => RaiseTo(250)
+  flop     board 7s Kd Ad       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 68%  bet small 24%  bet large 7%  all in 1%
+           => Check
+  turn     board 7s Kd Ad 3s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  river    board 7s Kd Ad 3s 9d pot    6.7  to call   1.6
+           heads-up river
+           fold 0%  check/call 1%  bet small 3%  bet large 73%  all in 22%
+           => RaiseTo(788)
+  result   +0.00 bb
+
+HAND 86  6d 2s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 87  2s 6c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 88  8s Kh
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 6d Js 2c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => RaiseTo(182)
+  turn     board 6d Js 2c 5h    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 87%  bet small 11%  bet large 2%  all in 0%
+           => Check
+  river    board 6d Js 2c 5h 9c pot    9.1  to call   0.0
+           heads-up river
+           check/call 8%  bet small 86%  bet large 1%  all in 5%
+           => RaiseTo(302)
+  result   +7.84 bb
+
+HAND 89  Jh 6c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 8s Js 2c       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 8s Js 2c Qs    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board 8s Js 2c Qs 5d pot    5.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 90  Td As
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board Kc Kd Qs       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 5%  bet large 1%  all in 0%
+           => Check
+  turn     board Kc Kd Qs Qh    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board Kc Kd Qs Qh Ac pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   -2.50 bb
+
+HAND 91  Ah Ks
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 1%  passive 4%  raise 55%  jam 40%
+           => RaiseTo(10000)
+  result   -2.50 bb
+
+HAND 92  Jh 9c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 68%  passive 31%  raise 0%  jam 1%
+           => Call
+  flop     board 9d 2s Ts       pot    7.5  to call   0.0
+           3-way flop
+           check/call 89%  bet small 8%  bet large 2%  all in 0%
+           => Check
+  flop     board 9d 2s Ts       pot   10.0  to call   2.5
+           3-way flop
+           fold 1%  check/call 97%  bet small 1%  bet large 1%  all in 1%
+           => Call
+  turn     board 9d 2s Ts 7c    pot   14.9  to call   0.0
+           3-way turn
+           check/call 87%  bet small 11%  bet large 1%  all in 1%
+           => Check
+  turn     board 9d 2s Ts 7c    pot   24.8  to call   4.9
+           3-way turn
+           fold 2%  check/call 91%  bet small 3%  bet large 2%  all in 2%
+           => Call
+  river    board 9d 2s Ts 7c Kd pot   29.7  to call   0.0
+           3-way river
+           check/call 95%  bet small 1%  bet large 3%  all in 1%
+           => Check
+  river    board 9d 2s Ts 7c Kd pot   52.0  to call  22.3
+           3-way river
+           fold 4%  check/call 91%  bet small 0%  bet large 2%  all in 2%
+           => Call
+  result   +64.42 bb
+
+HAND 93  4c Kh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 94  Kh Qs
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 81%  raise 17%  jam 2%
+           => Call
+  flop     board Js 6s 9d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 82%  bet small 17%  bet large 1%  all in 0%
+           => Check
+  flop     board Js 6s 9d       pot    7.3  to call   1.8
+           heads-up flop
+           fold 0%  check/call 71%  bet small 25%  bet large 3%  all in 0%
+           => Call
+  turn     board Js 6s 9d 7c    pot    9.1  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Js 6s 9d 7c    pot   16.0  to call   6.9
+           heads-up turn
+           fold 96%  check/call 1%  bet small 2%  bet large 1%  all in 0%
+           => Fold
+  result   +4.82 bb
+
+HAND 95  Qs 9c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 76%  passive 23%  raise 0%  jam 1%
+           => Fold
+  result   -4.32 bb
+
+HAND 96  7d 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 97  Ks 3d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 49%  raise 50%  jam 1%
+           => Check
+  flop     board 3h As 9h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 3h As 9h Jc    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 3h As 9h Jc 7h pot    3.0  to call   1.0
+           heads-up river
+           fold 66%  check/call 25%  bet small 1%  bet large 5%  all in 3%
+           => Fold
+  result   +0.00 bb
+
+HAND 98  9h Js
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 28%  raise 72%  jam 1%
+           => RaiseTo(250)
+  flop     board 5s 8s Qc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 8%  bet large 1%  all in 0%
+           => Check
+  turn     board 5s 8s Qc 2d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 67%  bet small 23%  bet large 9%  all in 0%
+           => Check
+  river    board 5s 8s Qc 2d Th pot    5.0  to call   0.0
+           heads-up river
+           check/call 65%  bet small 24%  bet large 1%  all in 9%
+           => Check
+  result   +0.00 bb
+
+HAND 99  2h Kh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 98%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 100  8d 5d
+  preflop  board -              pot    6.0  to call   1.5
+           3-handed preflop
+           fold 1%  passive 95%  raise 1%  jam 3%
+           => Fold
+  result   +3.50 bb
+
+HAND 101  Ah 9s
+  preflop  board -              pot    2.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 45%  raise 53%  jam 1%
+           => RaiseTo(250)
+  preflop  board -              pot  103.5  to call  97.5
+           3-handed preflop
+           fold 98%  passive 2%
+           => Fold
+  result   -1.00 bb
+
+HAND 102  Ac 4h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 4%  raise 94%  jam 0%
+           => RaiseTo(250)
+  flop     board 9d 6d Jc       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 6%  bet small 86%  bet large 7%  all in 0%
+           => RaiseTo(182)
+  result   +3.00 bb
+
+HAND 103  9d 6d
+  preflop  board -              pot    3.0  to call   0.0
+           3-handed preflop
+           passive 96%  raise 0%  jam 3%
+           => Check
+  flop     board 2h 8d Kc       pot    3.0  to call   0.0
+           3-way flop
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board 2h 8d Kc 7c    pot    3.0  to call   0.0
+           3-way turn
+           check/call 93%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  river    board 2h 8d Kc 7c Th pot    3.0  to call   0.0
+           3-way river
+           check/call 7%  bet small 14%  bet large 60%  all in 19%
+           => RaiseTo(225)
+  result   -1.00 bb
+
+HAND 104  9d Kd
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 2%  raise 97%  jam 1%
+           => RaiseTo(250)
+  flop     board 5d Kh Tc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 58%  bet small 36%  bet large 5%  all in 1%
+           => RaiseTo(165)
+  flop     board 5d Kh Tc       pot   11.0  to call   2.7
+           heads-up flop
+           fold 0%  check/call 49%  bet small 50%  bet large 1%  all in 0%
+           => RaiseTo(894)
+  turn     board 5d Kh Tc 7c    pot   22.9  to call   0.0
+           heads-up turn
+           check/call 37%  bet small 61%  bet large 1%  all in 1%
+           => RaiseTo(755)
+  result   +0.00 bb
+
+HAND 105  Ac Qd
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 3%  raise 96%  jam 1%
+           => RaiseTo(250)
+  flop     board 7d Kd 7c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 5%  bet large 1%  all in 0%
+           => Check
+  turn     board 7d Kd 7c 4d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 7d Kd 7c 4d 4h pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +3.00 bb
+
+HAND 106  9s 7c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 2%
+           => Check
+  flop     board 4c 4h Qs       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 64%  bet small 22%  bet large 15%  all in 0%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 107  3s 9s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 2%  passive 96%  raise 0%  jam 2%
+           => Call
+  flop     board 5s Ad 2d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 5s Ad 2d Td    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 95%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  turn     board 5s Ad 2d Td    pot    3.0  to call   1.0
+           heads-up turn
+           fold 97%  check/call 0%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 108  4d 2c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 109  5h Kh
+  preflop  board -              pot    6.0  to call   1.5
+           3-handed preflop
+           fold 1%  passive 95%  raise 1%  jam 3%
+           => Call
+  flop     board Jc Tc Ks       pot    7.5  to call   0.0
+           3-way flop
+           check/call 33%  bet small 66%  bet large 1%  all in 0%
+           => Check
+  turn     board Jc Tc Ks 7d    pot    7.5  to call   0.0
+           3-way turn
+           check/call 94%  bet small 5%  bet large 1%  all in 1%
+           => Check
+  river    board Jc Tc Ks 7d 2s pot    7.5  to call   0.0
+           3-way river
+           check/call 97%  bet small 1%  bet large 1%  all in 1%
+           => Check
+  result   -2.50 bb
+
+HAND 110  7h Tc
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 111  Tc Ah
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 5h Th 9c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 6%  bet small 54%  bet large 38%  all in 2%
+           => RaiseTo(413)
+  result   +3.00 bb
+
+HAND 112  Ac Js
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 27%  raise 71%  jam 1%
+           => Call
+  flop     board 5d Jh 3h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 75%  bet small 14%  bet large 7%  all in 4%
+           => RaiseTo(182)
+  flop     board 5d Jh 3h       pot   12.2  to call   3.0
+           heads-up flop
+           fold 0%  check/call 5%  bet small 91%  bet large 3%  all in 1%
+           => RaiseTo(985)
+  turn     board 5d Jh 3h Ah    pot   25.2  to call   0.0
+           heads-up turn
+           check/call 82%  bet small 17%  bet large 1%  all in 1%
+           => Check
+  river    board 5d Jh 3h Ah Ks pot   25.2  to call   0.0
+           heads-up river
+           check/call 4%  bet small 3%  bet large 1%  all in 93%
+           => RaiseTo(8765)
+  result   -100.00 bb
+
+HAND 113  Ac 6d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 7%  raise 92%  jam 1%
+           => RaiseTo(250)
+  flop     board Qh 5s Qs       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 86%  bet small 12%  bet large 1%  all in 0%
+           => Check
+  turn     board Qh 5s Qs 6h    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 81%  bet small 13%  bet large 6%  all in 0%
+           => Check
+  river    board Qh 5s Qs 6h 8c pot    5.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  river    board Qh 5s Qs 6h 8c pot  102.5  to call  97.5
+           heads-up river
+           fold 59%  check/call 41%
+           => Fold
+  result   +0.00 bb
+
+HAND 114  3s 9h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 115  9s Qc
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Th 9c Ac       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board Th 9c Ac 6d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board Th 9c Ac 6d 5h pot    5.5  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 0%  all in 1%
+           => Check
+  result   -2.50 bb
+
+HAND 116  9d Ts
+  preflop  board -              pot    2.5  to call   0.5
+           3-handed preflop
+           fold 5%  passive 93%  raise 0%  jam 2%
+           => Call
+  flop     board 9h 5c 6s       pot    3.0  to call   0.0
+           3-way flop
+           check/call 88%  bet small 10%  bet large 2%  all in 0%
+           => Check
+  flop     board 9h 5c 6s       pot    5.2  to call   2.2
+           3-way flop
+           fold 1%  check/call 96%  bet small 1%  bet large 1%  all in 1%
+           => Call
+  turn     board 9h 5c 6s 9s    pot    9.8  to call   0.0
+           3-way turn
+           check/call 54%  bet small 25%  bet large 12%  all in 9%
+           => Check
+  river    board 9h 5c 6s 9s 5d pot    9.8  to call   0.0
+           3-way river
+           check/call 80%  bet small 5%  bet large 5%  all in 10%
+           => RaiseTo(9675)
+  result   -3.25 bb
+
+HAND 117  Kh 3h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 98%  passive 0%  raise 1%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 118  3d 9c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 99%  raise 0%  jam 1%
+           => Check
+  flop     board Jc 6c 5s       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 84%  bet small 15%  bet large 1%  all in 0%
+           => Check
+  turn     board Jc 6c 5s 2s    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 13%  bet small 47%  bet large 39%  all in 0%
+           => RaiseTo(150)
+  turn     board Jc 6c 5s 2s    pot    6.7  to call   1.6
+           heads-up turn
+           fold 94%  check/call 1%  bet small 4%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 119  8s 3h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 5%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 120  Kd 4c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 121  8c Tc
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 95%  raise 1%  jam 4%
+           => Call
+  flop     board 7c Ah 7d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 60%  bet small 34%  bet large 6%  all in 0%
+           => Check
+  turn     board 7c Ah 7d Jc    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 7c Ah 7d Jc 3c pot    6.7  to call   1.6
+           heads-up river
+           fold 0%  check/call 1%  bet small 2%  bet large 21%  all in 76%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 122  5d 3d
+  preflop  board -              pot    2.5  to call   0.5
+           3-handed preflop
+           fold 34%  passive 64%  raise 0%  jam 2%
+           => Fold
+  result   +5.88 bb
+
+HAND 123  7c 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 124  9c 7s
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 4h 5s Jc       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  turn     board 4h 5s Jc 3h    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 92%  bet small 3%  bet large 4%  all in 0%
+           => Check
+  river    board 4h 5s Jc 3h 6h pot    5.5  to call   0.0
+           heads-up river
+           check/call 66%  bet small 32%  bet large 1%  all in 1%
+           => RaiseTo(182)
+  result   -2.50 bb
+
+HAND 125  As 5s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 1%  raise 97%  jam 1%
+           => RaiseTo(250)
+  flop     board 8d 7h Th       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 85%  bet small 14%  bet large 1%  all in 0%
+           => Check
+  turn     board 8d 7h Th 2d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => Check
+  turn     board 8d 7h Th 2d    pot    8.8  to call   3.8
+           heads-up turn
+           fold 96%  check/call 0%  bet small 1%  bet large 2%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 126  9c Kd
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 14%  raise 85%  jam 0%
+           => Call
+  flop     board Ks Jh 8d       pot    2.5  to call   0.0
+           heads-up flop
+           check/call 68%  bet small 24%  bet large 7%  all in 1%
+           => Check
+  turn     board Ks Jh 8d Ac    pot    2.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board Ks Jh 8d Ac Qh pot    2.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +1.50 bb
+
+HAND 127  4c 7d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 49%  passive 50%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 1%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 5c 3c 9c       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 81%  bet small 18%  bet large 1%  all in 0%
+           => Check
+  flop     board 5c 3c 9c       pot    6.7  to call   1.6
+           heads-up flop
+           fold 12%  check/call 56%  bet small 25%  bet large 7%  all in 0%
+           => Call
+  turn     board 5c 3c 9c 2s    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 15%  bet small 13%  bet large 71%  all in 0%
+           => Check
+  turn     board 5c 3c 9c 2s    pot   14.5  to call   6.2
+           heads-up turn
+           fold 97%  check/call 1%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 128  4c Ts
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 129  5h Ad
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 5%  raise 94%  jam 1%
+           => RaiseTo(250)
+  flop     board 3h 4s Tc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 82%  bet small 17%  bet large 1%  all in 0%
+           => Check
+  turn     board 3h 4s Tc 8d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board 3h 4s Tc 8d 7s pot    5.0  to call   0.0
+           heads-up river
+           check/call 93%  bet small 3%  bet large 1%  all in 3%
+           => Check
+  result   +0.00 bb
+
+HAND 130  2s Ah
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 72%  passive 23%  raise 5%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 131  6s 9h
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => RaiseTo(900)
+  flop     board 6c Ad 3h       pot   23.9  to call   5.9
+           heads-up flop
+           fold 0%  check/call 97%  bet small 1%  bet large 1%  all in 0%
+           => Call
+  turn     board 6c Ad 3h 7h    pot   29.9  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 1%
+           => Check
+  river    board 6c Ad 3h 7h Tc pot   29.9  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 3%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 132  7c Ah
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 2%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board Td 8h Qs       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Td 8h Qs 4h    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board Td 8h Qs 4h Ad pot    5.0  to call   0.0
+           heads-up river
+           check/call 75%  bet small 23%  bet large 0%  all in 1%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 133  Qh 7d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 134  7d 5s
+  preflop  board -              pot    6.0  to call   1.5
+           3-handed preflop
+           fold 1%  passive 97%  raise 0%  jam 1%
+           => Call
+  flop     board As 9d Kh       pot    7.5  to call   0.0
+           3-way flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board As 9d Kh 8h    pot    7.5  to call   0.0
+           3-way turn
+           check/call 96%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  river    board As 9d Kh 8h Qs pot    7.5  to call   0.0
+           3-way river
+           check/call 76%  bet small 7%  bet large 17%  all in 1%
+           => Check
+  result   -2.50 bb
+
+HAND 135  4d Ah
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 27%  raise 72%  jam 1%
+           => RaiseTo(250)
+  flop     board 6s Qd Qs       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 6s Qd Qs 5s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 91%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  river    board 6s Qd Qs 5s 8d pot    5.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 136  4h Ad
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 4%  raise 94%  jam 0%
+           => RaiseTo(250)
+  flop     board 6c 8h 8s       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 6%  bet large 1%  all in 0%
+           => Check
+  turn     board 6c 8h 8s As    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 6c 8h 8s As 3h pot    5.5  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 1%  all in 1%
+           => Check
+  result   -2.50 bb
+
+HAND 137  9d 4c
+  preflop  board -              pot    2.5  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 7c 8c Qd       pot    2.5  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 3%  bet large 3%  all in 0%
+           => RaiseTo(100)
+  turn     board 7c 8c Qd Ah    pot    4.5  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  river    board 7c 8c Qd Ah Th pot    4.5  to call   0.0
+           heads-up river
+           check/call 15%  bet small 80%  bet large 2%  all in 3%
+           => RaiseTo(149)
+  result   +3.99 bb
+
+HAND 138  Qs 6d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 61%  raise 38%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 8c 2c 3d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  flop     board 8c 2c 3d       pot    6.7  to call   1.6
+           heads-up flop
+           fold 76%  check/call 1%  bet small 15%  bet large 7%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 139  As 9d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 8c 2s 4c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 86%  bet small 11%  bet large 2%  all in 0%
+           => Check
+  turn     board 8c 2s 4c Td    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 1%  all in 0%
+           => Check
+  river    board 8c 2s 4c Td Jc pot    5.5  to call   0.0
+           heads-up river
+           check/call 87%  bet small 0%  bet large 3%  all in 9%
+           => Check
+  result   -2.50 bb
+
+HAND 140  Js Ts
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 95%  jam 3%
+           => RaiseTo(250)
+  flop     board 9s 9c 8h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 141  Ac Qd
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 59%  raise 40%  jam 1%
+           => Call
+  flop     board 2s 3c 8h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 2s 3c 8h As    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 84%  bet small 8%  bet large 8%  all in 1%
+           => Check
+  river    board 2s 3c 8h As 4d pot    2.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => RaiseTo(9900)
+  result   +0.00 bb
+
+HAND 142  Qc 2c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 143  3d 4c
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 2h Ts 9c       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 60%  bet small 38%  bet large 2%  all in 0%
+           => Check
+  turn     board 2h Ts 9c 8c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 33%  bet small 22%  bet large 45%  all in 0%
+           => Check
+  river    board 2h Ts 9c 8c 8s pot    5.5  to call   0.0
+           heads-up river
+           check/call 57%  bet small 29%  bet large 4%  all in 10%
+           => RaiseTo(9750)
+  result   -2.50 bb
+
+HAND 144  Jc 7c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 49%  raise 49%  jam 1%
+           => RaiseTo(250)
+  flop     board 2c 9s As       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 2c 9s As Kh    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 17%  bet large 5%  all in 0%
+           => Check
+  river    board 2c 9s As Kh 7s pot    5.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 145  8c 6h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 146  Kc 3c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 4%  raise 94%  jam 2%
+           => RaiseTo(250)
+  flop     board Jh 8c Qc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board Jh 8c Qc Jd    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Jh 8c Qc Jd 7h pot    5.0  to call   0.0
+           heads-up river
+           check/call 96%  bet small 0%  bet large 1%  all in 3%
+           => Check
+  result   +0.00 bb
+
+HAND 147  9d 5c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board Jh 7c 6d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 2%  all in 0%
+           => Check
+  flop     board Jh 7c 6d       pot  101.0  to call  99.0
+           heads-up flop
+           fold 99%  check/call 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 148  7h 7c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 1%  raise 97%  jam 1%
+           => RaiseTo(250)
+  flop     board 7s 6d Ad       pot    7.3  to call   1.8
+           heads-up flop
+           fold 0%  check/call 12%  bet small 71%  bet large 6%  all in 11%
+           => RaiseTo(484)
+  result   +4.82 bb
+
+HAND 149  6h 3s
+  preflop  board -              pot  101.0  to call  99.0
+           3-handed preflop
+           fold 100%  passive 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 150  Jd 8d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 34%  raise 64%  jam 1%
+           => RaiseTo(250)
+  flop     board 7d 9d 6s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  flop     board 7d 9d 6s       pot    6.7  to call   1.6
+           heads-up flop
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => RaiseTo(439)
+  result   +0.00 bb
+
+HAND 151  8s Ts
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 152  5c 9h
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => RaiseTo(10000)
+  result   +0.00 bb
+
+HAND 153  8d Js
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 59%  raise 40%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board Th 3h Jh       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board Th 3h Jh 5c    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board Th 3h Jh 5c Ah pot    5.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 0%  all in 2%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 154  Ad 9h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 4s Kc Jd       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 4s Kc Jd 4h    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4s Kc Jd 4h 7d pot    7.3  to call   1.8
+           heads-up river
+           fold 44%  check/call 54%  bet small 0%  bet large 1%  all in 1%
+           => Fold
+  result   -2.50 bb
+
+HAND 155  Jc 3c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 8s 8d Ac       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 72%  bet small 25%  bet large 3%  all in 0%
+           => Check
+  turn     board 8s 8d Ac Th    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 1%  bet large 3%  all in 0%
+           => Check
+  river    board 8s 8d Ac Th 5c pot    2.0  to call   0.0
+           heads-up river
+           check/call 43%  bet small 1%  bet large 51%  all in 5%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 156  4h 5c
+  preflop  board -              pot    2.5  to call   0.5
+           3-handed preflop
+           fold 25%  passive 74%  raise 0%  jam 1%
+           => Call
+  flop     board Qh 2c Kh       pot    3.0  to call   0.0
+           3-way flop
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  flop     board Qh 2c Kh       pot    5.0  to call   1.0
+           3-way flop
+           fold 99%  check/call 0%  bet small 0%  bet large 0%  all in 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 157  9d 4h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 158  Kd Ks
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 0%  raise 96%  jam 4%
+           => RaiseTo(250)
+  flop     board 2s Jh Kh       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 61%  bet small 18%  bet large 19%  all in 2%
+           => Check
+  turn     board 2s Jh Kh Qh    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 3%  bet small 63%  bet large 34%  all in 1%
+           => RaiseTo(165)
+  river    board 2s Jh Kh Qh Qc pot  104.2  to call  95.8
+           heads-up river
+           fold 0%  check/call 100%
+           => Call
+  result   +0.00 bb
+
+HAND 159  3c Ts
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 8h Td 2d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board 8h Td 2d 3h    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 81%  bet small 8%  bet large 4%  all in 7%
+           => Check
+  river    board 8h Td 2d 3h 5s pot    2.0  to call   0.0
+           heads-up river
+           check/call 76%  bet small 19%  bet large 2%  all in 3%
+           => Check
+  result   +0.00 bb
+
+HAND 160  6d 3h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 161  8d 3s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 5%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 162  7c Js
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 163  Th 3s
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 2%  passive 96%  raise 0%  jam 1%
+           => Call
+  flop     board Tc 8d 5d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Tc 8d 5d Kd    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Tc 8d 5d Kd Ac pot    5.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 164  9h 5s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 1%  passive 98%  raise 0%  jam 1%
+           => RaiseTo(10000)
+  result   +0.00 bb
+
+HAND 165  4c 6c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 166  Kc Qh
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 0%  raise 98%  jam 1%
+           => RaiseTo(250)
+  preflop  board -              pot   11.5  to call   6.5
+           3-handed preflop
+           fold 4%  passive 93%  raise 0%  jam 3%
+           => Call
+  flop     board 6d 6s 7s       pot   18.0  to call   0.0
+           heads-up flop
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board 6d 6s 7s 7h    pot   18.0  to call   0.0
+           heads-up turn
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 6d 6s 7s 7h 2h pot   18.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 167  7c Ks
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 24%  raise 75%  jam 1%
+           => RaiseTo(250)
+  result   +0.00 bb
+
+HAND 168  8s 3d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 169  2h As
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 3%  raise 96%  jam 2%
+           => RaiseTo(250)
+  flop     board 2d 7c Kc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 2d 7c Kc 3c    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 2d 7c Kc 3c 6h pot    5.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 170  3h 7h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 26%  passive 73%  raise 0%  jam 1%
+           => Call
+  flop     board 7s 2h 5d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  flop     board 7s 2h 5d       pot    3.0  to call   1.0
+           heads-up flop
+           fold 0%  check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Call
+  turn     board 7s 2h 5d 7d    pot    4.0  to call   0.0
+           heads-up turn
+           check/call 84%  bet small 8%  bet large 8%  all in 1%
+           => Check
+  turn     board 7s 2h 5d 7d    pot    7.0  to call   3.0
+           heads-up turn
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Call
+  river    board 7s 2h 5d 7d 8d pot   10.0  to call   0.0
+           heads-up river
+           check/call 11%  bet small 81%  bet large 2%  all in 7%
+           => RaiseTo(330)
+  river    board 7s 2h 5d 7d 8d pot  108.3  to call  91.7
+           heads-up river
+           fold 2%  check/call 98%
+           => Call
+  result   +0.00 bb
+
+HAND 171  Td Jh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 10%  passive 87%  raise 2%  jam 1%
+           => Call
+  flop     board 3s Qc Ks       pot    3.0  to call   0.0
+           3-way flop
+           check/call 94%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board 3s Qc Ks 9h    pot    4.0  to call   1.0
+           3-way turn
+           fold 0%  check/call 29%  bet small 2%  bet large 22%  all in 47%
+           => RaiseTo(9900)
+  result   +3.00 bb
+
+HAND 172  4d 3d
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 96%  raise 1%  jam 3%
+           => Call
+  flop     board 2h 8h 7d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board 2h 8h 7d Ts    pot    8.8  to call   3.8
+           heads-up turn
+           fold 97%  check/call 0%  bet small 1%  bet large 2%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 173  6s 8d
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -2.50 bb
+
+HAND 174  8c 9s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 175  2d Kh
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Ac 8d Kd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 94%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board Ac 8d Kd 5s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board Ac 8d Kd 5s As pot    5.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 1%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 176  Qs 2d
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 177  Ah 7d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 0%
+           => RaiseTo(250)
+  flop     board Ad 4s Ks       pot   10.0  to call   2.5
+           3-way flop
+           fold 0%  check/call 92%  bet small 4%  bet large 3%  all in 1%
+           => Call
+  turn     board Ad 4s Ks Js    pot   12.5  to call   0.0
+           heads-up turn
+           check/call 10%  bet small 88%  bet large 2%  all in 1%
+           => RaiseTo(411)
+  river    board Ad 4s Ks Js Kh pot   20.7  to call   0.0
+           heads-up river
+           check/call 2%  bet small 1%  bet large 96%  all in 1%
+           => RaiseTo(9091)
+  result   +11.59 bb
+
+HAND 178  5h 5s
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 3%  raise 95%  jam 2%
+           => RaiseTo(250)
+  flop     board 7c 8c 9s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 9%  bet large 1%  all in 0%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 179  8h 6s
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -2.50 bb
+
+HAND 180  5c Kd
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 181  6d 4c
+  preflop  board -              pot    3.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 2%
+           => Check
+  flop     board Qd 2c Ad       pot    3.0  to call   0.0
+           3-way flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board Qd 2c Ad 4h    pot    3.0  to call   0.0
+           3-way turn
+           check/call 87%  bet small 9%  bet large 4%  all in 1%
+           => Check
+  river    board Qd 2c Ad 4h 5s pot    3.0  to call   0.0
+           3-way river
+           check/call 96%  bet small 1%  bet large 2%  all in 1%
+           => Check
+  result   -1.00 bb
+
+HAND 182  2c Js
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 2%  passive 97%  raise 0%  jam 1%
+           => Call
+  flop     board 5s Qs Jc       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 183  Jc Ks
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board Jh 7d 5h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 68%  bet small 24%  bet large 7%  all in 1%
+           => RaiseTo(182)
+  flop     board Jh 7d 5h       pot   12.2  to call   3.0
+           heads-up flop
+           fold 0%  check/call 57%  bet small 41%  bet large 1%  all in 0%
+           => Call
+  turn     board Jh 7d 5h 7c    pot   15.2  to call   0.0
+           heads-up turn
+           check/call 2%  bet small 3%  bet large 94%  all in 1%
+           => RaiseTo(1139)
+  river    board Jh 7d 5h 7c 5c pot   38.0  to call   0.0
+           heads-up river
+           check/call 0%  bet small 1%  bet large 74%  all in 26%
+           => RaiseTo(2847)
+  result   +47.70 bb
+
+HAND 184  Qs 8c
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 2d 7c 7h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 2d 7c 7h Kh    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board 2d 7c 7h Kh Ac pot    5.5  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +3.00 bb
+
+HAND 185  5s Kd
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 50%  raise 49%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 1%  jam 1%
+           => Call
+  flop     board 8c 6h 4s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 8c 6h 4s Qc    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => RaiseTo(375)
+  river    board 8c 6h 4s Qc 8d pot   12.5  to call   0.0
+           heads-up river
+           check/call 92%  bet small 5%  bet large 1%  all in 2%
+           => Check
+  river    board 8c 6h 4s Qc 8d pot   21.9  to call   9.4
+           heads-up river
+           fold 94%  check/call 2%  bet small 0%  bet large 1%  all in 3%
+           => Fold
+  result   +0.00 bb
+
+HAND 186  8h 5c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 187  2d 3s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 188  Qh 5c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 189  Ac Ks
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 1%  passive 2%  raise 73%  jam 24%
+           => RaiseTo(900)
+  flop     board 4s 7h Jd       pot   19.0  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 6%  bet large 3%  all in 0%
+           => Check
+  flop     board 4s 7h Jd       pot   25.3  to call   6.3
+           heads-up flop
+           fold 1%  check/call 92%  bet small 6%  bet large 1%  all in 0%
+           => Call
+  turn     board 4s 7h Jd 3s    pot   31.5  to call   0.0
+           heads-up turn
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 4s 7h Jd 3s    pot   42.0  to call  10.4
+           heads-up turn
+           fold 1%  check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Call
+  river    board 4s 7h Jd 3s 9s pot   52.4  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 0%  all in 1%
+           => Check
+  river    board 4s 7h Jd 3s 9s pot   91.6  to call  39.3
+           heads-up river
+           fold 73%  check/call 26%  all in 1%
+           => Fold
+  result   +26.68 bb
+
+HAND 190  Js 8c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 191  Qd 8d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 4%  raise 94%  jam 2%
+           => RaiseTo(250)
+  flop     board Jd 6c 4h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 81%  bet small 18%  bet large 1%  all in 0%
+           => Check
+  turn     board Jd 6c 4h 5h    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 94%  bet small 3%  bet large 3%  all in 0%
+           => Check
+  turn     board Jd 6c 4h 5h    pot    6.7  to call   1.6
+           heads-up turn
+           fold 96%  check/call 1%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 192  3h Qc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 193  Ac 9h
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board Jh 6s As       pot    8.8  to call   3.8
+           heads-up flop
+           fold 0%  check/call 67%  bet small 29%  bet large 3%  all in 1%
+           => Call
+  turn     board Jh 6s As Tc    pot   12.5  to call   0.0
+           heads-up turn
+           check/call 2%  bet small 3%  bet large 94%  all in 1%
+           => RaiseTo(938)
+  result   +0.00 bb
+
+HAND 194  5s 3c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 4%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 195  Ts Jc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 10%  passive 87%  raise 2%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 196  Qs 6c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 6d Ad Td       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 6d Ad Td Jd    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 98%  bet small 1%  bet large 2%  all in 0%
+           => Check
+  river    board 6d Ad Td Jd 2d pot    5.0  to call   0.0
+           heads-up river
+           check/call 44%  bet small 2%  bet large 46%  all in 8%
+           => Check
+  result   +0.00 bb
+
+HAND 197  9c 3c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 2%  passive 96%  raise 0%  jam 2%
+           => Call
+  flop     board Th 2s 7h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board Th 2s 7h 5s    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 33%  bet small 22%  bet large 45%  all in 0%
+           => RaiseTo(100)
+  result   +0.00 bb
+
+HAND 198  8h 5c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 199  Th 9h
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 95%  raise 2%  jam 3%
+           => RaiseTo(10000)
+  result   -2.50 bb
+
+HAND 200  Jh 6d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board Qs Ts Qd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 81%  bet small 18%  bet large 1%  all in 0%
+           => RaiseTo(375)
+  turn     board Qs Ts Qd Tc    pot   12.5  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Qs Ts Qd Tc    pot   16.6  to call   4.1
+           heads-up turn
+           fold 3%  check/call 93%  bet small 3%  bet large 0%  all in 0%
+           => Call
+  river    board Qs Ts Qd Tc 8s pot   20.8  to call   0.0
+           heads-up river
+           check/call 98%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 201  7c Qc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 97%  passive 1%  raise 1%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 202  Ks 3d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 49%  raise 50%  jam 1%
+           => Check
+  flop     board 9c Jh Js       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 86%  bet small 11%  bet large 2%  all in 0%
+           => Check
+  turn     board 9c Jh Js 6c    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 98%  bet small 1%  bet large 2%  all in 0%
+           => Check
+  river    board 9c Jh Js 6c 7c pot    2.0  to call   0.0
+           heads-up river
+           check/call 88%  bet small 1%  bet large 2%  all in 8%
+           => Check
+  result   +0.00 bb
+
+HAND 203  9s Ts
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 42%  raise 56%  jam 1%
+           => RaiseTo(250)
+  flop     board 6c Kd Qd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  flop     board 6c Kd Qd       pot    6.7  to call   1.6
+           heads-up flop
+           fold 1%  check/call 88%  bet small 10%  bet large 2%  all in 0%
+           => RaiseTo(439)
+  result   +0.00 bb
+
+HAND 204  3h Ah
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 2%  raise 96%  jam 1%
+           => RaiseTo(250)
+  flop     board 8s Js 9h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 16%  bet small 28%  bet large 56%  all in 0%
+           => Check
+  turn     board 8s Js 9h 4c    pot    7.3  to call   1.8
+           heads-up turn
+           fold 66%  check/call 2%  bet small 2%  bet large 29%  all in 1%
+           => RaiseTo(868)
+  river    board 8s Js 9h 4c 2h pot   22.9  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 1%  all in 1%
+           => Check
+  result   -11.18 bb
+
+HAND 205  4h 2h
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 96%  raise 0%  jam 4%
+           => Check
+  flop     board 4c 9h Qd       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 4c 9h Qd Ac    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4c 9h Qd Ac Td pot    2.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 206  8d Th
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   -7.34 bb
+
+HAND 207  8s Ts
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 208  7c Jh
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 64%  raise 35%  jam 1%
+           => Check
+  flop     board 9h 8s 5s       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 67%  bet small 32%  bet large 1%  all in 0%
+           => Check
+  turn     board 9h 8s 5s 4h    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 31%  bet small 37%  bet large 32%  all in 0%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 209  Jc 6s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 7h Qh 7d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 79%  bet small 21%  bet large 1%  all in 0%
+           => RaiseTo(100)
+  result   +0.00 bb
+
+HAND 210  Ac 8d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board Jd Kc Qs       pot    7.5  to call   0.0
+           3-way flop
+           check/call 94%  bet small 2%  bet large 4%  all in 0%
+           => Check
+  turn     board Jd Kc Qs Kd    pot    7.5  to call   0.0
+           3-way turn
+           check/call 86%  bet small 11%  bet large 2%  all in 0%
+           => RaiseTo(248)
+  result   +5.00 bb
+
+HAND 211  Ks 5c
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board Ac 5h 2h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 1%  bet large 1%  all in 0%
+           => Check
+  turn     board Ac 5h 2h 3c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 21%  bet large 1%  all in 0%
+           => RaiseTo(182)
+  river    board Ac 5h 2h 3c Ts pot    9.1  to call   0.0
+           heads-up river
+           check/call 99%  bet small 1%  bet large 0%  all in 1%
+           => Check
+  river    board Ac 5h 2h 3c Ts pot   16.0  to call   6.9
+           heads-up river
+           fold 33%  check/call 60%  bet small 0%  bet large 1%  all in 6%
+           => Fold
+  result   +4.82 bb
+
+HAND 212  6h 4c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 47%  passive 53%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 213  Kd Js
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board 4d Qd As       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 4d Qd As 5c    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4d Qd As 5c Jd pot    5.5  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   +3.00 bb
+
+HAND 214  4c Kd
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 18%  raise 81%  jam 1%
+           => Check
+  flop     board 8c 8s 4h       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 8c 8s 4h Jd    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 8c 8s 4h Jd 6h pot    2.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 215  3h 2d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 216  7s 8s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 217  4s 7s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 2%  passive 96%  raise 0%  jam 2%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 1%  jam 2%
+           => Call
+  flop     board As 8h Ah       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 7%  bet large 3%  all in 0%
+           => Check
+  turn     board As 8h Ah 9h    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 93%  bet small 3%  bet large 3%  all in 0%
+           => Check
+  river    board As 8h Ah 9h 2s pot    5.0  to call   0.0
+           heads-up river
+           check/call 3%  bet small 86%  bet large 4%  all in 7%
+           => RaiseTo(9750)
+  result   +0.00 bb
+
+HAND 218  4h Jc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 219  8d 4d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 97%  raise 0%  jam 3%
+           => Check
+  flop     board 5d Kh 3d       pot    3.0  to call   1.0
+           heads-up flop
+           fold 1%  check/call 90%  bet small 5%  bet large 3%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 220  Td 9s
+  preflop  board -              pot  101.5  to call  99.5
+           3-handed preflop
+           fold 99%  passive 1%
+           => Fold
+  result   +1.50 bb
+
+HAND 221  8h Qh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 44%  passive 32%  raise 24%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 222  Jh Jc
+  preflop  board -              pot    6.0  to call   1.5
+           3-handed preflop
+           fold 1%  passive 1%  raise 22%  jam 76%
+           => RaiseTo(10000)
+  result   -2.50 bb
+
+HAND 223  4c Qd
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 2%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 99%  raise 0%  jam 1%
+           => Call
+  flop     board 2c Ah 2h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 2c Ah 2h 3c    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  river    board 2c Ah 2h 3c 6s pot    5.0  to call   0.0
+           heads-up river
+           check/call 96%  bet small 1%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 224  Jd Kh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  preflop  board -              pot   12.5  to call   6.5
+           3-handed preflop
+           fold 30%  passive 68%  raise 0%  jam 2%
+           => Call
+  flop     board Th 3h 9d       pot   19.0  to call   0.0
+           heads-up flop
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board Th 3h 9d 8d    pot   19.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 1%  all in 0%
+           => Check
+  river    board Th 3h 9d 8d 5c pot   19.0  to call   0.0
+           heads-up river
+           check/call 34%  bet small 1%  bet large 46%  all in 18%
+           => RaiseTo(627)
+  river    board Th 3h 9d 8d 5c pot   55.2  to call  23.7
+           heads-up river
+           fold 94%  check/call 0%  bet small 1%  bet large 2%  all in 3%
+           => Fold
+  result   -15.27 bb
+
+HAND 225  5s Kc
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 50%  raise 49%  jam 1%
+           => RaiseTo(250)
+  flop     board Th As Jd       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 91%  bet small 8%  bet large 1%  all in 0%
+           => Check
+  turn     board Th As Jd 3h    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 92%  bet small 6%  bet large 2%  all in 0%
+           => Check
+  river    board Th As Jd 3h 7s pot    5.0  to call   0.0
+           heads-up river
+           check/call 96%  bet small 1%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 226  9d 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 227  5s Qh
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 8h 2d 4d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 64%  bet small 22%  bet large 15%  all in 0%
+           => RaiseTo(375)
+  result   +0.00 bb
+
+HAND 228  4d 8c
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 41%  passive 58%  raise 0%  jam 1%
+           => Call
+  flop     board Jd 4c 9s       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Jd 4c 9s Kc    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board Jd 4c 9s Kc    pot    3.0  to call   1.0
+           heads-up turn
+           fold 87%  check/call 1%  bet small 5%  bet large 7%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 229  3d 2s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 230  7c 9d
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board Ac 5d Th       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Ac 5d Th 2s    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 2%  bet large 2%  all in 0%
+           => Check
+  river    board Ac 5d Th 2s Qd pot    5.5  to call   0.0
+           heads-up river
+           check/call 44%  bet small 46%  bet large 2%  all in 8%
+           => Check
+  result   +3.00 bb
+
+HAND 231  8d Qh
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 15%  raise 84%  jam 1%
+           => RaiseTo(250)
+  flop     board Ah 7d 5h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  flop     board Ah 7d 5h       pot    6.7  to call   1.6
+           heads-up flop
+           fold 0%  check/call 76%  bet small 21%  bet large 2%  all in 0%
+           => Call
+  turn     board Ah 7d 5h 3h    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board Ah 7d 5h 3h 8s pot    8.3  to call   0.0
+           heads-up river
+           check/call 68%  bet small 31%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 232  Ad Kc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 13%  raise 80%  jam 7%
+           => RaiseTo(250)
+  flop     board 8h 5s 3d       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 8h 5s 3d Jd    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 8h 5s 3d Jd Ks pot    5.5  to call   0.0
+           heads-up river
+           check/call 1%  bet small 1%  bet large 97%  all in 1%
+           => RaiseTo(413)
+  result   +7.13 bb
+
+HAND 233  Jc 6d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 1%
+           => Check
+  flop     board Kc 9h 5d       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 26%  bet small 60%  bet large 14%  all in 0%
+           => Check
+  turn     board Kc 9h 5d Qh    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 1%  bet large 2%  all in 0%
+           => Check
+  river    board Kc 9h 5d Qh 7d pot    2.0  to call   0.0
+           heads-up river
+           check/call 6%  bet small 6%  bet large 77%  all in 11%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 234  2d 4h
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 235  2s 7c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 236  6c Ks
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board 8c 2h 8d       pot    6.7  to call   1.6
+           heads-up flop
+           fold 0%  check/call 92%  bet small 6%  bet large 1%  all in 0%
+           => Call
+  turn     board 8c 2h 8d 3d    pot   11.0  to call   2.7
+           heads-up turn
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 1%
+           => Call
+  river    board 8c 2h 8d 3d Qd pot  106.9  to call  93.1
+           heads-up river
+           fold 95%  check/call 5%
+           => Fold
+  result   +0.00 bb
+
+HAND 237  4h 9c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 238  Qc Tc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 1%  raise 97%  jam 1%
+           => RaiseTo(250)
+  flop     board 3s Ad 7h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 86%  bet small 11%  bet large 2%  all in 0%
+           => Check
+  turn     board 3s Ad 7h Jh    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 3s Ad 7h Jh 7s pot    5.5  to call   0.0
+           heads-up river
+           check/call 96%  bet small 0%  bet large 1%  all in 3%
+           => Check
+  result   -2.50 bb
+
+HAND 239  3d 4s
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 240  Ks Th
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 1%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board 2h 9c 2s       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board 2h 9c 2s 4d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 2h 9c 2s 4d Qh pot    5.5  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   -2.50 bb
+
+HAND 241  8s Ah
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 1%  jam 1%
+           => Call
+  flop     board Jc As 4h       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 58%  bet small 36%  bet large 5%  all in 1%
+           => Check
+  flop     board Jc As 4h       pot  103.0  to call  97.5
+           heads-up flop
+           fold 4%  check/call 96%
+           => Call
+  result   -100.00 bb
+
+HAND 242  8c 9h
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => RaiseTo(10000)
+  result   -2.50 bb
+
+HAND 243  Kd 8d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 4%  passive 16%  raise 79%  jam 1%
+           => RaiseTo(250)
+  flop     board 6d 9s Js       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 60%  bet small 34%  bet large 6%  all in 0%
+           => RaiseTo(182)
+  flop     board 6d 9s Js       pot   12.2  to call   3.0
+           heads-up flop
+           fold 3%  check/call 83%  bet small 10%  bet large 4%  all in 0%
+           => Call
+  turn     board 6d 9s Js Td    pot   20.2  to call   5.0
+           heads-up turn
+           fold 0%  check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Call
+  river    board 6d 9s Js Td 3h pot  112.8  to call  87.7
+           heads-up river
+           fold 96%  check/call 4%
+           => Fold
+  result   -12.35 bb
+
+HAND 244  Js 6c
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 1%
+           => Check
+  flop     board 5d 9s Jc       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 94%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  turn     board 5d 9s Jc 3d    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  river    board 5d 9s Jc 3d 6h pot    2.0  to call   0.0
+           heads-up river
+           check/call 1%  bet small 4%  bet large 90%  all in 6%
+           => RaiseTo(150)
+  result   +0.00 bb
+
+HAND 245  3s Ks
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 57%  raise 42%  jam 1%
+           => RaiseTo(250)
+  flop     board Kc 7s 5h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Kc 7s 5h 5d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Kc 7s 5h 5d    pot    6.7  to call   1.6
+           heads-up turn
+           fold 0%  check/call 98%  bet small 0%  bet large 1%  all in 0%
+           => Call
+  river    board Kc 7s 5h 5d 3c pot    8.3  to call   0.0
+           heads-up river
+           check/call 2%  bet small 96%  bet large 1%  all in 1%
+           => RaiseTo(274)
+  result   +0.00 bb
+
+HAND 246  9d 4h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 247  Kd Tc
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 96%  raise 2%  jam 2%
+           => Call
+  flop     board 2d 9d 9h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 2d 9d 9h Qd    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 2d 9d 9h Qd 6c pot    6.7  to call   1.6
+           heads-up river
+           fold 75%  check/call 22%  bet small 0%  bet large 1%  all in 2%
+           => Fold
+  result   +0.00 bb
+
+HAND 248  9c Ts
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 90%  raise 9%  jam 1%
+           => RaiseTo(250)
+  flop     board 5c Kh 6c       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 93%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  turn     board 5c Kh 6c Ah    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 94%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  turn     board 5c Kh 6c Ah    pot    8.8  to call   3.8
+           heads-up turn
+           fold 96%  check/call 1%  bet small 1%  bet large 2%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 249  4h Ks
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 250  4s 5c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Ah Ad 6c       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Ah Ad 6c 7d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 2%  bet small 72%  bet large 25%  all in 0%
+           => RaiseTo(165)
+  river    board Ah Ad 6c 7d Qc pot  104.2  to call  95.8
+           heads-up river
+           fold 100%  check/call 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 251  Ah 6c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 15%  passive 83%  raise 1%  jam 1%
+           => Call
+  flop     board Kh Qd 5c       pot    7.5  to call   0.0
+           3-way flop
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board Kh Qd 5c 5s    pot    7.5  to call   0.0
+           3-way turn
+           check/call 97%  bet small 1%  bet large 1%  all in 1%
+           => Check
+  turn     board Kh Qd 5c 5s    pot   13.1  to call   5.6
+           3-way turn
+           fold 96%  check/call 1%  bet small 1%  bet large 1%  all in 1%
+           => Fold
+  result   +5.00 bb
+
+HAND 252  4d Ks
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 253  Ts Kd
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 0%  raise 99%  jam 1%
+           => RaiseTo(250)
+  flop     board Ah 5c Qs       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board Ah 5c Qs Jh    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 12%  bet small 73%  bet large 12%  all in 4%
+           => RaiseTo(165)
+  river    board Ah 5c Qs Jh 3c pot    8.3  to call   0.0
+           heads-up river
+           check/call 0%  bet small 1%  bet large 92%  all in 7%
+           => RaiseTo(623)
+  result   +0.00 bb
+
+HAND 254  4s Qh
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 2%  jam 1%
+           => Call
+  flop     board 2s Ac 4c       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 98%  bet small 2%  bet large 0%  all in 0%
+           => Check
+  turn     board 2s Ac 4c Kd    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 97%  bet small 2%  bet large 1%  all in 0%
+           => Check
+  turn     board 2s Ac 4c Kd    pot    3.0  to call   1.0
+           heads-up turn
+           fold 1%  check/call 93%  bet small 3%  bet large 3%  all in 0%
+           => Call
+  river    board 2s Ac 4c Kd 7c pot    4.0  to call   0.0
+           heads-up river
+           check/call 98%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  river    board 2s Ac 4c Kd 7c pot    7.0  to call   3.0
+           heads-up river
+           fold 87%  check/call 9%  bet small 0%  bet large 1%  all in 3%
+           => Call
+  result   +0.00 bb
+
+HAND 255  Ah 5c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 1%  raise 98%  jam 0%
+           => RaiseTo(250)
+  flop     board 6c Js 3s       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 72%  bet small 25%  bet large 3%  all in 0%
+           => RaiseTo(413)
+  result   +3.00 bb
+
+HAND 256  3d 8c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 34%  passive 65%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 257  Th Kh
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 4%  raise 95%  jam 1%
+           => RaiseTo(250)
+  flop     board 4d 8s 2s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 81%  bet small 18%  bet large 1%  all in 0%
+           => Check
+  turn     board 4d 8s 2s 9s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 94%  bet small 2%  bet large 3%  all in 0%
+           => Check
+  river    board 4d 8s 2s 9s Js pot    5.0  to call   0.0
+           heads-up river
+           check/call 6%  bet small 86%  bet large 3%  all in 5%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 258  Jh 2h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 259  8s 6h
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board 5d Th 4h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 50%  bet small 29%  bet large 21%  all in 0%
+           => RaiseTo(375)
+  flop     board 5d Th 4h       pot   16.6  to call   4.1
+           heads-up flop
+           fold 77%  check/call 2%  bet small 17%  bet large 4%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 260  6c Qs
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 61%  raise 38%  jam 1%
+           => RaiseTo(250)
+  flop     board Th Jh 4d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => Check
+  turn     board Th Jh 4d Kd    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 17%  bet large 5%  all in 0%
+           => Check
+  river    board Th Jh 4d Kd 4h pot    5.0  to call   0.0
+           heads-up river
+           check/call 93%  bet small 3%  bet large 1%  all in 3%
+           => Check
+  river    board Th Jh 4d Kd 4h pot    8.8  to call   3.8
+           heads-up river
+           fold 94%  check/call 4%  bet small 0%  bet large 1%  all in 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 261  3s 7c
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 262  7c Jh
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 88%  raise 11%  jam 1%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 1%
+           => Call
+  flop     board 5d Ac 4d       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 90%  bet small 7%  bet large 3%  all in 0%
+           => Check
+  turn     board 5d Ac 4d 6d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 94%  bet small 3%  bet large 3%  all in 0%
+           => Check
+  turn     board 5d Ac 4d 6d    pot    6.7  to call   1.6
+           heads-up turn
+           fold 96%  check/call 1%  bet small 1%  bet large 1%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 263  8h 9h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 98%  passive 1%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 264  Qc 4d
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 96%  raise 2%  jam 2%
+           => Check
+  flop     board 4s 6c Ts       pot    2.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board 4s 6c Ts 8s    pot    2.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board 4s 6c Ts 8s 6s pot    2.0  to call   0.0
+           heads-up river
+           check/call 93%  bet small 0%  bet large 2%  all in 5%
+           => Check
+  result   +0.00 bb
+
+HAND 265  3c 5d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 4%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 266  Ah 8h
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 0%  passive 0%  raise 98%  jam 1%
+           => RaiseTo(250)
+  flop     board Kd 9h Ts       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 4%  bet large 1%  all in 0%
+           => Check
+  turn     board Kd 9h Ts Jh    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  river    board Kd 9h Ts Jh 4h pot    5.5  to call   0.0
+           heads-up river
+           check/call 0%  bet small 6%  bet large 68%  all in 26%
+           => RaiseTo(413)
+  result   +7.13 bb
+
+HAND 267  Qh 6h
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 74%  passive 24%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb
+
+HAND 268  8c Kc
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 4%  passive 16%  raise 79%  jam 1%
+           => RaiseTo(10000)
+  result   +1.50 bb
+
+HAND 269  Qh 8c
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  flop     board Th 9s Js       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 11%  bet small 79%  bet large 6%  all in 5%
+           => RaiseTo(165)
+  turn     board Th 9s Js 5s    pot    8.3  to call   0.0
+           heads-up turn
+           check/call 2%  bet small 2%  bet large 95%  all in 1%
+           => RaiseTo(623)
+  river    board Th 9s Js 5s Ac pot   36.3  to call  15.6
+           heads-up river
+           fold 0%  check/call 1%  bet small 4%  bet large 14%  all in 81%
+           => RaiseTo(3270)
+  river    board Th 9s Js 5s Ac pot  114.6  to call  28.4
+           heads-up river
+           fold 0%  check/call 8%  all in 91%
+           => RaiseTo(8962)
+  result   +0.00 bb
+
+HAND 270  Kh Qs
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 15%  raise 84%  jam 1%
+           => RaiseTo(250)
+  flop     board 9c 6s 3h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board 9c 6s 3h 7s    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 13%  bet large 8%  all in 0%
+           => Check
+  river    board 9c 6s 3h 7s 9h pot    5.0  to call   0.0
+           heads-up river
+           check/call 97%  bet small 0%  bet large 1%  all in 2%
+           => Check
+  result   +0.00 bb
+
+HAND 271  Ah 5d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 1%  passive 1%  raise 98%  jam 0%
+           => RaiseTo(250)
+  flop     board 3c 6h Ad       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 94%  bet small 4%  bet large 2%  all in 0%
+           => Check
+  turn     board 3c 6h Ad Qd    pot    7.3  to call   1.8
+           heads-up turn
+           fold 0%  check/call 96%  bet small 2%  bet large 1%  all in 1%
+           => Call
+  river    board 3c 6h Ad Qd 2d pot    9.1  to call   0.0
+           heads-up river
+           check/call 76%  bet small 2%  bet large 21%  all in 1%
+           => Check
+  result   +4.82 bb
+
+HAND 272  Ks 5s
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 96%  raise 1%  jam 3%
+           => Call
+  flop     board Qd 2d 6c       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 16%  bet small 28%  bet large 56%  all in 0%
+           => RaiseTo(165)
+  turn     board Qd 2d 6c 6s    pot   11.0  to call   2.7
+           heads-up turn
+           fold 0%  check/call 98%  bet small 1%  bet large 1%  all in 1%
+           => Call
+  river    board Qd 2d 6c 6s 6h pot   13.8  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   +0.00 bb
+
+HAND 273  3h 5d
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 95%  passive 4%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 274  2s Qh
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 275  3c 8h
+  preflop  board -              pot    4.0  to call   1.5
+           3-handed preflop
+           fold 5%  passive 94%  raise 0%  jam 1%
+           => Call
+  flop     board 2c 6d Qs       pot    5.5  to call   0.0
+           heads-up flop
+           check/call 86%  bet small 10%  bet large 3%  all in 0%
+           => Check
+  turn     board 2c 6d Qs 2d    pot    5.5  to call   0.0
+           heads-up turn
+           check/call 62%  bet small 14%  bet large 23%  all in 0%
+           => Check
+  river    board 2c 6d Qs 2d Td pot    5.5  to call   0.0
+           heads-up river
+           check/call 3%  bet small 86%  bet large 4%  all in 7%
+           => RaiseTo(182)
+  result   -2.50 bb
+
+HAND 276  6c 7s
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +7.13 bb
+
+HAND 277  2s 3s
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +0.00 bb
+
+HAND 278  Jd 2s
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 98%  raise 0%  jam 2%
+           => Check
+  flop     board 9c Kh Kc       pot    3.0  to call   1.0
+           heads-up flop
+           fold 61%  check/call 18%  bet small 15%  bet large 6%  all in 1%
+           => RaiseTo(232)
+  result   +0.00 bb
+
+HAND 279  Ac Qs
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 59%  raise 40%  jam 1%
+           => RaiseTo(250)
+  flop     board Jh 7h 9h       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 92%  bet small 7%  bet large 1%  all in 0%
+           => Check
+  turn     board Jh 7h 9h 4d    pot    5.0  to call   0.0
+           heads-up turn
+           check/call 78%  bet small 17%  bet large 5%  all in 0%
+           => Check
+  river    board Jh 7h 9h 4d 2h pot    5.0  to call   0.0
+           heads-up river
+           check/call 23%  bet small 71%  bet large 1%  all in 4%
+           => Check
+  result   +0.00 bb
+
+HAND 280  6h 2d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 100%  passive 0%  raise 0%  jam 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 281  Tc Jd
+  preflop  board -              pot    2.0  to call   0.0
+           3-handed preflop
+           passive 1%  raise 98%  jam 2%
+           => RaiseTo(250)
+  flop     board Qc 3s 7s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 6%  bet small 86%  bet large 7%  all in 0%
+           => RaiseTo(165)
+  result   +0.00 bb
+
+HAND 282  4s Ts
+  preflop  board -              pot    1.5  to call   0.5
+           3-handed preflop
+           fold 0%  passive 98%  raise 0%  jam 2%
+           => Call
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 1%  jam 2%
+           => Call
+  flop     board Kd 2h 9s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 95%  bet small 3%  bet large 1%  all in 0%
+           => RaiseTo(165)
+  flop     board Kd 2h 9s       pot   11.0  to call   2.7
+           heads-up flop
+           fold 93%  check/call 1%  bet small 1%  bet large 4%  all in 0%
+           => Fold
+  result   +0.00 bb
+
+HAND 283  4c 4d
+  preflop  board -              pot    1.5  to call   1.0
+           3-handed preflop
+           fold 4%  passive 1%  raise 94%  jam 1%
+           => RaiseTo(250)
+  preflop  board -              pot   12.5  to call   6.5
+           3-handed preflop
+           fold 0%  passive 91%  raise 0%  jam 8%
+           => Call
+  flop     board 5c Td Kc       pot   19.0  to call   0.0
+           heads-up flop
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  turn     board 5c Td Kc 2s    pot   19.0  to call   0.0
+           heads-up turn
+           check/call 99%  bet small 1%  bet large 0%  all in 0%
+           => Check
+  river    board 5c Td Kc 2s Qs pot   19.0  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 0%
+           => Check
+  result   -9.00 bb
+
+HAND 284  3c Ah
+  preflop  board -              pot    3.5  to call   1.5
+           3-handed preflop
+           fold 0%  passive 97%  raise 2%  jam 2%
+           => Call
+  flop     board 3h 8d 5s       pot    5.0  to call   0.0
+           heads-up flop
+           check/call 96%  bet small 3%  bet large 1%  all in 0%
+           => RaiseTo(165)
+  turn     board 3h 8d 5s Jd    pot   11.0  to call   2.7
+           heads-up turn
+           fold 0%  check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Call
+  river    board 3h 8d 5s Jd 6h pot   13.8  to call   0.0
+           heads-up river
+           check/call 99%  bet small 0%  bet large 0%  all in 1%
+           => Check
+  result   +0.00 bb
+
+HAND 285  Td 7c
+  preflop  board -              pot    4.0  to call   2.0
+           3-handed preflop
+           fold 99%  passive 0%  raise 0%  jam 1%
+           => Fold
+  result   +3.00 bb

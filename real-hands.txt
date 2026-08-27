@@ -1,0 +1,42 @@
+
+HAND 1  Ks Th
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
+  flop     board Qs 8d Ad       pot    4.3  to call   1.8
+           heads-up flop
+           fold 2%  check/call 94%  bet small 3%  bet large 1%  all in 0%
+           => Call
