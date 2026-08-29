@@ -35,15 +35,17 @@ $Manifest = @(
   @{ Frame="h172408-0-1280x960.png"; Card=5; Rank="7"; Suit=$null } # 7 of hearts
   @{ Frame="h172738-0-1280x960.png"; Card=5; Rank="8"; Suit=$null } # 8 of hearts
   @{ Frame="h172738-0-1280x960.png"; Card=7; Rank="5"; Suit=$null } # 5 of clubs
-  @{ Frame="h181616-0-1280x960.png"; Card=4; Rank="6"; Suit=$null } # 6 (red)
+  @{ Frame="h181631-0-1280x960.png"; Card=6; Rank="6"; Suit=$null } # 6 of hearts
   @{ Frame="flop1b-0-1280x960.png";  Card=5; Rank="4"; Suit=$null } # 4 of diamonds
-  # 3 is still missing - add a line here once harvested, e.g.:
-  # @{ Frame="hXXXXXX-0-1280x960.png"; Card=N; Rank="3"; Suit=$null }
+  @{ Frame="h191248-0-1280x960.png"; Card=4; Rank="3"; Suit=$null } # 3 of spades
 )
 
 $SrcDir = "D:\poker-bot\captures-coinpoker"
 $RANK_TOP=8; $RANK_W=38; $RANK_H=31
-$SUIT_TOP=38; $SUIT_W=34; $SUIT_H=36
+# Board and hole cards need their own suit-pip window - see coinpoker.rs's
+# geometry module docs for why one generous window doesn't work for both.
+$SUIT_TOP=43; $SUIT_W=34; $SUIT_H=27
+$SUIT_TOP_HOLE=47   # same W/H as board - only the start position differs
 
 # --- detect card boxes in a frame (same rule as coinpoker.rs) -----------------
 function Get-CardBoxes($bmp) {
@@ -86,18 +88,23 @@ function Get-CardBoxes($bmp) {
     $cards = New-Object System.Collections.Generic.List[object]
     foreach ($b in $boxes) {
         if ($b.W -le ($CARD_W + 15)) {
-            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y})
+            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; IsHole=$false})
         } else {
-            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y})
-            $cards.Add([PSCustomObject]@{X=($b.X + $b.W - $CARD_W); Y=$b.Y})
+            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; IsHole=$true})
+            $cards.Add([PSCustomObject]@{X=($b.X + $b.W - $CARD_W); Y=$b.Y; IsHole=$true})
         }
     }
     return $cards
 }
 
 # --- greyscale a region with the same luma weights the Rust reader uses -------
+# Then contrast-stretch exactly like Gray::normalised() does, because
+# best_match() compares a *normalised* live patch against the template as
+# loaded from disk - so an un-normalised template is being compared against
+# something on a different scale every time. Same edge case too: a near-flat
+# patch (range < 30) normalises to blank white rather than amplified noise.
 function Get-GreyBytes($bmp, $x, $y, $w, $h) {
-    $bytes = New-Object byte[] ($w * $h)
+    $raw = New-Object int[] ($w * $h)
     $i = 0
     for ($yy = 0; $yy -lt $h; $yy++) {
         for ($xx = 0; $xx -lt $w; $xx++) {
@@ -105,9 +112,23 @@ function Get-GreyBytes($bmp, $x, $y, $w, $h) {
             $luma = 0.299 * $p.R + 0.587 * $p.G + 0.114 * $p.B
             $v = [Math]::Round($luma)
             if ($v -lt 0) { $v = 0 }; if ($v -gt 255) { $v = 255 }
-            $bytes[$i] = [byte]$v
+            $raw[$i] = [int]$v
             $i++
         }
+    }
+    $lo = ($raw | Measure-Object -Minimum).Minimum
+    $hi = ($raw | Measure-Object -Maximum).Maximum
+    $bytes = New-Object byte[] ($w * $h)
+    if (($hi - $lo) -lt 30) {
+        for ($j = 0; $j -lt $bytes.Length; $j++) { $bytes[$j] = 255 }
+        return ,$bytes
+    }
+    $scale = 255.0 / ($hi - $lo)
+    for ($j = 0; $j -lt $raw.Length; $j++) {
+        # Rust's `as u8` truncates toward zero, it does not round.
+        $stretched = [Math]::Truncate(($raw[$j] - $lo) * $scale)
+        if ($stretched -lt 0) { $stretched = 0 }; if ($stretched -gt 255) { $stretched = 255 }
+        $bytes[$j] = [byte]$stretched
     }
     return ,$bytes
 }
@@ -132,7 +153,8 @@ foreach ($entry in $Manifest) {
         $rankBytes[$entry.Rank] = Get-GreyBytes $bmp ($c.X) ($c.Y + $RANK_TOP) $RANK_W $RANK_H
     }
     if ($entry.Suit -and -not $suitBytes.ContainsKey($entry.Suit)) {
-        $suitBytes[$entry.Suit] = Get-GreyBytes $bmp ($c.X) ($c.Y + $SUIT_TOP) $SUIT_W $SUIT_H
+        $top = if ($c.IsHole) { $SUIT_TOP_HOLE } else { $SUIT_TOP }
+        $suitBytes[$entry.Suit] = Get-GreyBytes $bmp ($c.X) ($c.Y + $top) $SUIT_W $SUIT_H
     }
 }
 
