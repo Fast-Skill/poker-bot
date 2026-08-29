@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 mod action;
+pub mod coinpoker;
 mod hero;
 mod text;
 mod view;
@@ -263,6 +264,19 @@ impl Templates {
 
     pub fn suit_count(&self) -> usize {
         self.suits.len()
+    }
+
+    /// The rank templates, for a reader with its own geometry to match
+    /// against — see [`coinpoker::read_cards`], which cannot reuse this
+    /// crate's ClubGG-specific `read_at` since the two clients' card
+    /// geometry differs.
+    pub(crate) fn ranks(&self) -> &[(Rank, Gray)] {
+        &self.ranks
+    }
+
+    /// The suit templates. See [`Templates::ranks`].
+    pub(crate) fn suits(&self) -> &[(Suit, Gray)] {
+        &self.suits
     }
 }
 
