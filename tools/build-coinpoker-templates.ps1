@@ -1,53 +1,100 @@
 <#
 .SYNOPSIS
-  Assembles data/card_templates_coinpoker.bin from a manifest of known-good
-  (source frame, card index, rank, suit) crops.
+  Assembles the three position-specific CoinPoker template files from a
+  manifest of known-good (source frame, card index, rank, suit) crops.
 
 .DESCRIPTION
+  A board card and the two hole-card positions (the fanned-under "back" card
+  and the fanned-over "front" card) render their corner index differently
+  enough that they need separate template sets - see coinpoker.rs's module
+  docs for why. This script builds all three from one manifest, writing
+  card_templates_coinpoker_board.bin, _hole_back.bin and _hole_front.bin.
+
   Card index is 1-based, in the same top-to-bottom/left-to-right discovery
   order `harvest-coinpoker.ps1` prints as "card N". Re-runs the exact same
-  detection used there against the source frame to find that card's top-left
-  corner, then crops the rank and suit regions at native resolution (no
-  zoom), converts to greyscale with the same luma weights the Rust reader
-  uses, and packs everything into the PKVT format `poker_vision::Templates`
-  expects.
+  detection used there against the source frame to find that card's
+  top-left corner, crops the rank and (position-appropriate) suit region at
+  native resolution, converts to greyscale and contrast-stretches it exactly
+  like Gray::normalised() does (best_match compares a normalised live patch
+  against the template as loaded, so a raw, un-stretched template is being
+  compared on a different scale every time - this cost a long debugging
+  session to track down once already), and packs everything into the PKVT
+  format `poker_vision::Templates` expects.
 
-  Refuses to write the file unless all 13 ranks and all 4 suits are present -
-  a partial rank set is worse than no file at all, because an untemplated
-  rank does not refuse to match, it confidently matches the nearest wrong
-  template. See coinpoker.rs's module docs.
+  A position is only written once all 13 ranks and all 4 suits are present
+  for it - a partial rank set is worse than no file at all, because an
+  untemplated rank does not refuse to match, it confidently matches the
+  nearest wrong template.
 #>
 param(
-  [string]$OutFile = "D:\poker-bot\data\card_templates_coinpoker.bin"
+  [string]$OutDir = "D:\poker-bot\data"
 )
 
 Add-Type -AssemblyName System.Drawing
 
 # --- the manifest: edit this as new cards get harvested -----------------------
+# Suit=$null means "already have this suit for this position, rank is what's
+# new here".
 $Manifest = @(
-  @{ Frame="h181631-0-1280x960.png"; Card=1; Rank="A"; Suit="d" }  # A of diamonds
-  @{ Frame="h181631-0-1280x960.png"; Card=2; Rank="2"; Suit="s" }  # 2 of spades
-  @{ Frame="h181631-0-1280x960.png"; Card=3; Rank="9"; Suit="s" }  # 9 of spades
-  @{ Frame="h181631-0-1280x960.png"; Card=4; Rank="J"; Suit="h" }  # J of hearts
-  @{ Frame="h181631-0-1280x960.png"; Card=5; Rank="K"; Suit="c" }  # K of clubs
-  @{ Frame="h172408-0-1280x960.png"; Card=1; Rank="Q"; Suit=$null } # Q of diamonds (suit already have)
-  @{ Frame="h172408-0-1280x960.png"; Card=4; Rank="T"; Suit=$null } # 10 of clubs
-  @{ Frame="h172408-0-1280x960.png"; Card=5; Rank="7"; Suit=$null } # 7 of hearts
-  @{ Frame="h172738-0-1280x960.png"; Card=5; Rank="8"; Suit=$null } # 8 of hearts
-  @{ Frame="h172738-0-1280x960.png"; Card=7; Rank="5"; Suit=$null } # 5 of clubs
-  @{ Frame="h181631-0-1280x960.png"; Card=6; Rank="6"; Suit=$null } # 6 of hearts
-  @{ Frame="flop1b-0-1280x960.png";  Card=5; Rank="4"; Suit=$null } # 4 of diamonds
-  @{ Frame="h191248-0-1280x960.png"; Card=4; Rank="3"; Suit=$null } # 3 of spades
+  # --- board (complete: 13/13 ranks, 4/4 suits) --------------------------------
+  @{ Frame="h181631-0-1280x960.png"; Card=1; Rank="A"; Suit="d"; Position="Board" }
+  @{ Frame="h181631-0-1280x960.png"; Card=2; Rank="2"; Suit="s"; Position="Board" }
+  @{ Frame="h181631-0-1280x960.png"; Card=3; Rank="9"; Suit=$null; Position="Board" }
+  @{ Frame="h181631-0-1280x960.png"; Card=4; Rank="J"; Suit="h"; Position="Board" }
+  @{ Frame="h181631-0-1280x960.png"; Card=5; Rank="K"; Suit="c"; Position="Board" }
+  @{ Frame="h191248-0-1280x960.png"; Card=4; Rank="3"; Suit=$null; Position="Board" }
+  @{ Frame="h205555-0-1280x960.png"; Card=6; Rank="4"; Suit=$null; Position="Board" }
+  @{ Frame="h191248-0-1280x960.png"; Card=3; Rank="5"; Suit=$null; Position="Board" }
+  @{ Frame="h115119-0-1280x960.png"; Card=5; Rank="6"; Suit=$null; Position="Board" }
+  @{ Frame="h172738-0-1280x960.png"; Card=2; Rank="7"; Suit=$null; Position="Board" }
+  @{ Frame="h172738-0-1280x960.png"; Card=5; Rank="8"; Suit=$null; Position="Board" }
+  @{ Frame="h191248-0-1280x960.png"; Card=5; Rank="T"; Suit=$null; Position="Board" }
+  @{ Frame="h172408-0-1280x960.png"; Card=1; Rank="Q"; Suit=$null; Position="Board" }
+
+  # --- hole-front (complete: 13/13 ranks, 4/4 suits) ---------------------------
+  @{ Frame="h120454-0-1280x960.png"; Card=2; Rank="A"; Suit=$null; Position="HoleFront" }
+  @{ Frame="h230407-0-1280x960.png"; Card=2; Rank="2"; Suit=$null; Position="HoleFront" }
+  @{ Frame="h205314-0-1280x960.png"; Card=6; Rank="3"; Suit="d";   Position="HoleFront" }
+  @{ Frame="h214351-0-1280x960.png"; Card=2; Rank="4"; Suit="s";   Position="HoleFront" }
+  @{ Frame="h213915-0-1280x960.png"; Card=2; Rank="5"; Suit=$null; Position="HoleFront" }
+  @{ Frame="h181631-0-1280x960.png"; Card=7; Rank="6"; Suit="d";   Position="HoleFront" }
+  @{ Frame="h172408-0-1280x960.png"; Card=5; Rank="7"; Suit=$null; Position="HoleFront" }
+  @{ Frame="h214128-0-1280x960.png"; Card=2; Rank="8"; Suit=$null; Position="HoleFront" }
+  @{ Frame="h210207-0-1280x960.png"; Card=5; Rank="9"; Suit="c";   Position="HoleFront" }
+  @{ Frame="h121826-0-1280x960.png"; Card=5; Rank="T"; Suit="h";   Position="HoleFront" }
+  @{ Frame="h215445-0-1280x960.png"; Card=3; Rank="J"; Suit="d";   Position="HoleFront" }
+  @{ Frame="h205510-0-1280x960.png"; Card=2; Rank="Q"; Suit="c";   Position="HoleFront" }
+  @{ Frame="h215247-0-1280x960.png"; Card=2; Rank="K"; Suit=$null; Position="HoleFront" }
+
+  # --- hole-back (incomplete: 11/13 - still missing 2 and 4) -------------------
+  @{ Frame="h181506-0-1280x960.png"; Card=1; Rank="A"; Suit="d";   Position="HoleBack" }
+  @{ Frame="h170646-0-1280x960.png"; Card=1; Rank="3"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h214351-0-1280x960.png"; Card=1; Rank="5"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h181631-0-1280x960.png"; Card=6; Rank="6"; Suit="h";   Position="HoleBack" }
+  @{ Frame="h214905-0-1280x960.png"; Card=3; Rank="7"; Suit="h";   Position="HoleBack" }
+  @{ Frame="h210323-0-1280x960.png"; Card=5; Rank="8"; Suit="s";   Position="HoleBack" }
+  @{ Frame="h214128-0-1280x960.png"; Card=1; Rank="9"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h172408-0-1280x960.png"; Card=4; Rank="T"; Suit="c";   Position="HoleBack" }
+  @{ Frame="h171130-0-1280x960.png"; Card=4; Rank="J"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h115742-0-1280x960.png"; Card=1; Rank="Q"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h205510-0-1280x960.png"; Card=1; Rank="K"; Suit=$null; Position="HoleBack" }
+  @{ Frame="h205749-0-1280x960.png"; Card=4; Rank="K"; Suit="d";   Position="HoleBack" } # suit-only: diamonds
+  # 2 and 4 still needed - add lines here once harvested, e.g.:
+  # @{ Frame="hXXXXXX-0-1280x960.png"; Card=N; Rank="2"; Suit=$null; Position="HoleBack" }
+  # @{ Frame="hXXXXXX-0-1280x960.png"; Card=N; Rank="4"; Suit=$null; Position="HoleBack" }
 )
 
 $SrcDir = "D:\poker-bot\captures-coinpoker"
 $RANK_TOP=8; $RANK_W=38; $RANK_H=31
-# Board and hole cards need their own suit-pip window - see coinpoker.rs's
-# geometry module docs for why one generous window doesn't work for both.
-$SUIT_TOP=43; $SUIT_W=34; $SUIT_H=27
-$SUIT_TOP_HOLE=47   # same W/H as board - only the start position differs
+$SUIT_W=34; $SUIT_H=27
+# Matches coinpoker.rs's Position::suit_offset() exactly - (dx, top).
+$SuitOffset = @{
+  Board     = @(0, 43)
+  HoleBack  = @(7, 49)
+  HoleFront = @(-5, 44)
+}
 
-# --- detect card boxes in a frame (same rule as coinpoker.rs) -----------------
+# --- detect card boxes, tagging each with its Position ------------------------
 function Get-CardBoxes($bmp) {
     $w = $bmp.Width; $h = $bmp.Height
     $mask = New-Object 'bool[,]' $w,$h
@@ -88,21 +135,16 @@ function Get-CardBoxes($bmp) {
     $cards = New-Object System.Collections.Generic.List[object]
     foreach ($b in $boxes) {
         if ($b.W -le ($CARD_W + 15)) {
-            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; IsHole=$false})
+            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; Position="Board"})
         } else {
-            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; IsHole=$true})
-            $cards.Add([PSCustomObject]@{X=($b.X + $b.W - $CARD_W); Y=$b.Y; IsHole=$true})
+            $cards.Add([PSCustomObject]@{X=$b.X; Y=$b.Y; Position="HoleBack"})
+            $cards.Add([PSCustomObject]@{X=($b.X + $b.W - $CARD_W); Y=$b.Y; Position="HoleFront"})
         }
     }
     return $cards
 }
 
-# --- greyscale a region with the same luma weights the Rust reader uses -------
-# Then contrast-stretch exactly like Gray::normalised() does, because
-# best_match() compares a *normalised* live patch against the template as
-# loaded from disk - so an un-normalised template is being compared against
-# something on a different scale every time. Same edge case too: a near-flat
-# patch (range < 30) normalises to blank white rather than amplified noise.
+# --- greyscale + contrast-stretch a region, matching Gray::normalised() -------
 function Get-GreyBytes($bmp, $x, $y, $w, $h) {
     $raw = New-Object int[] ($w * $h)
     $i = 0
@@ -133,71 +175,81 @@ function Get-GreyBytes($bmp, $x, $y, $w, $h) {
     return ,$bytes
 }
 
-# --- resolve the manifest into rank/suit -> bytes -----------------------------
-$rankBytes = @{}
-$suitBytes = @{}
+# --- resolve the manifest into position -> rank/suit -> bytes -----------------
+$positions = @("Board", "HoleBack", "HoleFront")
+$rankBytes = @{}; $suitBytes = @{}
+foreach ($pos in $positions) { $rankBytes[$pos] = @{}; $suitBytes[$pos] = @{} }
 $bmpCache = @{}
+
 foreach ($entry in $Manifest) {
     $path = Join-Path $SrcDir $entry.Frame
     if (-not (Test-Path $path)) { Write-Host "missing source frame: $path" -ForegroundColor Red; continue }
     if (-not $bmpCache.ContainsKey($path)) { $bmpCache[$path] = New-Object System.Drawing.Bitmap($path) }
     $bmp = $bmpCache[$path]
-    $cards = Get-CardBoxes $bmp
-    if ($entry.Card -gt $cards.Count) {
-        Write-Host "frame $($entry.Frame) only has $($cards.Count) card(s), asked for #$($entry.Card)" -ForegroundColor Red
+    # Card indices in the manifest are positions in the *full* detected list,
+    # matching harvest-coinpoker.ps1's "card N" numbering - not positions
+    # within just this entry's Board/HoleBack/HoleFront subset.
+    $allCards = Get-CardBoxes $bmp
+    if ($entry.Card -gt $allCards.Count) {
+        Write-Host "frame $($entry.Frame) only has $($allCards.Count) card(s), asked for #$($entry.Card)" -ForegroundColor Red
         continue
     }
-    $c = $cards[$entry.Card - 1]
-
-    if ($entry.Rank -and -not $rankBytes.ContainsKey($entry.Rank)) {
-        $rankBytes[$entry.Rank] = Get-GreyBytes $bmp ($c.X) ($c.Y + $RANK_TOP) $RANK_W $RANK_H
+    $c = $allCards[$entry.Card - 1]
+    if ($c.Position -ne $entry.Position) {
+        Write-Host "frame $($entry.Frame) card $($entry.Card) is $($c.Position), not $($entry.Position) as the manifest says" -ForegroundColor Red
+        continue
     }
-    if ($entry.Suit -and -not $suitBytes.ContainsKey($entry.Suit)) {
-        $top = if ($c.IsHole) { $SUIT_TOP_HOLE } else { $SUIT_TOP }
-        $suitBytes[$entry.Suit] = Get-GreyBytes $bmp ($c.X) ($c.Y + $top) $SUIT_W $SUIT_H
+
+    if ($entry.Rank -and -not $rankBytes[$entry.Position].ContainsKey($entry.Rank)) {
+        $rankBytes[$entry.Position][$entry.Rank] = Get-GreyBytes $bmp ($c.X) ($c.Y + $RANK_TOP) $RANK_W $RANK_H
+    }
+    if ($entry.Suit -and -not $suitBytes[$entry.Position].ContainsKey($entry.Suit)) {
+        $offset = $SuitOffset[$entry.Position]
+        $sx = [Math]::Max(0, $c.X + $offset[0])
+        $suitBytes[$entry.Position][$entry.Suit] = Get-GreyBytes $bmp $sx ($c.Y + $offset[1]) $SUIT_W $SUIT_H
     }
 }
 
+# --- write whichever positions are actually complete ---------------------------
 $wantedRanks = @("2","3","4","5","6","7","8","9","T","J","Q","K","A")
 $wantedSuits = @("c","d","h","s")
-$missingRanks = $wantedRanks | Where-Object { -not $rankBytes.ContainsKey($_) }
-$missingSuits = $wantedSuits | Where-Object { -not $suitBytes.ContainsKey($_) }
+$fileNames = @{ Board="card_templates_coinpoker_board.bin"; HoleBack="card_templates_coinpoker_hole_back.bin"; HoleFront="card_templates_coinpoker_hole_front.bin" }
 
-Write-Host "ranks collected: $($rankBytes.Keys.Count) / 13"
-Write-Host "suits collected: $($suitBytes.Keys.Count) / 4"
-if ($missingRanks.Count -gt 0) { Write-Host "missing ranks: $($missingRanks -join ', ')" -ForegroundColor Yellow }
-if ($missingSuits.Count -gt 0) { Write-Host "missing suits: $($missingSuits -join ', ')" -ForegroundColor Yellow }
+foreach ($pos in $positions) {
+    $missingRanks = $wantedRanks | Where-Object { -not $rankBytes[$pos].ContainsKey($_) }
+    $missingSuits = $wantedSuits | Where-Object { -not $suitBytes[$pos].ContainsKey($_) }
+    Write-Host "$pos - ranks: $($rankBytes[$pos].Keys.Count)/13, suits: $($suitBytes[$pos].Keys.Count)/4"
+    if ($missingRanks.Count -gt 0) { Write-Host "  missing ranks: $($missingRanks -join ', ')" -ForegroundColor Yellow }
+    if ($missingSuits.Count -gt 0) { Write-Host "  missing suits: $($missingSuits -join ', ')" -ForegroundColor Yellow }
+    if ($missingRanks.Count -gt 0 -or $missingSuits.Count -gt 0) {
+        Write-Host "  not writing $($fileNames[$pos]) - incomplete." -ForegroundColor Yellow
+        continue
+    }
 
-if ($missingRanks.Count -gt 0 -or $missingSuits.Count -gt 0) {
-    Write-Host "`nNot writing $OutFile - the loader refuses a file that isn't all 13 ranks and all 4 suits." -ForegroundColor Yellow
-    exit 1
+    $outFile = Join-Path $OutDir $fileNames[$pos]
+    $fs = [System.IO.File]::Create($outFile)
+    $bw = New-Object System.IO.BinaryWriter($fs)
+    $bw.Write([byte[]][char[]]"PKVT")
+    $bw.Write([uint32]1)
+
+    $bw.Write([uint32]$wantedRanks.Count)
+    $bw.Write([uint32]$RANK_H)
+    $bw.Write([uint32]$RANK_W)
+    foreach ($r in $wantedRanks) {
+        $label = [byte[]][char[]]$r
+        $bw.Write([byte]$label.Length); $bw.Write($label)
+        $bw.Write($rankBytes[$pos][$r])
+    }
+
+    $bw.Write([uint32]$wantedSuits.Count)
+    $bw.Write([uint32]$SUIT_H)
+    $bw.Write([uint32]$SUIT_W)
+    foreach ($s in $wantedSuits) {
+        $label = [byte[]][char[]]$s
+        $bw.Write([byte]$label.Length); $bw.Write($label)
+        $bw.Write($suitBytes[$pos][$s])
+    }
+
+    $bw.Close(); $fs.Close()
+    Write-Host "  wrote $outFile" -ForegroundColor Green
 }
-
-# --- write the PKVT binary -----------------------------------------------------
-$fs = [System.IO.File]::Create($OutFile)
-$bw = New-Object System.IO.BinaryWriter($fs)
-$bw.Write([byte[]][char[]]"PKVT")
-$bw.Write([uint32]1)  # version
-
-$bw.Write([uint32]$wantedRanks.Count)
-$bw.Write([uint32]$RANK_H)
-$bw.Write([uint32]$RANK_W)
-foreach ($r in $wantedRanks) {
-    $label = [byte[]][char[]]$r
-    $bw.Write([byte]$label.Length)
-    $bw.Write($label)
-    $bw.Write($rankBytes[$r])
-}
-
-$bw.Write([uint32]$wantedSuits.Count)
-$bw.Write([uint32]$SUIT_H)
-$bw.Write([uint32]$SUIT_W)
-foreach ($s in $wantedSuits) {
-    $label = [byte[]][char[]]$s
-    $bw.Write([byte]$label.Length)
-    $bw.Write($label)
-    $bw.Write($suitBytes[$s])
-}
-
-$bw.Close(); $fs.Close()
-Write-Host "`nwrote $OutFile" -ForegroundColor Green

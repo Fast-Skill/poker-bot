@@ -112,8 +112,15 @@ credentials.json
 # Vision assets
 # Raw captures are large and machine-specific. Sprite templates extracted for
 # recognition are small and belong in the repo — keep them out of these paths.
+#
+# captures-coinpoker/ (and any future captures-<client>/ directory) holds the
+# same kind of raw, hundreds-of-megabytes screenshots as /captures/ - the
+# glob catches it without needing a new line every time a new client shows
+# up. It went in as 562 staged files once already, from nobody having
+# extended this rule when the directory name changed.
 # =============================================================================
 /captures/
+/captures-*/
 /recordings/
 /frames/
 *.raw
