@@ -79,9 +79,9 @@ $Manifest = @(
   @{ Frame="h115742-0-1280x960.png"; Card=1; Rank="Q"; Suit=$null; Position="HoleBack" }
   @{ Frame="h205510-0-1280x960.png"; Card=1; Rank="K"; Suit=$null; Position="HoleBack" }
   @{ Frame="h205749-0-1280x960.png"; Card=4; Rank="K"; Suit="d";   Position="HoleBack" } # suit-only: diamonds
-  # 2 and 4 still needed - add lines here once harvested, e.g.:
+  @{ Frame="h070953-0-1280x960.png"; Card=1; Rank="4"; Suit=$null; Position="HoleBack" }
+  # 2 still needed - add a line here once harvested, e.g.:
   # @{ Frame="hXXXXXX-0-1280x960.png"; Card=N; Rank="2"; Suit=$null; Position="HoleBack" }
-  # @{ Frame="hXXXXXX-0-1280x960.png"; Card=N; Rank="4"; Suit=$null; Position="HoleBack" }
 )
 
 $SrcDir = "D:\poker-bot\captures-coinpoker"
