@@ -27,7 +27,7 @@
 //! the table has to re-check and re-apply the window size before *every*
 //! capture, not only when it first attaches.
 
-use crate::{best_match, components, Frame, Templates, Thresholds};
+use crate::{best_match, components, ActionButton, Frame, Templates, Thresholds};
 use crate::CardRead;
 use poker_core::card::{Card, Suit};
 
@@ -262,6 +262,113 @@ pub fn read_cards(frame: &Frame, templates: &PositionTemplates, thresholds: Thre
     reads
 }
 
+/// The row of action buttons, if the hero has a live decision pending.
+///
+/// # Colour, not label, tells the buttons apart
+///
+/// ClubGG draws all three buttons the same red and distinguishes them only by
+/// label text (`Fold` vs `Check` vs `Raise to`), which is why its reader
+/// measures label width. This client draws each button its own colour
+/// instead — fold red, check-or-call green, bet-or-raise orange — measured at
+/// a 1280x960 table as roughly (207,50,65), (33,159,132) and (238,136,57).
+/// That makes the three buttons distinguishable by colour alone, with no need
+/// to read text just to know which button is which.
+///
+/// # Why this refuses rather than tells "waiting" from "nothing showing"
+///
+/// When it is not the hero's turn, this client either shows nothing or shows
+/// a greyed, disabled-looking row (armed for when the turn does arrive, the
+/// same idea as ClubGG's `Check / Fold`). Neither matches these colour
+/// thresholds, so both come back `None` here. That conflates two situations
+/// a caller might eventually want to tell apart, but for the one thing that
+/// actually matters — is this safe to press right now — they are the same
+/// answer, and refusing on both is the safe default until there is a reason
+/// to do more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CoinPokerActionPanel {
+    pub fold: Option<ActionButton>,
+    /// `Check` when there is nothing to call, `Call` when there is.
+    pub passive: Option<ActionButton>,
+    /// `Bet` or `Raise`. Absent when there is nothing left to raise with.
+    pub aggressive: Option<ActionButton>,
+}
+
+impl CoinPokerActionPanel {
+    /// Whether this is a live turn worth acting on at all.
+    ///
+    /// Fold and the passive option are the two buttons a genuine turn always
+    /// carries — even a hero with nothing left to raise still sees `Fold`
+    /// and `Check`/`Call`. `aggressive` alone is never enough by itself to
+    /// call this a turn.
+    pub fn is_live(&self) -> bool {
+        self.fold.is_some() && self.passive.is_some()
+    }
+}
+
+/// Action button geometry, measured at a 1280x960 table.
+mod action_geometry {
+    /// Buttons sit in the bottom fraction of the window; scanning only this
+    /// band keeps the felt and the hole cards' art out of the colour search.
+    pub const SCAN_TOP_FRACTION: f64 = 0.85;
+    /// A button is roughly 161 wide. Generous on both sides since a
+    /// single-line label (`Fold`, `Check`) and a two-line one (`Bet 0.02`)
+    /// can split the coloured region into a taller or shorter connected
+    /// blob depending on how the text divides it — see the module test
+    /// `label_lines_do_not_change_which_button_is_found`.
+    pub const WIDTH_RANGE: (usize, usize) = (100, 220);
+    pub const HEIGHT_RANGE: (usize, usize) = (35, 100);
+}
+
+/// Finds the largest connected region matching a colour test, within the
+/// button band at the bottom of the frame.
+fn largest_colour_region(
+    frame: &Frame,
+    is_match: impl Fn(i16, i16, i16) -> bool,
+) -> Option<ActionButton> {
+    use action_geometry::*;
+    let (w, h) = (frame.width, frame.height);
+    let top = (h as f64 * SCAN_TOP_FRACTION) as usize;
+    let mut mask = vec![false; w * h];
+    for y in top..h {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            mask[y * w + x] = is_match(r as i16, g as i16, b as i16);
+        }
+    }
+    components(&mask, w, h)
+        .into_iter()
+        .filter(|b| {
+            (WIDTH_RANGE.0..=WIDTH_RANGE.1).contains(&b.width())
+                && (HEIGHT_RANGE.0..=HEIGHT_RANGE.1).contains(&b.height())
+        })
+        .max_by_key(|b| b.width() * b.height())
+        .map(|b| ActionButton {
+            x: b.x0,
+            y: b.y0,
+            width: b.width(),
+            height: b.height(),
+            label_width: 0,
+        })
+}
+
+/// Finds the action row, if a live (coloured) turn is showing.
+pub fn read_coinpoker_action_panel(frame: &Frame) -> Option<CoinPokerActionPanel> {
+    let fold = largest_colour_region(frame, |r, g, b| {
+        r > 150 && r - g > 100 && r - b > 80 && g < 100
+    });
+    let passive = largest_colour_region(frame, |r, g, b| g > 120 && g > b && r < 100);
+    let aggressive = largest_colour_region(frame, |r, g, b| {
+        r > 180 && (80..180).contains(&g) && b < 100 && r - g > 60 && g - b > 40
+    });
+
+    let panel = CoinPokerActionPanel {
+        fold,
+        passive,
+        aggressive,
+    };
+    panel.is_live().then_some(panel)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,5 +481,94 @@ mod tests {
         assert_eq!(positions.len(), 1);
         assert_eq!((positions[0].x, positions[0].y), (40, 30));
         assert_eq!(positions[0].position, Position::Board, "a lone card is a board card, not a hole card");
+    }
+
+    /// Paints a synthetic three-button row using the exact colours measured
+    /// at the real table, so the colour thresholds are checked independently
+    /// of any one capture.
+    fn paint_action_row(w: usize, h: usize, fold: bool, passive: bool, aggressive: bool) -> Vec<u8> {
+        let mut rgb = vec![20u8; w * h * 3]; // dark background
+        let mut paint = |x0: usize, colour: (u8, u8, u8)| {
+            for y in 877..953 {
+                for x in x0..x0 + 161 {
+                    let i = (y * w + x) * 3;
+                    rgb[i] = colour.0;
+                    rgb[i + 1] = colour.1;
+                    rgb[i + 2] = colour.2;
+                }
+            }
+        };
+        if fold { paint(760, (207, 50, 65)); }
+        if passive { paint(935, (33, 159, 132)); }
+        if aggressive { paint(1109, (238, 136, 57)); }
+        rgb
+    }
+
+    #[test]
+    fn a_full_turn_finds_all_three_buttons_by_colour() {
+        let (w, h) = (1280, 960);
+        let rgb = paint_action_row(w, h, true, true, true);
+        let frame = Frame::new(w, h, &rgb);
+        let panel = read_coinpoker_action_panel(&frame).expect("a live turn");
+        assert!(panel.is_live());
+        assert!(panel.fold.is_some());
+        assert!(panel.passive.is_some());
+        assert!(panel.aggressive.is_some());
+        // Fold sits left of passive, which sits left of aggressive.
+        assert!(panel.fold.unwrap().x < panel.passive.unwrap().x);
+        assert!(panel.passive.unwrap().x < panel.aggressive.unwrap().x);
+    }
+
+    #[test]
+    fn a_turn_with_nothing_left_to_raise_has_no_aggressive_button() {
+        let (w, h) = (1280, 960);
+        let rgb = paint_action_row(w, h, true, true, false);
+        let frame = Frame::new(w, h, &rgb);
+        let panel = read_coinpoker_action_panel(&frame).expect("still a live turn");
+        assert!(panel.is_live());
+        assert!(panel.aggressive.is_none());
+    }
+
+    #[test]
+    fn no_coloured_buttons_is_not_a_live_turn() {
+        let (w, h) = (1280, 960);
+        let rgb = paint_action_row(w, h, false, false, false);
+        let frame = Frame::new(w, h, &rgb);
+        assert_eq!(read_coinpoker_action_panel(&frame), None);
+    }
+
+    #[test]
+    fn only_a_fold_button_is_not_a_live_turn() {
+        // Fold alone (no passive option) should never happen at a real
+        // table, but it must not be mistaken for a real decision either.
+        let (w, h) = (1280, 960);
+        let rgb = paint_action_row(w, h, true, false, false);
+        let frame = Frame::new(w, h, &rgb);
+        assert_eq!(read_coinpoker_action_panel(&frame), None);
+    }
+
+    /// Checked against the real capture the geometry was measured from.
+    #[test]
+    fn reads_the_action_row_from_a_real_capture() {
+        let path = data("frames/coinpoker-h181631.rgb");
+        if !path.exists() {
+            return;
+        }
+        let raw = std::fs::read(path).expect("fixture frame");
+        let width = u32::from_le_bytes(raw[0..4].try_into().unwrap()) as usize;
+        let height = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+        let frame = Frame::new(width, height, &raw[8..]);
+
+        let panel = read_coinpoker_action_panel(&frame).expect("this frame is a live turn");
+        assert!(panel.is_live());
+        let fold = panel.fold.expect("fold button");
+        let passive = panel.passive.expect("passive button");
+        let aggressive = panel.aggressive.expect("this hand has room to raise");
+        assert!(fold.x < passive.x && passive.x < aggressive.x);
+        // Measured directly from this capture at the time the colour
+        // thresholds were derived.
+        assert_eq!((fold.x, fold.y), (760, 877));
+        assert_eq!((passive.x, passive.y), (935, 877));
+        assert_eq!((aggressive.x, aggressive.y), (1109, 877));
     }
 }
