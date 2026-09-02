@@ -6,26 +6,36 @@
 //! separate means a threshold tuned for one client can never quietly start
 //! matching pixels on the other's table.
 //!
-//! # Two inks, not three
+//! # Two inks, but no ClubGG-style safety net
 //!
-//! ClubGG needs three (stacks, pot, felt bets) because it draws bets on the
-//! open felt in the same white it uses for player names, and telling those
-//! apart needs a third signal (`on_felt`). CoinPoker draws every bet-related
-//! number — the pot, the bet-chip amount, the caption on the Bet/Raise
-//! button — in the same white, and stacks in gold, with nothing else on the
-//! table competing for either colour. Two inks, no felt test needed.
+//! CoinPoker draws every bet-related number — the pot, the bet-chip amount,
+//! the caption on the Bet/Raise button — in white, and stacks in gold.
+//! Simpler than ClubGG's three inks, but ClubGG can get away with scanning
+//! its *whole* frame because every real amount there carries a `BB` suffix,
+//! which tells an amount from the seat countdown badge, the hand counter,
+//! and the digits inside a player's name in one test. CoinPoker's amounts
+//! have no suffix, and it draws its own seat/hand-count badges in the same
+//! white as its amounts — confirmed by running an early whole-frame version
+//! of this reader against a real capture, where it read a badge number as a
+//! bogus pot value. So there is no [`read_numbers`]-style whole-frame
+//! function here at all: [`read_number_in`] only ever looks at a region the
+//! caller already knows holds an amount, which is the one thing that has
+//! been shown safe.
 //!
 //! Measured at a 1280x960 table, on `captures-coinpoker/h181631-0-1280x960.png`:
 //! the pot's "0.14" reads as (255,255,255) and a stack's "1.76" reads as
-//! (255,197,51). The pot digit stands 19px tall in that capture.
+//! (255,197,51). Pot and bet-chip digits stand 19px tall there; stack digits
+//! stand 22-23px tall.
 //!
-//! # Templates are not built yet
+//! # A known gap: two digits are the wrong size
 //!
-//! This module can find glyph-shaped blobs by colour and size, but has no
-//! digit shapes to match them against — that needs the same harvest-a-few-
-//! dozen-examples loop the card and suit templates went through. Until then,
-//! [`CoinPokerGlyphTemplates::load`] is the only way to get one, and there is
-//! nothing to load yet.
+//! White glyphs render at more than one size — 19px for the pot and
+//! bet-chip, but closer to 20-21px on the Bet/Raise button's own caption —
+//! and `5` and `9` currently only have a caption-sized (20px) template. A
+//! pot or bet-chip reading containing a 5 or 9 will therefore refuse rather
+//! than misread, which is the safe failure, but it is still a gap: find a
+//! pot- or bet-chip-sized 5 or 9 and re-point its manifest entry in
+//! `tools/build-coinpoker-text-templates.ps1`.
 
 use crate::{components, invalid, read_label, read_u32, Bounds, Frame};
 use std::fs::File;
@@ -216,32 +226,37 @@ struct Placed {
     distance: f32,
 }
 
-/// Finds every numeric readout in a frame.
+/// Reads the number inside one named rectangle, such as the pot badge or a
+/// seat's stack figure.
 ///
-/// Results are ordered top to bottom, then left to right.
-pub fn read_numbers(
-    frame: &Frame,
-    templates: &CoinPokerGlyphTemplates,
-    thresholds: TextThresholds,
-) -> Vec<NumberRead> {
-    let mut reads = Vec::new();
-    for ink in [Ink::Gold, Ink::White] {
-        reads.extend(read_ink(frame, templates, thresholds, ink));
-    }
-    reads.sort_by_key(|r| (r.y, r.x));
-    reads
-}
-
-fn read_ink(
+/// # Why this takes a region, and `read_numbers` does not exist
+///
+/// ClubGG can scan its whole frame safely because every real amount there
+/// carries a `BB` suffix, which tells an amount from the seat countdown
+/// badge, the hand counter, and the digits inside a player's name with one
+/// test. CoinPoker's amounts carry no suffix at all, and it draws its own
+/// seat/hand-count badges in the same white as the pot and bet-chip figures
+/// — confirmed by running an early, whole-frame version of this reader
+/// against a real capture: it read a badge number as a bogus pot value.
+/// Without a `BB`-style signal to separate an amount from every other white
+/// or gold number on the table, a whole-frame scan cannot be trusted, so
+/// this only ever looks where the caller already knows an amount belongs.
+pub fn read_number_in(
     frame: &Frame,
     templates: &CoinPokerGlyphTemplates,
     thresholds: TextThresholds,
     ink: Ink,
-) -> Vec<NumberRead> {
+    at: (usize, usize, usize, usize),
+) -> Option<NumberRead> {
+    let (x0, y0, x1, y1) = at;
+    if x0 >= x1 || y0 >= y1 || x1 > frame.width || y1 > frame.height {
+        return None;
+    }
+
     let (w, h) = (frame.width, frame.height);
     let mut mask = vec![false; w * h];
-    for y in 0..h {
-        for x in 0..w {
+    for y in y0..y1 {
+        for x in x0..x1 {
             mask[y * w + x] = ink.matches(frame.pixel(x, y));
         }
     }
@@ -259,15 +274,17 @@ fn read_ink(
             None => Placed { bounds: b, label: None, distance: f32::INFINITY },
         })
         .collect();
-
     placed.sort_by_key(|p| p.bounds.x0);
-    group_runs(&placed, ink)
+
+    // One region holds one number, so the widest run is it.
+    group_runs(&placed, ink, thresholds)
+        .into_iter()
+        .max_by_key(|run| run.width)
 }
 
 /// Joins accepted glyphs into readouts, the same way ClubGG's `group_runs`
 /// does: a gap test and a baseline test separate one readout from the next.
-fn group_runs(placed: &[Placed], ink: Ink) -> Vec<NumberRead> {
-    let thresholds = TextThresholds::default();
+fn group_runs(placed: &[Placed], ink: Ink, thresholds: TextThresholds) -> Vec<NumberRead> {
     let mut runs: Vec<Vec<&Placed>> = Vec::new();
     for glyph in placed {
         let joined = runs.iter_mut().rev().find(|run| {
@@ -397,6 +414,45 @@ fn best_glyph(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn data(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data")
+            .join(name)
+    }
+
+    /// The template file is only as good as what it reads back correctly.
+    /// Checked against a frame whose pot and stacks were confirmed by eye
+    /// against the live client at capture time - see the project's "verify
+    /// the instrument first" rule.
+    #[test]
+    fn reads_the_pot_and_both_stacks_from_a_known_table() {
+        let path = data("digit_templates_coinpoker.bin");
+        if !path.exists() {
+            // Not built yet in this checkout; nothing to verify against.
+            return;
+        }
+        let templates = CoinPokerGlyphTemplates::load(&path).expect("templates should load");
+
+        let raw = std::fs::read(data("frames/coinpoker-h181631.rgb")).expect("fixture frame");
+        let width = u32::from_le_bytes(raw[0..4].try_into().unwrap()) as usize;
+        let height = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+        let frame = Frame::new(width, height, &raw[8..]);
+
+        let thresholds = TextThresholds::default();
+        // Same regions harvest-coinpoker-text.ps1 scans - measured generous
+        // boxes around where each readout actually renders.
+        let pot = read_number_in(&frame, &templates, thresholds, Ink::White, (560, 335, 740, 375));
+        let hero_stack = read_number_in(&frame, &templates, thresholds, Ink::Gold, (560, 845, 730, 895));
+        let villain_stack = read_number_in(&frame, &templates, thresholds, Ink::Gold, (555, 205, 730, 250));
+
+        // Pot 0.14, hero (niki88) 1.76, villain (baloobond10) 0.89 -
+        // confirmed by eye against the live CoinPoker client at capture time.
+        assert_eq!(pot.and_then(|r| r.value), Some(0.14), "pot");
+        assert_eq!(hero_stack.and_then(|r| r.value), Some(1.76), "hero stack");
+        assert_eq!(villain_stack.and_then(|r| r.value), Some(0.89), "villain stack");
+    }
 
     #[test]
     fn ink_thresholds_do_not_overlap() {
