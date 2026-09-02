@@ -27,6 +27,7 @@
 
 mod action;
 pub mod coinpoker;
+pub mod coinpoker_text;
 mod hero;
 mod text;
 mod view;
