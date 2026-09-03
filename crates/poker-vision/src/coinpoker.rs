@@ -27,7 +27,7 @@
 //! the table has to re-check and re-apply the window size before *every*
 //! capture, not only when it first attaches.
 
-use crate::{best_match, components, ActionButton, Frame, Templates, Thresholds};
+use crate::{best_match, components, ActionButton, Bounds, Frame, Templates, Thresholds};
 use crate::CardRead;
 use poker_core::card::{Card, Suit};
 
@@ -369,6 +369,109 @@ pub fn read_coinpoker_action_panel(frame: &Frame) -> Option<CoinPokerActionPanel
     panel.is_live().then_some(panel)
 }
 
+/// Finds the dealer button: a small red hexagonal badge with a white `D`.
+///
+/// # Why card regions have to be excluded
+///
+/// The button's badge combines the same two colours a card face does — dark
+/// red and white — because it is a red hexagon with a white letter on it,
+/// the same way a card is a white rectangle with red or black ink on it.
+/// Colour and size alone are not enough to tell them apart: the "6" printed
+/// in the corner of a hole card, cropped to its own connected red-and-white
+/// blob, comes out close enough in both dimensions to pass the same filter
+/// the button does. What actually separates them is *where* they are — the
+/// button never sits on top of a card — so the caller passes in where the
+/// cards were already found, and anything overlapping one of those boxes is
+/// disqualified before it is ever scored.
+///
+/// # Why red-or-white, not red-with-a-hole
+///
+/// ClubGG's gold dealer button is found as a single connected region with
+/// the dark `D` counted as an enclosed hole, because gold pixels still form
+/// one unbroken ring around it. This button's white `D` touches its edge in
+/// several places, which severs the surrounding red into a handful of
+/// separate arcs rather than one ring — measured directly against
+/// `captures-coinpoker/h181631-0-1280x960.png`, a red-only mask breaks the
+/// button into more than a dozen fragments. Masking red *and* white
+/// together and looking for one solid blob sidesteps the fragmentation
+/// entirely, at the cost of needing the card-overlap exclusion above.
+pub fn find_dealer_button(frame: &Frame, exclude: &[(usize, usize, usize, usize)]) -> Option<(usize, usize)> {
+    /// Measured at a 1280x960 table: roughly 34 wide by 39 tall. Generous on
+    /// both sides for the anti-aliased edge of the hexagon.
+    const SIZE: (usize, usize) = (20, 50);
+    const MIN_FILL: f32 = 0.35;
+    /// The chrome bar along the top and the row of icons along the bottom
+    /// carry their own red-and-white artwork (a home icon, a chat bubble,
+    /// an emoji) that clears every other filter here just as easily as the
+    /// button does. The button itself only ever sits on the felt beside a
+    /// player's cards, comfortably inside this band at a 1280x960 table, so
+    /// restricting the scan to it is simpler than trying to describe what
+    /// makes a hexagon different from an icon.
+    const FELT_Y_RANGE: (usize, usize) = (150, 820);
+
+    let is_button_red = |r: i16, g: i16, b: i16| r > 100 && r < 190 && g < 50 && b < 50 && r - g > 60;
+    let is_white = |r: i16, g: i16, b: i16| r > 190 && g > 190 && b > 190;
+
+    let (w, h) = (frame.width, frame.height);
+    let mut mask = vec![false; w * h];
+    for y in FELT_Y_RANGE.0..FELT_Y_RANGE.1.min(h) {
+        for x in 0..w {
+            let (r, g, b) = frame.pixel(x, y);
+            let (r, g, b) = (r as i16, g as i16, b as i16);
+            mask[y * w + x] = is_button_red(r, g, b) || is_white(r, g, b);
+        }
+    }
+
+    // Mostly inside a card, not merely touching its edge. The button sits
+    // beside the hole cards closely enough that its own bounding box clips
+    // a few pixels of the neighbouring card's - measured on
+    // captures-coinpoker/h181631-0-1280x960.png, about 5% of the button's
+    // area. A false positive found *inside* a card's corner index, by
+    // contrast, is entirely contained by it. Excluding on any intersection
+    // at all would throw out the real button along with the false one; this
+    // only excludes a blob that is substantially a part of the card.
+    const MOSTLY_INSIDE_A_CARD: f32 = 0.5;
+    let overlaps_a_card = |b: &Bounds| {
+        exclude.iter().any(|&(ex, ey, ew, eh)| {
+            let ix0 = b.x0.max(ex);
+            let iy0 = b.y0.max(ey);
+            let ix1 = b.x1.min(ex + ew - 1);
+            let iy1 = b.y1.min(ey + eh - 1);
+            if ix0 > ix1 || iy0 > iy1 {
+                return false;
+            }
+            let overlap = (ix1 - ix0 + 1) * (iy1 - iy0 + 1);
+            overlap as f32 / (b.width() * b.height()) as f32 > MOSTLY_INSIDE_A_CARD
+        })
+    };
+
+    let candidates: Vec<Bounds> = components(&mask, w, h)
+        .into_iter()
+        .filter(|b| {
+            (SIZE.0..=SIZE.1).contains(&b.width())
+                && (SIZE.0..=SIZE.1).contains(&b.height())
+                && !overlaps_a_card(b)
+        })
+        .filter(|b| {
+            let lit = (b.y0..=b.y1)
+                .map(|y| (b.x0..=b.x1).filter(|&x| mask[y * w + x]).count())
+                .sum::<usize>();
+            lit as f32 / (b.width() * b.height()) as f32 >= MIN_FILL
+        })
+        .collect();
+
+    // More than one candidate means an ambiguous frame - mid animation, or a
+    // second card-shaped false positive that also happened to clear every
+    // filter. Refusing is cheaper than guessing which one is real.
+    match candidates.len() {
+        1 => {
+            let b = &candidates[0];
+            Some((b.x0 + b.width() / 2, b.y0 + b.height() / 2))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,6 +648,40 @@ mod tests {
         let rgb = paint_action_row(w, h, true, false, false);
         let frame = Frame::new(w, h, &rgb);
         assert_eq!(read_coinpoker_action_panel(&frame), None);
+    }
+
+    /// Checked against the real capture the geometry was measured from:
+    /// the button sits beside the hero's hole cards.
+    #[test]
+    fn finds_the_dealer_button_on_a_real_capture() {
+        let path = data("frames/coinpoker-h181631.rgb");
+        if !path.exists() {
+            return;
+        }
+        let raw = std::fs::read(path).expect("fixture frame");
+        let width = u32::from_le_bytes(raw[0..4].try_into().unwrap()) as usize;
+        let height = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+        let frame = Frame::new(width, height, &raw[8..]);
+
+        // Without excluding the cards, the hole card's own red-and-white
+        // corner index is a second candidate, and the ambiguity refuses.
+        assert_eq!(
+            find_dealer_button(&frame, &[]),
+            None,
+            "the hole card's corner index should be mistaken for a second button"
+        );
+
+        let exclude: Vec<(usize, usize, usize, usize)> = detect_card_positions(&frame)
+            .into_iter()
+            .map(|d| (d.x, d.y, geometry::CARD_W, geometry::CARD_H))
+            .collect();
+        let button = find_dealer_button(&frame, &exclude).expect("the button should be found");
+        // Measured directly against this capture: the button sits at about
+        // (541, 691), just above and left of the hero's hole cards.
+        assert!(
+            button.0.abs_diff(541) <= 5 && button.1.abs_diff(691) <= 5,
+            "button at {button:?}, expected near (541, 691)"
+        );
     }
 
     /// Checked against the real capture the geometry was measured from.

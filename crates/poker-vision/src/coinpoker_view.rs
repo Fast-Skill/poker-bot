@@ -19,11 +19,6 @@
 //!
 //! # What this does not do yet
 //!
-//! - **Position (who is on the button).** CoinPoker draws its own dealer
-//!   button graphic, but this module does not read it — that needs its own
-//!   colour measurement, the same way the action buttons' colours did, and
-//!   has not been done. Preflop strategy selection needs this and cannot
-//!   use this view alone until it exists.
 //! - **Per-street bet amounts and `to_call`.** The felt shows a bet-chip
 //!   figure near whichever seat last acted, but which seat that is, and
 //!   whether the hero or the villain currently owes the difference, has not
@@ -59,9 +54,20 @@ pub struct CoinPokerView {
     pub hole: Vec<Card>,
     /// The row of action buttons, when a live turn is showing.
     pub action: Option<CoinPokerActionPanel>,
+    /// Whether the hero holds the dealer button (and so posts the small
+    /// blind, and acts first preflop) rather than the villain. `None` when
+    /// the button could not be placed on either side this frame.
+    pub hero_on_button: Option<bool>,
     /// Cards and readouts the readers would not vouch for.
     pub refusals: usize,
 }
+
+/// Frame rows above this are the top chrome bar and the villain's side of
+/// the felt; rows below are the hero's side. The button's y-coordinate
+/// relative to this is what tells the two apart — see
+/// `coinpoker::find_dealer_button`'s module docs for the button's own
+/// colour and shape measurements.
+const TABLE_MIDLINE_Y: usize = 480;
 
 impl CoinPokerView {
     /// Reads a whole table from one frame.
@@ -81,6 +87,13 @@ impl CoinPokerView {
         let villain_stack = read_amount(frame, digits, text, Ink::Gold, regions::VILLAIN_STACK);
         let action = coinpoker::read_coinpoker_action_panel(frame);
 
+        let card_boxes: Vec<(usize, usize, usize, usize)> = found
+            .iter()
+            .map(|c| (c.x, c.y, coinpoker::geometry::CARD_W, coinpoker::geometry::CARD_H))
+            .collect();
+        let hero_on_button = coinpoker::find_dealer_button(frame, &card_boxes)
+            .map(|(_, y)| y > TABLE_MIDLINE_Y);
+
         CoinPokerView {
             hero_stack,
             villain_stack,
@@ -88,6 +101,7 @@ impl CoinPokerView {
             board,
             hole,
             action,
+            hero_on_button,
             refusals,
         }
     }
@@ -285,6 +299,7 @@ mod tests {
         assert_eq!(view.pot, Some(0.14));
         assert_eq!(view.hero_stack, Some(1.76));
         assert_eq!(view.villain_stack, Some(0.89));
+        assert_eq!(view.hero_on_button, Some(true), "niki88 holds the button on this frame");
     }
 
     #[test]
