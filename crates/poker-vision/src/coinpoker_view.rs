@@ -19,13 +19,20 @@
 //!
 //! # What this does not do yet
 //!
-//! - **Per-street bet amounts and `to_call`.** The felt shows a bet-chip
-//!   figure near whichever seat last acted, but which seat that is, and
-//!   whether the hero or the villain currently owes the difference, has not
-//!   been mapped out. For now, whether anything is owed is read off the
-//!   action panel's own labels (`Check` vs `Call`) instead of computed from
-//!   chip positions — cruder, but does not depend on geometry that has not
-//!   been measured.
+//! - **A safe `to_call`.** [`CoinPokerView::hero_bet`] and
+//!   [`CoinPokerView::villain_bet`] read the chip figure at each side's own
+//!   bet position, confirmed against a real capture where the villain had
+//!   bet 0.03. But a region that reads as empty is ambiguous in a way that
+//!   matters: it means either "nobody has bet" (the ordinary case, most
+//!   streets) or "a bet is there and failed to read" (dangerous to treat as
+//!   the same thing — that is exactly how a bot calls zero into a raise).
+//!   Telling those apart needs an independent signal, and the likeliest one
+//!   is each seat's own status tag (`Check` / `Bet` / `Call`, in its own
+//!   colour, drawn beside the name) — not read yet. Until it is, computing
+//!   `to_call` from these two fields is the caller's problem, not this
+//!   module's, and it should be treated with that ambiguity in mind.
+//! - **Villain's own hole cards**, which are never visible anyway except at
+//!   showdown, and reading them then has no use this module has needed yet.
 
 use crate::coinpoker::{self, CoinPokerActionPanel, PositionTemplates};
 use crate::coinpoker_text::{self, CoinPokerGlyphTemplates, Ink, TextThresholds};
@@ -40,6 +47,19 @@ mod regions {
     pub const POT: (usize, usize, usize, usize) = (560, 335, 740, 375);
     pub const HERO_STACK: (usize, usize, usize, usize) = (560, 845, 730, 895);
     pub const VILLAIN_STACK: (usize, usize, usize, usize) = (555, 205, 730, 250);
+
+    /// Measured against `h205314-0-1280x960.png`, where villain "mentalrun"
+    /// had a live 0.03 bet showing (digit blobs at x=481/502/517, y=279,
+    /// h=19, plus a decimal point at x=496,y=295).
+    pub const VILLAIN_BET: (usize, usize, usize, usize) = (470, 270, 540, 310);
+
+    /// NOT yet confirmed against a real frame — inferred by mirroring
+    /// `VILLAIN_BET` across `TABLE_MIDLINE_Y` (480), since no capture with
+    /// hero's own bet showing has been found yet. Treat a read from this box
+    /// with extra suspicion until it has been checked the same way
+    /// `VILLAIN_BET` was: by cropping a real frame and reading the number by
+    /// eye first.
+    pub const HERO_BET: (usize, usize, usize, usize) = (470, 650, 540, 690);
 }
 
 /// Everything one frame says about a CoinPoker heads-up table.
@@ -48,6 +68,13 @@ pub struct CoinPokerView {
     pub hero_stack: Option<f64>,
     pub villain_stack: Option<f64>,
     pub pot: Option<f64>,
+    /// The villain's live bet this street, when one is showing. `None` is
+    /// ambiguous — see this module's doc comment before computing a
+    /// `to_call` from it.
+    pub villain_bet: Option<f64>,
+    /// The hero's own live bet this street. Read from an unconfirmed region
+    /// — see `regions::HERO_BET`.
+    pub hero_bet: Option<f64>,
     /// Community cards, left to right.
     pub board: Vec<Card>,
     /// The hero's own two cards.
@@ -85,6 +112,8 @@ impl CoinPokerView {
         let pot = read_amount(frame, digits, text, Ink::White, regions::POT);
         let hero_stack = read_amount(frame, digits, text, Ink::Gold, regions::HERO_STACK);
         let villain_stack = read_amount(frame, digits, text, Ink::Gold, regions::VILLAIN_STACK);
+        let villain_bet = read_amount(frame, digits, text, Ink::White, regions::VILLAIN_BET);
+        let hero_bet = read_amount(frame, digits, text, Ink::White, regions::HERO_BET);
         let action = coinpoker::read_coinpoker_action_panel(frame);
 
         let card_boxes: Vec<(usize, usize, usize, usize)> = found
@@ -98,6 +127,8 @@ impl CoinPokerView {
             hero_stack,
             villain_stack,
             pot,
+            villain_bet,
+            hero_bet,
             board,
             hole,
             action,
@@ -300,6 +331,16 @@ mod tests {
         assert_eq!(view.hero_stack, Some(1.76));
         assert_eq!(view.villain_stack, Some(0.89));
         assert_eq!(view.hero_on_button, Some(true), "niki88 holds the button on this frame");
+    }
+
+    /// mentalrun (villain) has a live 0.03 bet showing, collected pot below
+    /// the board reads 0.04, and the client's own total (0.07) confirms
+    /// pot already includes bets in front of seats, same as ClubGG.
+    #[test]
+    fn a_live_villain_bet_reads_alongside_the_collected_pot() {
+        let Some(view) = view_of("coinpoker-h205314.rgb") else { return };
+        assert_eq!(view.villain_bet, Some(0.03), "villain's live bet");
+        assert_eq!(view.pot, Some(0.07), "pot already includes the live bet");
     }
 
     #[test]

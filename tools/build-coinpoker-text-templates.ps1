@@ -39,6 +39,16 @@ $Manifest = @(
   @{ Frame="t193436-0-1280x960.png"; X=675; Y=347; W=11; H=19; Ink="white"; Label="7" }
   @{ Frame="t194143-0-1280x960.png"; X=675; Y=347; W=11; H=19; Ink="white"; Label="8" }
   @{ Frame="h181631-0-1280x960.png"; X=656; Y=362; W=3;  H=4;  Ink="white"; Label="." }
+  # A second white "." sourced from a different frame: the first alone
+  # scored 42.5 against h205314's own point (just over the 40.0 threshold)
+  # - this tiny 3x4 glyph is fragile enough across renders that one source
+  # frame is not enough. Multiple templates per label are fine; the matcher
+  # just keeps whichever scores lowest.
+  @{ Frame="h205314-0-1280x960.png"; X=654; Y=362; W=3;  H=4;  Ink="white"; Label="." }
+  # A third white "." at yet another size bucket (3x3, not 3x4): the same
+  # bet-chip badge that reads 19px-tall digits fine renders its point one
+  # row shorter than the pot's. Sourced from the bet-chip readout itself.
+  @{ Frame="h205314-0-1280x960.png"; X=496; Y=295; W=3;  H=3;  Ink="white"; Label="." }
   # white, ~20px - Bet/Raise button caption only (see the known-gap note above)
   @{ Frame="t194257-0-1280x960.png"; X=1204; Y=926; W=10; H=20; Ink="white"; Label="5" }
   @{ Frame="t223454-0-1280x960.png"; X=1195; Y=925; W=11; H=20; Ink="white"; Label="9" }

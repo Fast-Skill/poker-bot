@@ -36,6 +36,15 @@
 //! than misread, which is the safe failure, but it is still a gap: find a
 //! pot- or bet-chip-sized 5 or 9 and re-point its manifest entry in
 //! `tools/build-coinpoker-text-templates.ps1`.
+//!
+//! The decimal point turned out to need the same per-location split: at
+//! only 3x3-4px, it is small enough that the pot's point, a bet-chip's, and
+//! (were one ever sourced) the stack's are each their own size bucket, not
+//! one shared glyph — confirmed the hard way, by a point that matched fine
+//! on the frame it was sourced from and refused on every other frame until
+//! a second and third `.` template were added for the other two contexts.
+//! `CoinPokerGlyphTemplates` allows more than one template per label for
+//! exactly this reason: `best_glyph` keeps whichever scores lowest.
 
 use crate::{components, invalid, read_label, read_u32, Bounds, Frame};
 use std::fs::File;
@@ -452,6 +461,30 @@ mod tests {
         assert_eq!(pot.and_then(|r| r.value), Some(0.14), "pot");
         assert_eq!(hero_stack.and_then(|r| r.value), Some(1.76), "hero stack");
         assert_eq!(villain_stack.and_then(|r| r.value), Some(0.89), "villain stack");
+    }
+
+    /// mentalrun (villain) had a live 0.03 bet showing here, on top of a
+    /// 0.04 collected pot from an earlier street - confirmed by eye against
+    /// the live client, and the source of `coinpoker_view::regions::VILLAIN_BET`.
+    #[test]
+    fn reads_a_live_bet_chip_amount_from_a_known_table() {
+        let path = data("digit_templates_coinpoker.bin");
+        if !path.exists() {
+            return;
+        }
+        let templates = CoinPokerGlyphTemplates::load(&path).expect("templates should load");
+
+        let raw = std::fs::read(data("frames/coinpoker-h205314.rgb")).expect("fixture frame");
+        let width = u32::from_le_bytes(raw[0..4].try_into().unwrap()) as usize;
+        let height = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+        let frame = Frame::new(width, height, &raw[8..]);
+
+        let thresholds = TextThresholds::default();
+        let pot = read_number_in(&frame, &templates, thresholds, Ink::White, (560, 335, 740, 375));
+        let villain_bet = read_number_in(&frame, &templates, thresholds, Ink::White, (470, 270, 540, 310));
+
+        assert_eq!(pot.and_then(|r| r.value), Some(0.07), "pot: 0.04 collected + 0.03 live bet");
+        assert_eq!(villain_bet.and_then(|r| r.value), Some(0.03), "villain's live bet-chip");
     }
 
     #[test]
