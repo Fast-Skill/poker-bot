@@ -71,6 +71,7 @@ fn main() -> ExitCode {
         Some("postflop") => postflop_chart(&args[1..]),
         Some("typetest") => typetest(&args[1..]),
         Some("see") => see(&args[1..]),
+        Some("coinsee") => coinsee(&args[1..]),
         Some("grab") => grab(&args[1..]),
         Some("sit") => sit(&args[1..]),
         Some("ranges") => ranges(&args[1..]),
@@ -112,7 +113,8 @@ USAGE
   poker textures [options]         build the board sample a postflop solve needs
   poker compare <a> <b>            how far apart two blueprints play
   poker postflop <file>            what a postflop solve does, by hand strength
-  poker see   [options]            look at the live table and report what it reads
+  poker see   [options]            look at the live ClubGG table and report what it reads
+  poker coinsee [options]          look at the live CoinPoker table and report what it reads
   poker grab  [options]            save every window of the client as a PNG
   poker sit   [options]            confirm the dialogs between an empty seat and a seat
   poker replay <dir>               read recorded frames again, offline
@@ -155,6 +157,12 @@ PLAY OPTIONS
 SEE OPTIONS
   --process <name>    which app to look at                [default ClubGG]
   --resize <on|off>   force the window to 1430x1040       [default off]
+
+COINSEE OPTIONS
+  --process <name>    which app to look at                [default CoinPoker]
+  --seconds <n>       0 reads once; >0 watches and reprints only when the
+                       reading changes, so it can run alongside real play
+                       [default 0]
 
 STAGES
   pushfold   sb, bb
@@ -3048,6 +3056,185 @@ hole   : {}", show(&table.hole));
 #[cfg(not(windows))]
 fn see(_args: &[String]) -> Result<(), String> {
     Err("looking at a live window is only implemented on Windows".to_string())
+}
+
+/// Where the CoinPoker vision templates live, and the window size they were
+/// measured at. CoinPoker's own table window, not ClubGG's, and a different
+/// size (1280x960) - kept separate from `TABLE_W`/`TABLE_H`/`TEMPLATES`/
+/// `GLYPHS` rather than reusing them, since the two clients share none of
+/// their vision layer.
+#[cfg(windows)]
+const COINPOKER_W: usize = 1280;
+#[cfg(windows)]
+const COINPOKER_H: usize = 960;
+#[cfg(windows)]
+const COINPOKER_BOARD_TEMPLATES: &str = "data/card_templates_coinpoker_board.bin";
+#[cfg(windows)]
+const COINPOKER_HOLE_BACK_TEMPLATES: &str = "data/card_templates_coinpoker_hole_back.bin";
+#[cfg(windows)]
+const COINPOKER_HOLE_FRONT_TEMPLATES: &str = "data/card_templates_coinpoker_hole_front.bin";
+#[cfg(windows)]
+const COINPOKER_GLYPHS: &str = "data/digit_templates_coinpoker.bin";
+
+/// Looks at the live CoinPoker table and reports what `CoinPokerView` reads
+/// off it - the way `see` does for ClubGG, so the vision work built so far
+/// can be checked against a real, currently-running hand rather than only
+/// against the frozen test fixtures.
+///
+/// With `--seconds 0` (the default) it reads once and exits. With
+/// `--seconds N` it keeps re-reading for that long and only reprints when
+/// the assembled table actually changes, so it can be left running in a
+/// corner of the screen while a hand is played out and compared against what
+/// the client shows - including across the window's own habit of resetting
+/// its size on every new hand, which is why this resizes it before every
+/// single capture rather than once at the start.
+#[cfg(windows)]
+fn coinsee(args: &[String]) -> Result<(), String> {
+    use poker_vision::coinpoker::PositionTemplates;
+    use poker_vision::coinpoker_text::{CoinPokerGlyphTemplates, TextThresholds};
+    use poker_vision::coinpoker_view::CoinPokerView;
+    use poker_vision::{Frame, Templates, Thresholds};
+    use poker_win::Window;
+
+    let flags = Flags::parse(args)?;
+    flags.reject_unknown(&["process", "seconds"])?;
+    let process = flags.text("process", "CoinPoker");
+    let seconds: u64 = flags
+        .text("seconds", "0")
+        .parse()
+        .map_err(|_| "--seconds wants a number")?;
+
+    let cards = PositionTemplates {
+        board: Templates::load(COINPOKER_BOARD_TEMPLATES)
+            .map_err(|e| format!("could not load {COINPOKER_BOARD_TEMPLATES}: {e}"))?,
+        hole_back: Templates::load(COINPOKER_HOLE_BACK_TEMPLATES).map_err(|e| {
+            format!(
+                "could not load {COINPOKER_HOLE_BACK_TEMPLATES}: {e}\n  \
+                 this set is still missing a rank at the time of writing; \
+                 build it with tools/build-coinpoker-templates.ps1 once one is harvested"
+            )
+        })?,
+        hole_front: Templates::load(COINPOKER_HOLE_FRONT_TEMPLATES)
+            .map_err(|e| format!("could not load {COINPOKER_HOLE_FRONT_TEMPLATES}: {e}"))?,
+    };
+    let digits = CoinPokerGlyphTemplates::load(COINPOKER_GLYPHS)
+        .map_err(|e| format!("could not load {COINPOKER_GLYPHS}: {e}"))?;
+
+    let windows = Window::find_by_process(&process);
+    if windows.is_empty() {
+        return Err(format!("no visible window from a process matching {process:?}"));
+    }
+    let table = pick_table(&windows)?;
+    println!("watching: {}", table.title());
+
+    let read_one = |table: &poker_win::Window| -> Option<CoinPokerView> {
+        let (w, h) = table.resize(COINPOKER_W, COINPOKER_H);
+        if (w, h) != (COINPOKER_W, COINPOKER_H) {
+            return None;
+        }
+        let capture = table.capture()?;
+        if capture.is_blank() {
+            return None;
+        }
+        let frame = Frame::new(capture.width, capture.height, &capture.rgb);
+        Some(CoinPokerView::read(
+            &frame,
+            &cards,
+            &digits,
+            Thresholds::default(),
+            TextThresholds::default(),
+        ))
+    };
+
+    if seconds == 0 {
+        table.focus();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let view = read_one(&table).ok_or_else(|| {
+            format!(
+                "could not read the table - it would not resize to {COINPOKER_W}x{COINPOKER_H}, \
+                 the capture came back blank, or the window is covered"
+            )
+        })?;
+        print_coinpoker_view(&view);
+        return Ok(());
+    }
+
+    println!("watching for {seconds}s - play normally; this reprints only when the reading changes.\n");
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
+    let started = std::time::Instant::now();
+    let mut last: Option<CoinPokerView> = None;
+    while std::time::Instant::now() < until {
+        match read_one(&table) {
+            Some(view) if last.as_ref() != Some(&view) => {
+                println!("--- t+{:>4}s ---", started.elapsed().as_secs());
+                print_coinpoker_view(&view);
+                println!();
+                last = Some(view);
+            }
+            _ => {}
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn coinsee(_args: &[String]) -> Result<(), String> {
+    Err("looking at a live window is only implemented on Windows".to_string())
+}
+
+#[cfg(windows)]
+fn print_coinpoker_view(view: &poker_vision::coinpoker_view::CoinPokerView) {
+    let show = |cards: &[poker_core::card::Card]| {
+        if cards.is_empty() {
+            "-".to_string()
+        } else {
+            cards.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")
+        }
+    };
+    let amount = |v: Option<f64>| v.map(|v| format!("{v}")).unwrap_or_else(|| "?".into());
+
+    println!("board          : {}", show(&view.board));
+    println!("hole           : {}", show(&view.hole));
+    println!("pot            : {}", amount(view.pot));
+    println!("hero stack     : {}", amount(view.hero_stack));
+    println!("villain stack  : {}", amount(view.villain_stack));
+    println!(
+        "villain bet    : {}  (empty means either no bet or an unread one - see coinpoker_view's doc comment)",
+        view.villain_bet.map(|v| format!("{v}")).unwrap_or_else(|| "-".into())
+    );
+    println!(
+        "hero bet       : {}  (UNCONFIRMED region - not yet checked against a real frame)",
+        view.hero_bet.map(|v| format!("{v}")).unwrap_or_else(|| "-".into())
+    );
+    println!(
+        "button         : {}",
+        match view.hero_on_button {
+            Some(true) => "hero",
+            Some(false) => "villain",
+            None => "?",
+        }
+    );
+    match &view.action {
+        None => println!("turn           : no buttons showing"),
+        Some(panel) if panel.is_live() => {
+            println!("turn           : YOURS");
+            for (name, button) in [
+                ("fold", panel.fold),
+                ("check/call", panel.passive),
+                ("bet/raise", panel.aggressive),
+            ] {
+                if let Some(b) = button {
+                    let (x, y) = b.centre();
+                    println!("  {name:<11} click ({x}, {y})");
+                }
+            }
+        }
+        Some(_) => println!("turn           : buttons showing, but not a live turn"),
+    }
+    if view.refusals > 0 {
+        println!("{} card reading(s) refused.", view.refusals);
+    }
 }
 
 fn open(path: &str) -> Result<Blueprint, String> {
